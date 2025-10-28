@@ -216,6 +216,12 @@ const main = async () => {
   const payload = await writePromptsFile(outputPath, projectName, prompts);
 
   const batchSize = ensureNumber(config.batchSize, 3) || 3;
+  const googleEmail = config.googleFlowEmail?.trim() || config.googleEmail?.trim() || '';
+  const googlePassword = config.googleFlowPassword || config.googlePassword || '';
+
+  if (!googleEmail || !googlePassword) {
+    console.log('⚠️ Chưa cung cấp googleFlowEmail/googleFlowPassword trong cấu hình. Script sẽ giả định bạn đã đăng nhập sẵn.');
+  }
 
   console.log('🚗 Bắt đầu tự động hoá Google Flow...');
   await runFlowAutomation({
@@ -224,7 +230,9 @@ const main = async () => {
     batchSize,
     headless: Boolean(config.headless),
     browserExecutablePath: config.browserExecutablePath,
-    userDataDir: config.userDataDir
+    userDataDir: config.userDataDir,
+    googleEmail,
+    googlePassword
   });
 };
 

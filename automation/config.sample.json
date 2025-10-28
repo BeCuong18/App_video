@@ -15,5 +15,7 @@
   "promptsOutputPath": "automation/latest-prompts.json",
   "headless": false,
   "browserExecutablePath": "",
-  "userDataDir": ""
+  "userDataDir": "",
+  "googleFlowEmail": "your-account@example.com",
+  "googleFlowPassword": ""
 }

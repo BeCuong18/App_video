@@ -177,6 +177,186 @@ const chooseResolution = async (page) => {
   throw new Error('Không tìm thấy tuỳ chọn tải "Kích thước gốc (720)".');
 };
 
+const waitForPotentialNavigation = (page) =>
+  page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 }).catch(() => null);
+
+const isFlowReady = async (page) => {
+  return page.evaluate(() => {
+    const elements = Array.from(document.querySelectorAll('button, a, div[role="button"], span[role="button"]'));
+    return elements.some((element) => {
+      const text = (element.textContent || element.innerText || '').toLowerCase();
+      const aria = (element.getAttribute('aria-label') || '').toLowerCase();
+      return text.includes('dự án mới') || text.includes('new project');
+    });
+  });
+};
+
+const hasSignInButton = async (page) => {
+  return page.evaluate(() => {
+    const elements = Array.from(document.querySelectorAll('button, a, div[role="button"], span[role="button"]'));
+    return elements.some((element) => {
+      const text = (element.textContent || element.innerText || '').toLowerCase();
+      const aria = (element.getAttribute('aria-label') || '').toLowerCase();
+      return (
+        text.includes('đăng nhập') ||
+        text.includes('sign in') ||
+        text.includes('log in') ||
+        aria.includes('đăng nhập') ||
+        aria.includes('sign in') ||
+        aria.includes('log in')
+      );
+    });
+  });
+};
+
+const tryClickSignInButton = async (page) => {
+  const labels = ['đăng nhập', 'sign in', 'log in'];
+  for (const label of labels) {
+    const clicked = await clickButtonByText(page, label, { timeout: 5000, optional: true });
+    if (clicked) {
+      await page.waitForTimeout(1500);
+      return true;
+    }
+  }
+  return false;
+};
+
+const selectAccountIfNeeded = async (page, email) => {
+  const normalizedEmail = email.trim().toLowerCase();
+  const clicked = await page.evaluate((targetEmail) => {
+    const selectors = [
+      '[data-identifier]',
+      '[data-email]',
+      'div[role="link"]',
+      'div[role="button"]',
+      'span[role="link"]',
+      'span[role="button"]'
+    ];
+
+    for (const selector of selectors) {
+      const elements = Array.from(document.querySelectorAll(selector));
+      const match = elements.find((element) => {
+        const identifier = (element.getAttribute('data-identifier') || element.getAttribute('data-email') || '').toLowerCase();
+        const text = (element.textContent || element.innerText || '').toLowerCase();
+        return identifier === targetEmail || text.includes(targetEmail);
+      });
+
+      if (match) {
+        match.click();
+        return true;
+      }
+    }
+
+    return false;
+  }, normalizedEmail);
+
+  if (clicked) {
+    await page.waitForTimeout(2000);
+    return true;
+  }
+
+  return false;
+};
+
+const fillEmailIfNeeded = async (page, email) => {
+  const input = await page.$('input[type="email"]');
+  if (!input) {
+    return false;
+  }
+
+  await input.focus();
+  await input.evaluate((element) => {
+    element.value = '';
+  });
+  await input.type(email, { delay: 20 });
+
+  const nextButton = await page.$('#identifierNext button, #identifierNext');
+  const navigation = waitForPotentialNavigation(page);
+  if (nextButton) {
+    await Promise.all([navigation, nextButton.click()]);
+  } else {
+    await Promise.all([navigation, page.keyboard.press('Enter')]);
+  }
+
+  await page.waitForTimeout(2000);
+  return true;
+};
+
+const fillPasswordIfNeeded = async (page, password) => {
+  const input = await page.$('input[type="password"]');
+  if (!input) {
+    return false;
+  }
+
+  await input.focus();
+  await input.evaluate((element) => {
+    element.value = '';
+  });
+  await input.type(password, { delay: 20 });
+
+  const nextButton = await page.$('#passwordNext button, #passwordNext');
+  const navigation = waitForPotentialNavigation(page);
+  if (nextButton) {
+    await Promise.all([navigation, nextButton.click()]);
+  } else {
+    await Promise.all([navigation, page.keyboard.press('Enter')]);
+  }
+
+  await page.waitForTimeout(2000);
+  return true;
+};
+
+const ensureLoggedIntoFlow = async (page, credentials = {}) => {
+  const email = credentials.email?.trim();
+  const password = credentials.password || '';
+
+  if (!email || !password) {
+    console.log('⚠️ Không có thông tin đăng nhập Google Flow. Giả định bạn đã đăng nhập sẵn.');
+    return;
+  }
+
+  console.log('🔐 Đang đăng nhập Google Flow với thông tin đã cung cấp...');
+
+  const deadline = Date.now() + 180000;
+
+  while (Date.now() < deadline) {
+    const currentUrl = page.url();
+
+    if (currentUrl.includes('labs.google/fx')) {
+      if (await isFlowReady(page)) {
+        console.log('✅ Đã đăng nhập và sẵn sàng tạo dự án mới trên Google Flow.');
+        return;
+      }
+
+      if (await hasSignInButton(page)) {
+        await tryClickSignInButton(page);
+        continue;
+      }
+    }
+
+    if (currentUrl.includes('accounts.google.com')) {
+      if (await selectAccountIfNeeded(page, email)) {
+        continue;
+      }
+      if (await fillEmailIfNeeded(page, email)) {
+        continue;
+      }
+      if (await fillPasswordIfNeeded(page, password)) {
+        continue;
+      }
+    }
+
+    await page.waitForTimeout(1000);
+
+    if (currentUrl.includes('labs.google/fx') && (await isFlowReady(page))) {
+      console.log('✅ Đã đăng nhập và sẵn sàng tạo dự án mới trên Google Flow.');
+      return;
+    }
+  }
+
+  throw new Error('Không thể đăng nhập Google Flow bằng thông tin đã cung cấp. Vui lòng kiểm tra lại email/mật khẩu hoặc thử đăng nhập thủ công trước.');
+};
+
 export const runFlowAutomation = async ({
   promptsPath,
   promptsData,
@@ -184,7 +364,9 @@ export const runFlowAutomation = async ({
   batchSize = 3,
   headless = false,
   browserExecutablePath,
-  userDataDir
+  userDataDir,
+  googleEmail,
+  googlePassword
 } = {}) => {
   let resolvedPromptsPath = null;
   let projectName;
@@ -249,6 +431,7 @@ export const runFlowAutomation = async ({
     });
 
     await page.goto('https://labs.google/fx/vi/tools/flow', { waitUntil: 'networkidle2' });
+    await ensureLoggedIntoFlow(page, { email: googleEmail, password: googlePassword });
     await clickButtonByText(page, 'dự án mới', { timeout: 120000 });
     await page.waitForTimeout(2000);
 
@@ -303,7 +486,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   const [, , promptsArg, downloadArg] = process.argv;
   runFlowAutomation({
     promptsPath: promptsArg,
-    downloadDirectory: downloadArg
+    downloadDirectory: downloadArg,
+    googleEmail: process.env.GOOGLE_FLOW_EMAIL || process.env.FLOW_EMAIL,
+    googlePassword: process.env.GOOGLE_FLOW_PASSWORD || process.env.FLOW_PASSWORD
   }).catch((error) => {
     console.error('\n❌ Có lỗi xảy ra:', error.message);
     process.exitCode = 1;

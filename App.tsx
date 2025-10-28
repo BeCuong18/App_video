@@ -1,86 +1,11 @@
 
 import React, { useState, useCallback, ChangeEvent } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
-import { Scene, VideoType, UploadedImage, FormData } from './types';
+import { Scene, VideoType, FormData } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
 import { LoaderIcon } from './components/Icons';
 import { useGeminiApiKey } from './hooks/useGeminiApiKey';
-
-declare const XLSX: any;
-
-const WorkflowModal: React.FC<{
-  isOpen: boolean;
-  onClose: () => void;
-  scenes: Scene[];
-  currentIndex: number;
-  setCurrentIndex: (index: number) => void;
-}> = ({ isOpen, onClose, scenes, currentIndex, setCurrentIndex }) => {
-  if (!isOpen || scenes.length === 0) return null;
-
-  const currentScene = scenes[currentIndex];
-
-  const handleCopyAndNext = () => {
-    navigator.clipboard.writeText(currentScene.prompt_text);
-    if (currentIndex < scenes.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-    }
-  };
-  
-  const handlePrevious = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl w-full max-w-2xl border border-white/30">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-indigo-100">Trợ lý Xuất Video Siêu Tốc</h2>
-          <button onClick={onClose} className="text-white/70 hover:text-white">&times;</button>
-        </div>
-        <p className="text-indigo-200 mb-4">Sử dụng quy trình sau để có tốc độ nhanh nhất:</p>
-        <ol className="list-decimal list-inside mb-6 text-white bg-black/20 p-4 rounded-lg">
-            <li>Nhấn nút "Mở Google Flow" để mở công cụ trong tab mới.</li>
-            <li>Nhấn vào nút **"Sao chép & Tới Cảnh Tiếp"** ở dưới.</li>
-            <li>Chuyển qua tab Google Flow và Dán (Ctrl+V) prompt vào.</li>
-            <li>Quay lại đây và lặp lại bước 2 và 3 cho đến hết kịch bản.</li>
-        </ol>
-        <div className="mb-4">
-            <a href="https://labs.google/fx/vi/tools/flow" target="_blank" rel="noopener noreferrer" className="inline-block w-full sm:w-auto text-center bg-teal-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-teal-600 transition shadow-lg">
-                Mở Google Flow (trong tab mới)
-            </a>
-        </div>
-
-        <div className="bg-black/30 p-4 rounded-lg">
-            <h3 className="font-bold text-lg text-indigo-100 mb-2">🎬 Cảnh {currentScene.scene_number}: {currentScene.scene_title}</h3>
-            <textarea
-              readOnly
-              value={currentScene.prompt_text}
-              className="w-full h-48 bg-white/5 border border-white/20 rounded-lg p-3 text-white font-mono text-sm"
-            />
-        </div>
-        
-        <div className="mt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-4">
-              <button onClick={handlePrevious} disabled={currentIndex === 0} className="bg-white/10 text-white font-bold py-2 px-4 rounded-lg hover:bg-white/20 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                  &larr; Cảnh Trước
-              </button>
-              <span className="font-bold text-indigo-100">{currentIndex + 1} / {scenes.length}</span>
-            </div>
-            <button 
-              onClick={handleCopyAndNext} 
-              className="w-full sm:w-auto bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-indigo-700 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
-            >
-              {currentIndex < scenes.length - 1 ? 'Sao chép & Tới Cảnh Tiếp &rarr;' : 'Sao chép Prompt Cuối Cùng'}
-            </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 
 const App: React.FC = () => {
   const [videoType, setVideoType] = useState<VideoType>('story');
@@ -101,17 +26,13 @@ const App: React.FC = () => {
   const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
   const { apiKey, setApiKey, clearApiKey, storageStatus } = useGeminiApiKey();
   const [showApiKey, setShowApiKey] = useState(false);
-
-  const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false);
-  const [currentWorkflowIndex, setCurrentWorkflowIndex] = useState(0);
   const [isRunningAutomation, setIsRunningAutomation] = useState(false);
   const [automationStatus, setAutomationStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
   const [automationMessage, setAutomationMessage] = useState<string | null>(null);
   const [automationDownloadDirectory, setAutomationDownloadDirectory] = useState('');
-
-  const getSafeProjectSlug = useCallback(() => {
-    return (formData.projectName.trim() || 'prompt_script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
-  }, [formData.projectName]);
+  const [googleFlowEmail, setGoogleFlowEmail] = useState('');
+  const [googleFlowPassword, setGoogleFlowPassword] = useState('');
+  const [showGooglePassword, setShowGooglePassword] = useState(false);
 
   const handleApiKeyChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     setApiKey(e.target.value);
@@ -124,6 +45,14 @@ const App: React.FC = () => {
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  }, []);
+
+  const handleGoogleEmailChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setGoogleFlowEmail(e.target.value);
+  }, []);
+
+  const handleGooglePasswordChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setGoogleFlowPassword(e.target.value);
   }, []);
 
   const handleDownloadDirectoryChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
@@ -275,70 +204,17 @@ const App: React.FC = () => {
     }
   };
 
-  const handleStartWorkflow = () => {
-    setCurrentWorkflowIndex(0);
-    setIsWorkflowModalOpen(true);
-  };
-
-  const exportToExcel = () => {
-    if (generatedScenes.length === 0) {
-      setError("Chưa có dữ liệu prompt để xuất!");
-      return;
-    }
-
-    const now = new Date();
-    const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const prefix = formData.projectName.trim().replace(/[^a-z0-9_]/gi, '_').toUpperCase() || 'PROJECT';
-
-    const dataToExport = generatedScenes.map((p, index) => ({
-      'JOB_ID': `Job_${index + 1}`,
-      'PROMPT': p.prompt_text,
-      'IMAGE_PATH': '',
-      'STATUS': '',
-      'VIDEO_NAME': `${prefix}_${dateStr}_${index + 1}`
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    worksheet['!cols'] = [{ wch: 15 }, { wch: 150 }, { wch: 20 }, { wch: 20 }, { wch: 30 }];
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Prompts");
-
-    const safeFileName = getSafeProjectSlug();
-    XLSX.writeFile(workbook, `${safeFileName}.xlsx`);
-  };
-
-  const downloadFlowAutomationJson = () => {
-    if (generatedScenes.length === 0) {
-      setError("Chưa có dữ liệu prompt để tải!");
-      return;
-    }
-
-    setError(null);
-
-    const payload = {
-      projectName: formData.projectName.trim() || 'Prompt Project',
-      prompts: generatedScenes.map(scene => ({
-        scene_number: scene.scene_number,
-        scene_title: scene.scene_title,
-        prompt_text: scene.prompt_text
-      }))
-    };
-
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${getSafeProjectSlug()}-google-flow-prompts.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   const runAutomationFromUi = useCallback(async () => {
     if (generatedScenes.length === 0) {
       setAutomationStatus('error');
       setAutomationMessage('Chưa có prompt nào để tự động hoá. Vui lòng tạo prompt trước.');
+      return;
+    }
+
+    const trimmedEmail = googleFlowEmail.trim();
+    if (!trimmedEmail || !googleFlowPassword) {
+      setAutomationStatus('error');
+      setAutomationMessage('Vui lòng nhập đầy đủ tài khoản Google Flow (email và mật khẩu) trước khi chạy tự động hoá.');
       return;
     }
 
@@ -355,6 +231,8 @@ const App: React.FC = () => {
         body: JSON.stringify({
           projectName: formData.projectName.trim() || 'Prompt Project',
           downloadDirectory: automationDownloadDirectory.trim() || undefined,
+          googleFlowEmail: trimmedEmail,
+          googleFlowPassword,
           prompts: generatedScenes.map(scene => ({
             scene_number: scene.scene_number,
             scene_title: scene.scene_title,
@@ -371,7 +249,7 @@ const App: React.FC = () => {
 
       const result = await response.json().catch(() => ({}));
       setAutomationStatus('success');
-      setAutomationMessage(result?.message || 'Đang xử lý từng prompt trong Google Flow. Theo dõi tiến trình trên cửa sổ Chrome vừa mở.');
+      setAutomationMessage(result?.message || 'Ứng dụng sẽ đăng nhập Google Flow và xử lý từng prompt. Theo dõi tiến trình trên cửa sổ Chrome vừa mở.');
     } catch (automationError: any) {
       console.error('Không thể chạy tự động hoá từ UI:', automationError);
       let message = automationError?.message || 'Không thể khởi chạy tự động hoá.';
@@ -383,7 +261,7 @@ const App: React.FC = () => {
     } finally {
       setIsRunningAutomation(false);
     }
-  }, [automationDownloadDirectory, formData.projectName, generatedScenes]);
+  }, [automationDownloadDirectory, formData.projectName, generatedScenes, googleFlowEmail, googleFlowPassword]);
 
   const RadioLabel: React.FC<{ name: string; value: string; checked: boolean; onChange: (value: any) => void; children: React.ReactNode; }> = ({ name, value, checked, onChange, children }) => {
     return (
@@ -404,13 +282,6 @@ const App: React.FC = () => {
   
   return (
     <>
-      <WorkflowModal 
-        isOpen={isWorkflowModalOpen}
-        onClose={() => setIsWorkflowModalOpen(false)}
-        scenes={generatedScenes}
-        currentIndex={currentWorkflowIndex}
-        setCurrentIndex={setCurrentWorkflowIndex}
-      />
       <div className="text-white min-h-screen flex items-center justify-center p-4">
         <div className="w-full max-w-5xl mx-auto">
           <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
@@ -455,6 +326,37 @@ const App: React.FC = () => {
                     Trình duyệt của bạn đang chặn bộ nhớ cục bộ, vì vậy khóa API sẽ chỉ tồn tại trong phiên hiện tại.
                   </p>
                 )}
+              </div>
+              <div className="space-y-2 mb-8">
+                <label className="block text-sm font-medium text-indigo-100">Tài khoản Google Flow</label>
+                <input
+                  type="email"
+                  value={googleFlowEmail}
+                  onChange={handleGoogleEmailChange}
+                  placeholder="Email đăng nhập Google Flow"
+                  className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                />
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 flex items-center gap-3">
+                    <input
+                      type={showGooglePassword ? 'text' : 'password'}
+                      value={googleFlowPassword}
+                      onChange={handleGooglePasswordChange}
+                      placeholder="Mật khẩu tài khoản Google Flow"
+                      className="flex-1 bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGooglePassword(prev => !prev)}
+                      className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-sm text-indigo-100 hover:bg-white/20 transition"
+                    >
+                      {showGooglePassword ? 'Ẩn' : 'Hiện'}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-indigo-200/80">
+                  Thông tin đăng nhập chỉ được dùng cho phiên hiện tại để tự động đăng nhập Google Flow và không được lưu vào trình duyệt.
+                </p>
               </div>
               <div className="space-y-6 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -547,63 +449,40 @@ const App: React.FC = () => {
               
               {generatedScenes.length > 0 && (
                 <div className="text-center mt-8 pt-6 border-t border-white/20">
-                    <h3 className="text-xl font-bold mb-4">Hoàn thành! Kịch bản của bạn đã sẵn sàng.</h3>
-                    <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-                        <button
-                          onClick={handleStartWorkflow}
-                          className="bg-purple-600 text-white font-bold py-3 px-8 rounded-full hover:bg-purple-700 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-purple-300 w-full sm:w-auto"
-                        >
-                            Bắt đầu Quy trình Xuất Video
-                        </button>
-                        <button
-                          onClick={runAutomationFromUi}
-                          disabled={isRunningAutomation}
-                          className="bg-rose-500 text-white font-bold py-3 px-8 rounded-full hover:bg-rose-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-rose-300 disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto"
-                        >
-                            {isRunningAutomation ? 'Đang tự động hoá...' : 'Tự động hoá trên Google Flow'}
-                        </button>
-                        <button
-                          onClick={exportToExcel}
-                          className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto"
-                        >
-                            Xuất ra File Excel
-                        </button>
-                        <button
-                          onClick={downloadFlowAutomationJson}
-                          className="bg-amber-500 text-white font-bold py-3 px-8 rounded-full hover:bg-amber-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-amber-300 w-full sm:w-auto"
-                        >
-                            Tải file JSON cho Google Flow
-                        </button>
-                    </div>
-                    <p className="text-sm text-indigo-200 mt-4">
-                        Dùng file JSON với lệnh <code className="bg-black/40 px-2 py-1 rounded">npm run flow:run ./path/to/file.json /thu-muc-tai-video</code> để tự động mở Chrome, dán prompt và tải video từ Google Flow.
-                        <br />
-                        Hoặc sao chép file <code className="bg-black/40 px-2 py-1 rounded">automation/config.sample.json</code>, điền thông tin dự án rồi chạy <code className="bg-black/40 px-2 py-1 rounded">npm run flow:auto</code> để app tự sinh prompt và xuất video.
+                  <h3 className="text-xl font-bold mb-4">Hoàn thành! Kịch bản của bạn đã sẵn sàng.</h3>
+                  <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
+                    <button
+                      onClick={runAutomationFromUi}
+                      disabled={isRunningAutomation}
+                      className="bg-rose-500 text-white font-bold py-3 px-8 rounded-full hover:bg-rose-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-rose-300 disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto"
+                    >
+                      {isRunningAutomation ? 'Đang tự động hoá...' : 'Tự động hoá trên Google Flow'}
+                    </button>
+                  </div>
+                  <div className="mt-6 bg-black/30 border border-white/10 rounded-xl p-5 text-left space-y-3">
+                    <h4 className="text-lg font-semibold text-white">Chạy tự động hoá Google Flow</h4>
+                    <p className="text-sm text-indigo-100/90">
+                      Ứng dụng sẽ mở Chrome, đăng nhập bằng email/mật khẩu bạn đã cung cấp và tự động nhập từng prompt, chờ render và tải video về.
                     </p>
-                    <div className="mt-6 bg-black/30 border border-white/10 rounded-xl p-5 text-left space-y-3">
-                      <h4 className="text-lg font-semibold text-white">Chạy tự động hoá trực tiếp từ ứng dụng</h4>
-                      <p className="text-sm text-indigo-100/90">
-                        Nhấn nút <strong>"Tự động hoá trên Google Flow"</strong> ở trên sau khi tạo prompt. Ứng dụng sẽ mở Chrome, dán từng prompt và tải video về theo thứ tự.
+                    <label className="block text-sm text-indigo-100">
+                      Thư mục tải video (tuỳ chọn)
+                      <input
+                        type="text"
+                        value={automationDownloadDirectory}
+                        onChange={handleDownloadDirectoryChange}
+                        placeholder="Ví dụ: C:\\Users\\ban\\Videos\\GoogleFlow"
+                        className="mt-2 w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                      />
+                    </label>
+                    <p className="text-xs text-indigo-200/80">
+                      Nếu để trống, video sẽ tải vào thư mục <code className="bg-black/40 px-2 py-1 rounded">google-flow-downloads</code> của dự án. Giữ cửa sổ Chrome mở cho đến khi hoàn tất quá trình.
+                    </p>
+                    {automationStatus !== 'idle' && automationMessage && (
+                      <p className={`text-sm font-medium ${automationStatus === 'success' ? 'text-emerald-300' : automationStatus === 'running' ? 'text-sky-200' : 'text-amber-200'}`}>
+                        {automationMessage}
                       </p>
-                      <label className="block text-sm text-indigo-100">
-                        Thư mục tải video (tuỳ chọn)
-                        <input
-                          type="text"
-                          value={automationDownloadDirectory}
-                          onChange={handleDownloadDirectoryChange}
-                          placeholder="Ví dụ: C:\\Users\\ban\\Videos\\GoogleFlow"
-                          className="mt-2 w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                        />
-                      </label>
-                      <p className="text-xs text-indigo-200/80">
-                        Nếu để trống, video sẽ tải vào thư mục <code className="bg-black/40 px-2 py-1 rounded">google-flow-downloads</code> trong dự án. Lần đầu tiên Chrome mở ra, hãy chọn thư mục tải xuống mặc định và giữ cửa sổ mở cho đến khi hoàn tất.
-                      </p>
-                      {automationStatus !== 'idle' && automationMessage && (
-                        <p className={`text-sm font-medium ${automationStatus === 'success' ? 'text-emerald-300' : automationStatus === 'running' ? 'text-sky-200' : 'text-amber-200'}`}>
-                          {automationMessage}
-                        </p>
-                      )}
-                    </div>
+                    )}
+                  </div>
                 </div>
               )}
 

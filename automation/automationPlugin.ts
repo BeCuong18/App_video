@@ -45,7 +45,9 @@ export const createAutomationPlugin = (): Plugin => {
             batchSize: payload.batchSize ? Number(payload.batchSize) : undefined,
             headless: Boolean(payload.headless),
             browserExecutablePath: payload.browserExecutablePath || undefined,
-            userDataDir: payload.userDataDir || undefined
+            userDataDir: payload.userDataDir || undefined,
+            googleEmail: payload.googleFlowEmail || payload.googleEmail || undefined,
+            googlePassword: payload.googleFlowPassword || payload.googlePassword || undefined
           };
 
           await runFlowAutomation({

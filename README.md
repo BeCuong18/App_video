@@ -20,64 +20,56 @@ View your app in AI Studio: https://ai.studio/apps/drive/1M1qY9pr7s9sVz-Vqhscv_a
    - Set `GEMINI_API_KEY` in [.env.local](.env.local) nếu bạn muốn dùng biến môi trường cho các script tự động hoá (giá trị này không được tự động nạp vào giao diện người dùng).
 3. Run the app:
    `npm run dev`
+4. Khi ứng dụng mở, nhập email và mật khẩu Google Flow của bạn vào khu vực **Tài khoản Google Flow** trước khi chạy tính năng tự động hoá. Thông tin này chỉ tồn tại trong bộ nhớ của tab hiện tại và không được lưu lại.
 
 ## Google Flow automation (Puppeteer)
 
-Bạn có thể tự động đưa prompt vào Google Flow và tải video về máy bằng một trong ba phương án sau.
+Ứng dụng giờ chỉ tập trung vào quy trình tự động: sau khi sinh prompt, bạn nhập thông tin đăng nhập Google Flow và nhấn nút. Không còn yêu cầu sao chép thủ công giữa các tab.
 
-### 0. Nhấn nút trực tiếp trong giao diện
+### Tự động hoá trực tiếp trong giao diện
 
-Sau khi tạo xong prompt ở ứng dụng web, hãy kéo xuống phần kết quả và bấm **"Tự động hoá trên Google Flow"**. Ứng dụng sẽ gửi danh sách prompt tới một endpoint cục bộ, mở Chrome bằng Puppeteer, dán từng prompt và tải video về thư mục bạn chọn.
+1. Nhập Gemini API key và thông tin tài khoản Google Flow ở đầu trang.
+2. Sinh prompt cho dự án của bạn.
+3. Ở phần kết quả, chọn thư mục tải video (nếu muốn) và nhấn **"Tự động hoá trên Google Flow"**.
+4. Giữ cửa sổ Chrome mở cho tới khi cả ba video trong từng nhóm được tải xuống; script sẽ tự đăng nhập, dán prompt và tải file 720p.
 
-- Bạn có thể nhập sẵn đường dẫn thư mục tải trong ô **"Thư mục tải video"** ngay dưới nút.
-- Chức năng này cần chạy ứng dụng bằng `npm run dev` trên máy local (endpoint không khả dụng khi chỉ mở bản build tĩnh).
-- Lần đầu chạy, Chrome sẽ hỏi chọn thư mục tải xuống; hãy xác nhận và giữ cửa sổ mở cho tới khi hoàn tất.
+### Tự động hoá bằng CLI (không cần mở trình duyệt thủ công)
 
-### 1. Toàn bộ tự động chỉ với 1 lệnh
+Script `automation/fullAutomation.mjs` vẫn cho phép chạy toàn bộ quy trình bằng một lệnh:
 
-Script `automation/fullAutomation.mjs` sẽ:
-
-1. Đọc cấu hình từ `automation/config.json` (hãy tạo file này bằng cách copy từ `automation/config.sample.json`).
-2. Gọi Gemini để sinh prompt theo cấu hình.
-3. Lưu prompt ra `automation/latest-prompts.json` (có thể đổi đường dẫn trong cấu hình).
-4. Mở Chrome, nhập từng prompt vào Google Flow theo nhóm 3 cảnh, đợi render và tải video về thư mục bạn chỉ định.
-
-Chạy lệnh:
-
-```bash
-npm run flow:auto
-```
-
-- Có thể truyền thêm đường dẫn file cấu hình và thư mục tải video:
-
-  ```bash
-  npm run flow:auto ./automation/config.json ./downloads/google-flow
-  ```
-
-- Điền `GEMINI_API_KEY` vào file `.env.local` để script tự lấy khi gọi Gemini.
-- Nếu muốn dùng Chrome/Chromium đã cài sẵn, cập nhật `browserExecutablePath` trong file cấu hình.
-- Trường `userDataDir` giúp tái sử dụng phiên đăng nhập Google giữa các lần chạy (không bắt buộc).
-- Các trường quan trọng trong `config.json`:
-  - `videoType`: `"story"` hoặc `"live"`.
-  - `idea` (đối với story) hoặc các trường `liveAtmosphere`, `liveArtistName`, `liveArtist`, `liveArtistImagePath` (đối với live).
-  - `songMinutes` + `songSeconds`: thời lượng bài hát để tính số cảnh.
-  - `downloadDirectory`: thư mục sẽ chứa video tải về.
-  - `headless`: đặt `true` nếu muốn chạy Chrome ở chế độ nền.
-
-### 2. Dùng prompts đã xuất thủ công
-
-Nếu bạn muốn tự tạo prompt trong giao diện rồi mới chạy tự động hoá:
-
-1. Xuất file JSON bằng nút **"Tải file JSON cho Google Flow"** trong ứng dụng.
-2. Chạy lệnh:
+1. Sao chép `automation/config.sample.json` thành `automation/config.json` và cập nhật nội dung.
+2. Điền Gemini API key vào `.env.local` để script gọi Gemini.
+3. Cập nhật các trường `googleFlowEmail` và `googleFlowPassword` trong file cấu hình để script tự đăng nhập Google Flow.
+4. Chạy:
 
    ```bash
-   npm run flow:run ./duong-dan-toi-file.json ./thu-muc-tai-video
+   npm run flow:auto
    ```
 
-   - Tham số đầu tiên: đường dẫn đến file JSON vừa tải.
-   - Tham số thứ hai (tuỳ chọn): thư mục muốn lưu video. Nếu bỏ trống, script sẽ tạo `google-flow-downloads` tại thư mục hiện tại.
+   Có thể truyền đường dẫn cấu hình và thư mục tải tùy ý:
 
-3. Chrome sẽ mở, bạn chỉ cần đăng nhập tài khoản Google (nếu được hỏi) và xác nhận thư mục tải về ở lần đầu.
+   ```bash
+   npm run flow:auto ./automation/config.json ./downloads/google-flow
+   ```
 
-> Tham khảo cấu trúc JSON mẫu ở `automation/prompts.sample.json`.
+Các trường quan trọng trong `config.json`:
+
+- `projectName`: tên dự án sẽ hiển thị trong log và file xuất.
+- `videoType`: `"story"` hoặc `"live"`.
+- `idea` (đối với story) hoặc `liveAtmosphere` / `liveArtistName` / `liveArtist` / `liveArtistImagePath` (đối với live).
+- `songMinutes` + `songSeconds`: thời lượng bài hát để tính số cảnh.
+- `downloadDirectory`: thư mục lưu video.
+- `batchSize`: số prompt chạy mỗi đợt (mặc định 3).
+- `googleFlowEmail` + `googleFlowPassword`: thông tin đăng nhập Google Flow để script tự đăng nhập.
+- `browserExecutablePath`, `userDataDir`, `headless`: tuỳ chỉnh cho trình duyệt Puppeteer.
+
+### Chạy script với file prompts sẵn có
+
+Nếu bạn đã có file JSON chứa prompt, dùng:
+
+```bash
+npm run flow:run ./path/to/prompts.json ./thu-muc-tai-video
+```
+
+- Script sẽ đọc biến môi trường `GOOGLE_FLOW_EMAIL` / `GOOGLE_FLOW_PASSWORD` (hoặc `FLOW_EMAIL` / `FLOW_PASSWORD`) để tự đăng nhập. Nếu không đặt, trình duyệt sẽ giữ nguyên phiên đăng nhập hiện có.
+- Thư mục tải video mặc định là `google-flow-downloads` nếu không truyền tham số thứ hai.
