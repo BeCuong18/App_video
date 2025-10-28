@@ -99,7 +99,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
-  const { apiKey, setApiKey, clearApiKey, isUsingFallbackKey } = useGeminiApiKey();
+  const { apiKey, setApiKey, clearApiKey, isUsingFallbackKey, storageStatus } = useGeminiApiKey();
   const [showApiKey, setShowApiKey] = useState(false);
 
   const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false);
@@ -393,6 +393,11 @@ const App: React.FC = () => {
                   Khóa API chỉ dùng trên trình duyệt của bạn và được lưu trong localStorage để tiện sử dụng cho lần sau.
                   {isUsingFallbackKey && ' (Đang dùng khóa API từ cấu hình mặc định. Bạn có thể thay đổi bằng cách nhập khóa mới.)'}
                 </p>
+                {storageStatus === 'unavailable' && (
+                  <p className="text-xs text-amber-200/90">
+                    Trình duyệt của bạn đang chặn bộ nhớ cục bộ, vì vậy khóa API sẽ chỉ tồn tại trong phiên hiện tại.
+                  </p>
+                )}
               </div>
               <div className="space-y-6 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

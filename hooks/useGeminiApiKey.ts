@@ -13,27 +13,53 @@ const readFallbackKey = () => {
   return envKey || processKey || '';
 };
 
+type StorageStatus = 'unknown' | 'available' | 'unavailable';
+
 export const useGeminiApiKey = () => {
   const [apiKey, setApiKeyState] = useState('');
   const [isUsingFallbackKey, setIsUsingFallbackKey] = useState(false);
+  const [storageStatus, setStorageStatus] = useState<StorageStatus>('unknown');
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const storedKey = window.localStorage.getItem(STORAGE_KEY);
-    if (storedKey) {
-      setApiKeyState(storedKey);
-      setIsUsingFallbackKey(false);
-      return;
-    }
-
     const fallback = readFallbackKey().trim();
+
+    if (typeof window === 'undefined') {
+      if (fallback) {
+        setApiKeyState(fallback);
+        setIsUsingFallbackKey(true);
+      }
+      return;
+    }
+
+    try {
+      const storedKey = window.localStorage.getItem(STORAGE_KEY);
+      if (storedKey) {
+        setApiKeyState(storedKey);
+        setIsUsingFallbackKey(false);
+        setStorageStatus('available');
+        return;
+      }
+
+      setStorageStatus('available');
+    } catch (error) {
+      console.warn('Unable to access localStorage for the Gemini API key.', error);
+      setStorageStatus('unavailable');
+      if (fallback) {
+        setApiKeyState(fallback);
+        setIsUsingFallbackKey(true);
+      }
+      return;
+    }
+
     if (fallback) {
       setApiKeyState(fallback);
       setIsUsingFallbackKey(true);
-      window.localStorage.setItem(STORAGE_KEY, fallback);
+      try {
+        window.localStorage.setItem(STORAGE_KEY, fallback);
+      } catch (error) {
+        console.warn('Unable to persist the fallback Gemini API key to localStorage.', error);
+        setStorageStatus('unavailable');
+      }
     }
   }, []);
 
@@ -42,11 +68,17 @@ export const useGeminiApiKey = () => {
       return;
     }
 
-    const trimmed = value.trim();
-    if (trimmed) {
-      window.localStorage.setItem(STORAGE_KEY, trimmed);
-    } else {
-      window.localStorage.removeItem(STORAGE_KEY);
+    try {
+      const trimmed = value.trim();
+      if (trimmed) {
+        window.localStorage.setItem(STORAGE_KEY, trimmed);
+      } else {
+        window.localStorage.removeItem(STORAGE_KEY);
+      }
+      setStorageStatus('available');
+    } catch (error) {
+      console.warn('Unable to persist the Gemini API key to localStorage.', error);
+      setStorageStatus('unavailable');
     }
   }, []);
 
@@ -62,8 +94,16 @@ export const useGeminiApiKey = () => {
   const clearApiKey = useCallback(() => {
     setApiKeyState('');
     setIsUsingFallbackKey(false);
-    if (typeof window !== 'undefined') {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
       window.localStorage.removeItem(STORAGE_KEY);
+      setStorageStatus('available');
+    } catch (error) {
+      console.warn('Unable to clear the Gemini API key from localStorage.', error);
+      setStorageStatus('unavailable');
     }
   }, []);
 
@@ -72,6 +112,7 @@ export const useGeminiApiKey = () => {
     setApiKey,
     clearApiKey,
     isUsingFallbackKey,
+    storageStatus,
   } as const;
 };
 
