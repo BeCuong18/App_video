@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, ChangeEvent } from 'react';
+import React, { useState, useCallback, ChangeEvent, useEffect } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { Scene, VideoType, UploadedImage, FormData } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
@@ -98,13 +98,42 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
-  
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+
   const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false);
   const [currentWorkflowIndex, setCurrentWorkflowIndex] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedKey = window.localStorage.getItem('geminiApiKey');
+    if (storedKey) {
+      setApiKey(storedKey);
+    }
+  }, []);
 
   const getSafeProjectSlug = useCallback(() => {
     return (formData.projectName.trim() || 'prompt_script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
   }, [formData.projectName]);
+
+  const handleApiKeyChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setApiKey(value);
+    if (typeof window === 'undefined') return;
+    const trimmed = value.trim();
+    if (trimmed) {
+      window.localStorage.setItem('geminiApiKey', trimmed);
+    } else {
+      window.localStorage.removeItem('geminiApiKey');
+    }
+  }, []);
+
+  const handleClearApiKey = useCallback(() => {
+    setApiKey('');
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('geminiApiKey');
+    }
+  }, []);
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -138,6 +167,12 @@ const App: React.FC = () => {
   }, []);
 
   const generatePrompts = async () => {
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) {
+      setError('Vui lòng nhập Gemini API Key trước khi tạo prompt.');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setGeneratedScenes([]);
@@ -186,7 +221,11 @@ const App: React.FC = () => {
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      if (typeof window !== 'undefined' && !window.localStorage.getItem('geminiApiKey')) {
+        window.localStorage.setItem('geminiApiKey', trimmedApiKey);
+      }
+
+      const ai = new GoogleGenAI({ apiKey: trimmedApiKey });
       const response = await ai.models.generateContent({
         model: formData.model,
         contents: { parts: parts },
@@ -334,6 +373,37 @@ const App: React.FC = () => {
             </header>
 
             <main>
+              <div className="space-y-2 mb-8">
+                <label className="block text-sm font-medium text-indigo-100">Gemini API Key</label>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1 flex items-center gap-3">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={apiKey}
+                      onChange={handleApiKeyChange}
+                      placeholder="Nhập API key từ Google AI Studio..."
+                      className="flex-1 bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(prev => !prev)}
+                      className="px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-sm text-indigo-100 hover:bg-white/20 transition"
+                    >
+                      {showApiKey ? 'Ẩn' : 'Hiện'}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearApiKey}
+                    className="self-start sm:self-auto px-4 py-2 bg-rose-500/80 hover:bg-rose-500 text-white rounded-lg text-sm transition"
+                  >
+                    Xoá key
+                  </button>
+                </div>
+                <p className="text-xs text-indigo-200/80">
+                  Khóa API chỉ dùng trên trình duyệt của bạn và được lưu trong localStorage để tiện sử dụng cho lần sau.
+                </p>
+              </div>
               <div className="space-y-6 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
