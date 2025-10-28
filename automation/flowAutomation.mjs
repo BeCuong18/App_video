@@ -1,10 +1,22 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import puppeteer from 'puppeteer';
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+let cachedPuppeteer = null;
+
+const loadPuppeteer = async () => {
+  if (!cachedPuppeteer) {
+    try {
+      const module = await import('puppeteer');
+      cachedPuppeteer = module.default || module;
+    } catch (error) {
+      throw new Error('Không tìm thấy thư viện puppeteer. Hãy chạy "npm install" để cài đặt devDependencies trước khi dùng tự động hoá.');
+    }
+  }
+  return cachedPuppeteer;
+};
 
 const chunkPrompts = (items, size) => {
   const result = [];
@@ -224,6 +236,7 @@ export const runFlowAutomation = async ({
     launchOptions.userDataDir = path.resolve(process.cwd(), userDataDir);
   }
 
+  const puppeteer = await loadPuppeteer();
   const browser = await puppeteer.launch(launchOptions);
 
   try {

@@ -104,6 +104,10 @@ const App: React.FC = () => {
 
   const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false);
   const [currentWorkflowIndex, setCurrentWorkflowIndex] = useState(0);
+  const [isRunningAutomation, setIsRunningAutomation] = useState(false);
+  const [automationStatus, setAutomationStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [automationMessage, setAutomationMessage] = useState<string | null>(null);
+  const [automationDownloadDirectory, setAutomationDownloadDirectory] = useState('');
 
   const getSafeProjectSlug = useCallback(() => {
     return (formData.projectName.trim() || 'prompt_script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
@@ -121,7 +125,11 @@ const App: React.FC = () => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   }, []);
-  
+
+  const handleDownloadDirectoryChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setAutomationDownloadDirectory(e.target.value);
+  }, []);
+
   const handleAspectRatioChange = (value: '16:9' | '9:16') => {
     setFormData(prev => ({...prev, aspectRatio: value}));
   };
@@ -327,10 +335,60 @@ const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
+  const runAutomationFromUi = useCallback(async () => {
+    if (generatedScenes.length === 0) {
+      setAutomationStatus('error');
+      setAutomationMessage('Chưa có prompt nào để tự động hoá. Vui lòng tạo prompt trước.');
+      return;
+    }
+
+    setAutomationStatus('running');
+    setIsRunningAutomation(true);
+    setAutomationMessage('Đang khởi động quy trình tự động hoá... Trình duyệt sẽ mở trong giây lát.');
+
+    try {
+      const response = await fetch('/automation/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          projectName: formData.projectName.trim() || 'Prompt Project',
+          downloadDirectory: automationDownloadDirectory.trim() || undefined,
+          prompts: generatedScenes.map(scene => ({
+            scene_number: scene.scene_number,
+            scene_title: scene.scene_title,
+            prompt_text: scene.prompt_text
+          }))
+        })
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(async () => ({ message: await response.text() }));
+        const message = errorPayload?.error || errorPayload?.message || `Máy chủ trả về lỗi ${response.status}`;
+        throw new Error(message);
+      }
+
+      const result = await response.json().catch(() => ({}));
+      setAutomationStatus('success');
+      setAutomationMessage(result?.message || 'Đang xử lý từng prompt trong Google Flow. Theo dõi tiến trình trên cửa sổ Chrome vừa mở.');
+    } catch (automationError: any) {
+      console.error('Không thể chạy tự động hoá từ UI:', automationError);
+      let message = automationError?.message || 'Không thể khởi chạy tự động hoá.';
+      if (message.includes('fetch') || message.includes('Failed to fetch')) {
+        message = 'Không thể kết nối tới máy chủ tự động hoá. Hãy đảm bảo bạn đang chạy ứng dụng bằng lệnh "npm run dev" trên máy local.';
+      }
+      setAutomationStatus('error');
+      setAutomationMessage(message);
+    } finally {
+      setIsRunningAutomation(false);
+    }
+  }, [automationDownloadDirectory, formData.projectName, generatedScenes]);
+
   const RadioLabel: React.FC<{ name: string; value: string; checked: boolean; onChange: (value: any) => void; children: React.ReactNode; }> = ({ name, value, checked, onChange, children }) => {
     return (
         <label className="relative flex items-center space-x-2 cursor-pointer p-2 rounded-md flex-1 justify-center text-center transition-colors">
-            <input 
+            <input
                 type="radio" 
                 name={name} 
                 value={value} 
@@ -499,6 +557,13 @@ const App: React.FC = () => {
                             Bắt đầu Quy trình Xuất Video
                         </button>
                         <button
+                          onClick={runAutomationFromUi}
+                          disabled={isRunningAutomation}
+                          className="bg-rose-500 text-white font-bold py-3 px-8 rounded-full hover:bg-rose-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-rose-300 disabled:opacity-60 disabled:cursor-not-allowed w-full sm:w-auto"
+                        >
+                            {isRunningAutomation ? 'Đang tự động hoá...' : 'Tự động hoá trên Google Flow'}
+                        </button>
+                        <button
                           onClick={exportToExcel}
                           className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto"
                         >
@@ -516,6 +581,30 @@ const App: React.FC = () => {
                         <br />
                         Hoặc sao chép file <code className="bg-black/40 px-2 py-1 rounded">automation/config.sample.json</code>, điền thông tin dự án rồi chạy <code className="bg-black/40 px-2 py-1 rounded">npm run flow:auto</code> để app tự sinh prompt và xuất video.
                     </p>
+                    <div className="mt-6 bg-black/30 border border-white/10 rounded-xl p-5 text-left space-y-3">
+                      <h4 className="text-lg font-semibold text-white">Chạy tự động hoá trực tiếp từ ứng dụng</h4>
+                      <p className="text-sm text-indigo-100/90">
+                        Nhấn nút <strong>"Tự động hoá trên Google Flow"</strong> ở trên sau khi tạo prompt. Ứng dụng sẽ mở Chrome, dán từng prompt và tải video về theo thứ tự.
+                      </p>
+                      <label className="block text-sm text-indigo-100">
+                        Thư mục tải video (tuỳ chọn)
+                        <input
+                          type="text"
+                          value={automationDownloadDirectory}
+                          onChange={handleDownloadDirectoryChange}
+                          placeholder="Ví dụ: C:\\Users\\ban\\Videos\\GoogleFlow"
+                          className="mt-2 w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                        />
+                      </label>
+                      <p className="text-xs text-indigo-200/80">
+                        Nếu để trống, video sẽ tải vào thư mục <code className="bg-black/40 px-2 py-1 rounded">google-flow-downloads</code> trong dự án. Lần đầu tiên Chrome mở ra, hãy chọn thư mục tải xuống mặc định và giữ cửa sổ mở cho đến khi hoàn tất.
+                      </p>
+                      {automationStatus !== 'idle' && automationMessage && (
+                        <p className={`text-sm font-medium ${automationStatus === 'success' ? 'text-emerald-300' : automationStatus === 'running' ? 'text-sky-200' : 'text-amber-200'}`}>
+                          {automationMessage}
+                        </p>
+                      )}
+                    </div>
                 </div>
               )}
 

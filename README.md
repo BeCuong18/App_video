@@ -23,7 +23,15 @@ View your app in AI Studio: https://ai.studio/apps/drive/1M1qY9pr7s9sVz-Vqhscv_a
 
 ## Google Flow automation (Puppeteer)
 
-Bạn có hai cách để tự động đưa prompt vào Google Flow và tải video về máy.
+Bạn có thể tự động đưa prompt vào Google Flow và tải video về máy bằng một trong ba phương án sau.
+
+### 0. Nhấn nút trực tiếp trong giao diện
+
+Sau khi tạo xong prompt ở ứng dụng web, hãy kéo xuống phần kết quả và bấm **"Tự động hoá trên Google Flow"**. Ứng dụng sẽ gửi danh sách prompt tới một endpoint cục bộ, mở Chrome bằng Puppeteer, dán từng prompt và tải video về thư mục bạn chọn.
+
+- Bạn có thể nhập sẵn đường dẫn thư mục tải trong ô **"Thư mục tải video"** ngay dưới nút.
+- Chức năng này cần chạy ứng dụng bằng `npm run dev` trên máy local (endpoint không khả dụng khi chỉ mở bản build tĩnh).
+- Lần đầu chạy, Chrome sẽ hỏi chọn thư mục tải xuống; hãy xác nhận và giữ cửa sổ mở cho tới khi hoàn tất.
 
 ### 1. Toàn bộ tự động chỉ với 1 lệnh
 
