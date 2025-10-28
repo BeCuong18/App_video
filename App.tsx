@@ -1,10 +1,11 @@
 
-import React, { useState, useCallback, ChangeEvent, useEffect } from 'react';
+import React, { useState, useCallback, ChangeEvent } from 'react';
 import { GoogleGenAI, Type } from "@google/genai";
 import { Scene, VideoType, UploadedImage, FormData } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
 import { LoaderIcon } from './components/Icons';
+import { useGeminiApiKey } from './hooks/useGeminiApiKey';
 
 declare const XLSX: any;
 
@@ -98,42 +99,23 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
-  const [apiKey, setApiKey] = useState('');
+  const { apiKey, setApiKey, clearApiKey, isUsingFallbackKey } = useGeminiApiKey();
   const [showApiKey, setShowApiKey] = useState(false);
 
   const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false);
   const [currentWorkflowIndex, setCurrentWorkflowIndex] = useState(0);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const storedKey = window.localStorage.getItem('geminiApiKey');
-    if (storedKey) {
-      setApiKey(storedKey);
-    }
-  }, []);
 
   const getSafeProjectSlug = useCallback(() => {
     return (formData.projectName.trim() || 'prompt_script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
   }, [formData.projectName]);
 
   const handleApiKeyChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setApiKey(value);
-    if (typeof window === 'undefined') return;
-    const trimmed = value.trim();
-    if (trimmed) {
-      window.localStorage.setItem('geminiApiKey', trimmed);
-    } else {
-      window.localStorage.removeItem('geminiApiKey');
-    }
-  }, []);
+    setApiKey(e.target.value);
+  }, [setApiKey]);
 
   const handleClearApiKey = useCallback(() => {
-    setApiKey('');
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem('geminiApiKey');
-    }
-  }, []);
+    clearApiKey();
+  }, [clearApiKey]);
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -221,10 +203,6 @@ const App: React.FC = () => {
     }
 
     try {
-      if (typeof window !== 'undefined' && !window.localStorage.getItem('geminiApiKey')) {
-        window.localStorage.setItem('geminiApiKey', trimmedApiKey);
-      }
-
       const ai = new GoogleGenAI({ apiKey: trimmedApiKey });
       const response = await ai.models.generateContent({
         model: formData.model,
@@ -253,7 +231,18 @@ const App: React.FC = () => {
         }
       });
       
-      const jsonText = response.text;
+      let jsonText: string | undefined | null;
+      if (typeof response.text === 'function') {
+        jsonText = await response.text();
+      } else if (typeof response.response?.text === 'function') {
+        jsonText = await response.response.text();
+      } else {
+        jsonText = response.text ?? response.response?.text();
+      }
+
+      if (!jsonText) {
+        throw new Error('Gemini không trả về nội dung nào.');
+      }
       const parsedData = JSON.parse(jsonText);
       
       if (parsedData.prompts && Array.isArray(parsedData.prompts)) {
@@ -402,6 +391,7 @@ const App: React.FC = () => {
                 </div>
                 <p className="text-xs text-indigo-200/80">
                   Khóa API chỉ dùng trên trình duyệt của bạn và được lưu trong localStorage để tiện sử dụng cho lần sau.
+                  {isUsingFallbackKey && ' (Đang dùng khóa API từ cấu hình mặc định. Bạn có thể thay đổi bằng cách nhập khóa mới.)'}
                 </p>
               </div>
               <div className="space-y-6 mb-6">
