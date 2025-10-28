@@ -448,6 +448,8 @@ const App: React.FC = () => {
                     </div>
                     <p className="text-sm text-indigo-200 mt-4">
                         Dùng file JSON với lệnh <code className="bg-black/40 px-2 py-1 rounded">npm run flow:run ./path/to/file.json /thu-muc-tai-video</code> để tự động mở Chrome, dán prompt và tải video từ Google Flow.
+                        <br />
+                        Hoặc sao chép file <code className="bg-black/40 px-2 py-1 rounded">automation/config.sample.json</code>, điền thông tin dự án rồi chạy <code className="bg-black/40 px-2 py-1 rounded">npm run flow:auto</code> để app tự sinh prompt và xuất video.
                     </p>
                 </div>
               )}

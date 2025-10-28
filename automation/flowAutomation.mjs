@@ -6,14 +6,6 @@ import puppeteer from 'puppeteer';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const [, , promptsArg, downloadArg] = process.argv;
-const promptsPath = promptsArg
-  ? path.resolve(process.cwd(), promptsArg)
-  : path.resolve(__dirname, 'prompts.json');
-const downloadDirectory = downloadArg
-  ? path.resolve(process.cwd(), downloadArg)
-  : path.resolve(process.cwd(), 'google-flow-downloads');
-
 const chunkPrompts = (items, size) => {
   const result = [];
   for (let i = 0; i < items.length; i += size) {
@@ -173,33 +165,81 @@ const chooseResolution = async (page) => {
   throw new Error('Không tìm thấy tuỳ chọn tải "Kích thước gốc (720)".');
 };
 
-const runAutomation = async () => {
-  const { projectName, prompts } = await readPrompts(promptsPath);
-  await ensureDownloadFolder(downloadDirectory);
+export const runFlowAutomation = async ({
+  promptsPath,
+  promptsData,
+  downloadDirectory,
+  batchSize = 3,
+  headless = false,
+  browserExecutablePath,
+  userDataDir
+} = {}) => {
+  let resolvedPromptsPath = null;
+  let projectName;
+  let prompts;
 
-  console.log('📄 Đang xử lý file prompts:', promptsPath);
-  console.log('📁 Thư mục tải video:', downloadDirectory);
+  if (promptsData && Array.isArray(promptsData.prompts)) {
+    projectName = promptsData.projectName || 'project';
+    prompts = promptsData.prompts.map((item, index) => ({
+      index: index + 1,
+      title: item.scene_title || item.title || `Prompt ${index + 1}`,
+      text: item.prompt_text || item.prompt || item.text || String(item)
+    }));
+  } else {
+    resolvedPromptsPath = promptsPath
+      ? path.resolve(process.cwd(), promptsPath)
+      : path.resolve(__dirname, 'prompts.json');
+    const parsed = await readPrompts(resolvedPromptsPath);
+    projectName = parsed.projectName;
+    prompts = parsed.prompts;
+  }
+
+  const resolvedDownloadDirectory = downloadDirectory
+    ? path.resolve(process.cwd(), downloadDirectory)
+    : path.resolve(process.cwd(), 'google-flow-downloads');
+
+  await ensureDownloadFolder(resolvedDownloadDirectory);
+
+  if (resolvedPromptsPath) {
+    console.log('📄 Đang xử lý file prompts:', resolvedPromptsPath);
+  } else {
+    console.log('📄 Đang sử dụng prompts có sẵn trong bộ nhớ.');
+  }
+  console.log('📂 Tên dự án:', projectName);
+  console.log('📁 Thư mục tải video:', resolvedDownloadDirectory);
   console.log(`🎯 Tổng số prompt: ${prompts.length}`);
   console.log('👉 Lưu ý: Nếu Chrome yêu cầu chọn thư mục tải xuống, hãy chọn đúng thư mục rồi nhấn Save.');
 
-  const browser = await puppeteer.launch({
-    headless: false,
+  const launchOptions = {
+    headless,
     defaultViewport: null,
     args: ['--start-maximized']
-  });
+  };
+
+  if (browserExecutablePath) {
+    launchOptions.executablePath = browserExecutablePath;
+  }
+
+  if (userDataDir) {
+    launchOptions.userDataDir = path.resolve(process.cwd(), userDataDir);
+  }
+
+  const browser = await puppeteer.launch(launchOptions);
 
   try {
-    const [page] = await browser.pages();
-    await page._client().send('Page.setDownloadBehavior', {
+    const pages = await browser.pages();
+    const page = pages.length > 0 ? pages[0] : await browser.newPage();
+    const client = await page.createCDPSession();
+    await client.send('Page.setDownloadBehavior', {
       behavior: 'allow',
-      downloadPath: downloadDirectory
+      downloadPath: resolvedDownloadDirectory
     });
 
     await page.goto('https://labs.google/fx/vi/tools/flow', { waitUntil: 'networkidle2' });
     await clickButtonByText(page, 'dự án mới', { timeout: 120000 });
     await page.waitForTimeout(2000);
 
-    const batches = chunkPrompts(prompts, 3);
+    const batches = chunkPrompts(prompts, batchSize);
     let processed = 0;
 
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
@@ -218,11 +258,11 @@ const runAutomation = async () => {
         await waitForDownloadMenu(page);
         console.log('✅ Video đã sẵn sàng, mở menu tải xuống.');
 
-        const existingFiles = await listFiles(downloadDirectory);
+        const existingFiles = await listFiles(resolvedDownloadDirectory);
         await openDownloadMenu(page);
         await chooseResolution(page);
 
-        const downloadedFile = await waitForNewDownload(downloadDirectory, existingFiles);
+        const downloadedFile = await waitForNewDownload(resolvedDownloadDirectory, existingFiles);
         console.log(`⬇️ Đã tải xong: ${downloadedFile}`);
 
         await page.waitForTimeout(2000);
@@ -246,7 +286,13 @@ const runAutomation = async () => {
   }
 };
 
-runAutomation().catch((error) => {
-  console.error('\n❌ Có lỗi xảy ra:', error.message);
-  process.exitCode = 1;
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  const [, , promptsArg, downloadArg] = process.argv;
+  runFlowAutomation({
+    promptsPath: promptsArg,
+    downloadDirectory: downloadArg
+  }).catch((error) => {
+    console.error('\n❌ Có lỗi xảy ra:', error.message);
+    process.exitCode = 1;
+  });
+}

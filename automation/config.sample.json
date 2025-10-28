@@ -1,0 +1,19 @@
+{
+  "projectName": "My Awesome MV",
+  "videoType": "story",
+  "idea": "A nostalgic journey through neon-lit city streets while remembering a first love.",
+  "liveAtmosphere": "",
+  "liveArtistName": "",
+  "liveArtist": "",
+  "liveArtistImagePath": "",
+  "songMinutes": 3,
+  "songSeconds": 30,
+  "aspectRatio": "16:9",
+  "model": "gemini-flash-lite-latest",
+  "batchSize": 3,
+  "downloadDirectory": "google-flow-downloads",
+  "promptsOutputPath": "automation/latest-prompts.json",
+  "headless": false,
+  "browserExecutablePath": "",
+  "userDataDir": ""
+}

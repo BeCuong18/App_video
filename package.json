@@ -7,10 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "flow:run": "node automation/flowAutomation.mjs"
+    "flow:run": "node automation/flowAutomation.mjs",
+    "flow:auto": "node automation/fullAutomation.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.27.0",
+    "dotenv": "^16.4.7",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
