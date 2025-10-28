@@ -1,0 +1,20 @@
+{
+  "projectName": "demo_project",
+  "prompts": [
+    {
+      "scene_number": 1,
+      "scene_title": "Mở đầu",
+      "prompt_text": "Wide aerial shot of a neon-lit city skyline at dusk, rain falling softly as synthwave music pulses."
+    },
+    {
+      "scene_number": 2,
+      "scene_title": "Cao trào",
+      "prompt_text": "Close-up of the singer on a rooftop, wind blowing hair, holographic butterflies swirling in sync with the beat."
+    },
+    {
+      "scene_number": 3,
+      "scene_title": "Kết thúc",
+      "prompt_text": "Slow motion dancers under glowing umbrellas in a futuristic alley, camera pulling back to reveal the city."
+    }
+  ]
+}

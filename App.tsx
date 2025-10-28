@@ -102,6 +102,10 @@ const App: React.FC = () => {
   const [isWorkflowModalOpen, setIsWorkflowModalOpen] = useState(false);
   const [currentWorkflowIndex, setCurrentWorkflowIndex] = useState(0);
 
+  const getSafeProjectSlug = useCallback(() => {
+    return (formData.projectName.trim() || 'prompt_script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
+  }, [formData.projectName]);
+
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -263,8 +267,36 @@ const App: React.FC = () => {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Prompts");
 
-    const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
+    const safeFileName = getSafeProjectSlug();
     XLSX.writeFile(workbook, `${safeFileName}.xlsx`);
+  };
+
+  const downloadFlowAutomationJson = () => {
+    if (generatedScenes.length === 0) {
+      setError("Chưa có dữ liệu prompt để tải!");
+      return;
+    }
+
+    setError(null);
+
+    const payload = {
+      projectName: formData.projectName.trim() || 'Prompt Project',
+      prompts: generatedScenes.map(scene => ({
+        scene_number: scene.scene_number,
+        scene_title: scene.scene_title,
+        prompt_text: scene.prompt_text
+      }))
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${getSafeProjectSlug()}-google-flow-prompts.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const RadioLabel: React.FC<{ name: string; value: string; checked: boolean; onChange: (value: any) => void; children: React.ReactNode; }> = ({ name, value, checked, onChange, children }) => {
@@ -395,19 +427,28 @@ const App: React.FC = () => {
                 <div className="text-center mt-8 pt-6 border-t border-white/20">
                     <h3 className="text-xl font-bold mb-4">Hoàn thành! Kịch bản của bạn đã sẵn sàng.</h3>
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-                        <button 
-                          onClick={handleStartWorkflow} 
+                        <button
+                          onClick={handleStartWorkflow}
                           className="bg-purple-600 text-white font-bold py-3 px-8 rounded-full hover:bg-purple-700 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-purple-300 w-full sm:w-auto"
                         >
                             Bắt đầu Quy trình Xuất Video
                         </button>
-                        <button 
-                          onClick={exportToExcel} 
+                        <button
+                          onClick={exportToExcel}
                           className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto"
                         >
                             Xuất ra File Excel
                         </button>
+                        <button
+                          onClick={downloadFlowAutomationJson}
+                          className="bg-amber-500 text-white font-bold py-3 px-8 rounded-full hover:bg-amber-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-amber-300 w-full sm:w-auto"
+                        >
+                            Tải file JSON cho Google Flow
+                        </button>
                     </div>
+                    <p className="text-sm text-indigo-200 mt-4">
+                        Dùng file JSON với lệnh <code className="bg-black/40 px-2 py-1 rounded">npm run flow:run ./path/to/file.json /thu-muc-tai-video</code> để tự động mở Chrome, dán prompt và tải video từ Google Flow.
+                    </p>
                 </div>
               )}
 
