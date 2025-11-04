@@ -1,6 +1,7 @@
 
 
 
+
 import React, {
   useState,
   useCallback,
@@ -16,55 +17,6 @@ import { LoaderIcon, CopyIcon } from './components/Icons';
 
 declare const XLSX: any;
 declare const CryptoJS: any;
-
-// --- IndexedDB Helpers for FileSystemDirectoryHandle ---
-const DB_NAME = 'PromptGeneratorDB';
-const STORE_NAME = 'FileHandles';
-
-function openDb() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME);
-      }
-    };
-  });
-}
-
-async function getHandleFromDb(): Promise<FileSystemDirectoryHandle | null> {
-  const db = await openDb();
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const request = tx.objectStore(STORE_NAME).get('directoryHandle');
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => resolve(null);
-  });
-}
-
-async function saveHandleToDb(handle: FileSystemDirectoryHandle) {
-  const db = await openDb();
-  return new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).put(handle, 'directoryHandle');
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function deleteHandleFromDb() {
-    const db = await openDb();
-    return new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, 'readwrite');
-        tx.objectStore(STORE_NAME).delete('directoryHandle');
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-    });
-}
-
 
 // --- Activation Component ---
 interface ActivationProps {
@@ -250,8 +202,6 @@ const App: React.FC = () => {
   const [isActivated, setIsActivated] = useState<boolean | null>(null);
   const [machineId, setMachineId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
-  const [directoryHandle, setDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
-
 
   // This secret key MUST be identical to the one in the keygen.html tool.
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
@@ -319,25 +269,6 @@ const App: React.FC = () => {
             }
         }
     }, 100);
-
-    // Load saved directory handle from IndexedDB
-    const loadHandle = async () => {
-        if (!('showDirectoryPicker' in window)) return;
-        try {
-            const handle = await getHandleFromDb();
-            if (handle) {
-                const options = { mode: 'readwrite' as const };
-                if ((await (handle as any).queryPermission(options)) === 'granted' || (await (handle as any).requestPermission(options)) === 'granted') {
-                    setDirectoryHandle(handle);
-                } else {
-                    await deleteHandleFromDb();
-                }
-            }
-        } catch (error) {
-            console.error("Error loading directory handle:", error);
-        }
-    };
-    loadHandle();
   }, []);
 
 
@@ -505,66 +436,29 @@ const App: React.FC = () => {
       setFeedback({ type: 'error', message: 'Chưa có dữ liệu prompt để bắt đầu quá trình!' });
       return;
     }
-     if (!directoryHandle) {
-      setFeedback({ type: 'error', message: 'Vui lòng chọn thư mục lưu trước khi bắt đầu.' });
-      return;
-    }
     setFeedback(null);
 
-    const dataToExport = generatedScenes.map((p, index) => ({
-      JOB_ID: `Job_${index + 1}`,
-      PROMPT: p.prompt_text,
-    }));
-
-    const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    worksheet['!cols'] = [{ wch: 15 }, { wch: 150 }];
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Prompts');
-    const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
-
     try {
-        const options = { mode: 'readwrite' as const };
-        if ((await (directoryHandle as any).requestPermission(options)) !== 'granted') {
-          setFeedback({ type: 'error', message: 'Không có quyền ghi vào thư mục đã chọn. Vui lòng chọn lại.' });
-          setDirectoryHandle(null);
-          await deleteHandleFromDb();
-          return;
-        }
+        const dataToExport = generatedScenes.map((p, index) => ({
+          JOB_ID: `Job_${index + 1}`,
+          PROMPT: p.prompt_text,
+        }));
 
-        const fileHandle = await directoryHandle.getFileHandle(`${safeFileName}.xlsx`, { create: true });
-        const writable = await fileHandle.createWritable();
-        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-        await writable.write(excelBuffer);
-        await writable.close();
-        setFeedback({ type: 'success', message: `Thành công! File đã được lưu tại thư mục: ${directoryHandle.name}` });
+        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+        worksheet['!cols'] = [{ wch: 15 }, { wch: 150 }];
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Prompts');
+        const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
 
-      } catch (err: any) {
-        if (err.name === 'AbortError') {
-          setFeedback({ type: 'info', message: 'Người dùng đã hủy quá trình.' });
-        } else {
-          console.error('Error saving file:', err);
-          setFeedback({ type: 'error', message: 'Lỗi lưu file. Sẽ thử tải xuống trực tiếp.' });
-          XLSX.writeFile(workbook, `${safeFileName}.xlsx`);
-        }
-      }
-  };
+        // This function triggers a download in the browser and also works in Electron,
+        // opening a "Save As" dialog.
+        XLSX.writeFile(workbook, `${safeFileName}.xlsx`);
 
-  const selectDirectory = async () => {
-    if ('showDirectoryPicker' in window) {
-        try {
-            // @ts-ignore
-            const handle = await window.showDirectoryPicker();
-            await saveHandleToDb(handle);
-            setDirectoryHandle(handle);
-            setFeedback({ type: 'success', message: `Thư mục lưu đã được chọn: ${handle.name}` });
-        } catch (err: any) {
-            if (err.name !== 'AbortError') {
-                console.error('Error picking directory:', err);
-                setFeedback({ type: 'error', message: 'Không thể chọn thư mục.' });
-            }
-        }
-    } else {
-        setFeedback({ type: 'info', message: 'Trình duyệt của bạn không hỗ trợ tính năng này.' });
+        setFeedback({ type: 'success', message: 'Thành công! File kịch bản của bạn đang được tải xuống.' });
+
+    } catch (err: any) {
+        console.error('Error exporting file:', err);
+        setFeedback({ type: 'error', message: 'Đã có lỗi xảy ra khi xuất file Excel.' });
     }
   };
 
@@ -628,28 +522,6 @@ const App: React.FC = () => {
             </header>
 
             <main>
-              { 'showDirectoryPicker' in window &&
-                <div className="mb-6 p-4 rounded-lg bg-black/20 border border-white/10 text-center">
-                    <h2 className="text-lg font-semibold text-indigo-100 mb-2">Thư mục lưu trữ</h2>
-                    {directoryHandle ? (
-                        <div>
-                            <p className="text-white mb-2">
-                                File sẽ được lưu tại: <span className="font-mono bg-white/10 px-2 py-1 rounded">{directoryHandle.name}</span>
-                            </p>
-                            <button onClick={selectDirectory} className="text-indigo-300 hover:text-white text-sm underline transition">
-                                Thay đổi thư mục
-                            </button>
-                        </div>
-                    ) : (
-                        <div>
-                            <p className="text-yellow-300 mb-3">Vui lòng chọn thư mục để lưu file kịch bản của bạn.</p>
-                             <button onClick={selectDirectory} className="bg-indigo-600 text-white font-bold py-2 px-6 rounded-full hover:bg-indigo-700 transition-transform transform hover:scale-105 shadow-lg">
-                                Chọn thư mục
-                            </button>
-                        </div>
-                    )}
-                </div>
-              }
               <div className="space-y-6 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -876,9 +748,9 @@ const App: React.FC = () => {
               <div className="text-center">
                 <button
                   onClick={generatePrompts}
-                  disabled={isLoading || !directoryHandle}
+                  disabled={isLoading}
                   className="bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100"
-                  title={!directoryHandle ? "Vui lòng chọn thư mục lưu trước" : "Tạo kịch bản"}
+                  title="Tạo kịch bản"
                 >
                   {isLoading ? <LoaderIcon /> : <span>Tạo Kịch Bản Prompt</span>}
                 </button>
@@ -904,7 +776,7 @@ const App: React.FC = () => {
                       onClick={startProcess}
                       className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto"
                     >
-                       Bắt đầu quá trình
+                       Lưu kịch bản ra File Excel
                     </button>
                   </div>
                 </div>
