@@ -16,20 +16,23 @@ declare const XLSX: any;
 // --- Activation Component ---
 interface ActivationProps {
   machineId: string;
-  onActivate: (key: string) => boolean;
+  onActivate: (key: string) => Promise<boolean>;
 }
 
 const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
   const [key, setKey] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isActivating, setIsActivating] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!onActivate(key.trim())) {
+    setIsActivating(true);
+    if (!(await onActivate(key.trim()))) {
       setError('Mã kích hoạt không hợp lệ. Vui lòng thử lại.');
     }
+    setIsActivating(false);
   };
 
   const handleCopy = () => {
@@ -77,22 +80,23 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
               <label htmlFor="licenseKey" className="block text-sm font-medium text-indigo-100 mb-2">
                 Nhập mã kích hoạt
               </label>
-              <input
-                type="text"
+              <textarea
                 id="licenseKey"
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
+                rows={3}
                 className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                placeholder="PRO-APP-..."
+                placeholder="Dán mã kích hoạt bạn nhận được vào đây..."
                 required
               />
             </div>
             
             <button
               type="submit"
-              className="w-full bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
+              disabled={isActivating}
+              className="w-full bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              Kích hoạt
+              {isActivating ? <LoaderIcon /> : 'Kích hoạt'}
             </button>
             
             {error && (
@@ -129,16 +133,51 @@ const App: React.FC = () => {
   const [isActivated, setIsActivated] = useState<boolean | null>(null);
   const [machineId, setMachineId] = useState<string | null>(null);
 
-  const validateLicenseKey = useCallback((key: string): boolean => {
+  // This public key is used to VERIFY the license. It is safe to be in the client-side code.
+  // It corresponds to a private key that ONLY the admin should have.
+  const publicKeyJwk = {"kty":"EC","crv":"P-256","ext":true,"key_ops":["verify"],"x":"d_vjY8fL4oK1c-U-tI-wB7rS9kH_jG6vC3dE-nN5aB-","y":"-lK9jM7bQ1-XyL_nF-pH4oJ3u1iA-sD-fG_hJ-kL8mN"};
+
+  const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
       if (!machineId) return false;
-      // This is a simple, reversible transformation for demonstration.
-      // The admin would use the forward transformation on the machineId to generate the key.
-      const expectedKey = 'PRO-APP-' + btoa(machineId).split('').reverse().join('');
-      return key === expectedKey;
+
+      try {
+          const str2ab = (str: string) => {
+              const cleanedBase64 = str.replace(/-/g, '+').replace(/_/g, '/');
+              const binary_string = window.atob(cleanedBase64);
+              const len = binary_string.length;
+              const bytes = new Uint8Array(len);
+              for (let i = 0; i < len; i++) {
+                  bytes[i] = binary_string.charCodeAt(i);
+              }
+              return bytes.buffer;
+          };
+          
+          const signature = str2ab(key.trim());
+          const data = new TextEncoder().encode(machineId);
+
+          const cryptoKey = await window.crypto.subtle.importKey(
+              'jwk',
+              publicKeyJwk,
+              { name: 'ECDSA', namedCurve: 'P-256' },
+              true,
+              ['verify']
+          );
+
+          return await window.crypto.subtle.verify(
+              { name: 'ECDSA', hash: { name: 'SHA-256' } },
+              cryptoKey,
+              signature,
+              data
+          );
+      } catch (e) {
+          console.error('Error during license validation:', e);
+          return false;
+      }
   }, [machineId]);
 
-  const handleActivate = useCallback((key: string): boolean => {
-      if (validateLicenseKey(key)) {
+  const handleActivate = useCallback(async (key: string): Promise<boolean> => {
+      const isValid = await validateLicenseKey(key);
+      if (isValid) {
           localStorage.setItem('license_activated', 'true');
           setIsActivated(true);
           return true;
@@ -147,18 +186,21 @@ const App: React.FC = () => {
   }, [validateLicenseKey]);
 
   useEffect(() => {
-      const storedActivated = localStorage.getItem('license_activated');
-      if (storedActivated === 'true') {
-          setIsActivated(true);
-      } else {
-          let storedMachineId = localStorage.getItem('machine_id');
-          if (!storedMachineId) {
-              storedMachineId = crypto.randomUUID();
-              localStorage.setItem('machine_id', storedMachineId);
+      // Small delay to prevent flashing screen
+      setTimeout(() => {
+          const storedActivated = localStorage.getItem('license_activated');
+          if (storedActivated === 'true') {
+              setIsActivated(true);
+          } else {
+              let storedMachineId = localStorage.getItem('machine_id');
+              if (!storedMachineId) {
+                  storedMachineId = crypto.randomUUID();
+                  localStorage.setItem('machine_id', storedMachineId);
+              }
+              setMachineId(storedMachineId);
+              setIsActivated(false);
           }
-          setMachineId(storedMachineId);
-          setIsActivated(false);
-      }
+      }, 100);
   }, []);
 
   const handleInputChange = useCallback(
@@ -386,7 +428,7 @@ const App: React.FC = () => {
   if (isActivated === null) {
     return (
       <div className="text-white min-h-screen flex items-center justify-center p-4">
-        {/* Initial Loading state before we check local storage */}
+        <LoaderIcon />
       </div>
     );
   }
