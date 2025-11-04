@@ -1,25 +1,40 @@
 {
   "name": "prompt-generator-pro",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "An application to generate professional visual scripts for Music Videos and Live Shows by transforming ideas into detailed prompts for AI video models.",
   "main": "main.js",
+  "homepage": "./",
   "scripts": {
-    "start": "electron .",
-    "dist": "electron-builder"
+    "build": "tsc",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder"
   },
   "author": "Prompt Generator Pro",
   "license": "UNLICENSED",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
   "devDependencies": {
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
     "electron": "^29.1.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.3.3"
   },
   "build": {
     "appId": "com.promptgenerator.pro",
     "productName": "Prompt Generator Pro",
     "files": [
-      "**/*",
+      "**/*.{js,html,json}",
+      "!**/*.{ts,tsx}",
+      "components/**/*.{js}",
+      "assets/**/*",
       "!node_modules/**/*",
-      "!dist/**/*"
+      "!dist/**/*",
+      "!electron.js",
+      "!*.ts",
+      "!*.tsx"
     ],
     "directories": {
       "output": "dist"
