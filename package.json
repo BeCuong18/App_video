@@ -1,22 +1,36 @@
 {
-  "name": "prompt-generator-pro-for-mv-&-live-show",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "name": "prompt-generator-pro",
+  "version": "1.0.0",
+  "description": "An application to generate professional visual scripts for Music Videos and Live Shows by transforming ideas into detailed prompts for AI video models.",
+  "main": "electron.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "start": "electron .",
+    "dist": "electron-builder"
   },
-  "dependencies": {
-    "@google/genai": "^1.27.0",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
-  },
+  "author": "Prompt Generator Pro",
+  "license": "UNLICENSED",
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "electron": "^29.1.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.promptgenerator.pro",
+    "productName": "Prompt Generator Pro",
+    "files": [
+      "**/*",
+      "!node_modules/**/*",
+      "!dist/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    }
   }
 }
