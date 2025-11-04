@@ -1,6 +1,7 @@
 // electron.js
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
 
 function createWindow() {
   // Create the browser window.
@@ -27,7 +28,34 @@ function createWindow() {
 
 // This method will be called when Electron has finished initialization
 // and is ready to create browser windows.
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+
+  ipcMain.handle('save-file-dialog', async (event, { defaultPath, fileContent }) => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) {
+        return { success: false, error: 'Không tìm thấy cửa sổ ứng dụng.' };
+    }
+
+    const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Lưu Kịch Bản Prompt',
+        defaultPath: defaultPath,
+        filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }]
+    });
+
+    if (result.canceled || !result.filePath) {
+        return { success: false, error: 'Save dialog canceled' };
+    }
+
+    try {
+        fs.writeFileSync(result.filePath, Buffer.from(fileContent));
+        return { success: true, filePath: result.filePath };
+    } catch (err) {
+        console.error('Failed to save file:', err);
+        return { success: false, error: err.message };
+    }
+  });
+});
 
 // Quit when all windows are closed, except on macOS.
 app.on('window-all-closed', () => {

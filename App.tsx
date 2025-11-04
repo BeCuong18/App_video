@@ -14,6 +14,8 @@ import { LoaderIcon, CopyIcon } from './components/Icons';
 declare const XLSX: any;
 declare const CryptoJS: any;
 
+const isElectron = navigator.userAgent.toLowerCase().includes('electron');
+
 // --- Activation Component ---
 interface ActivationProps {
   machineId: string;
@@ -435,23 +437,38 @@ const App: React.FC = () => {
     setFeedback(null);
 
     try {
-        const dataToExport = generatedScenes.map((p, index) => ({
-          JOB_ID: `Job_${index + 1}`,
-          PROMPT: p.prompt_text,
-        }));
+      const dataToExport = generatedScenes.map((p, index) => ({
+        JOB_ID: `Job_${index + 1}`,
+        PROMPT: p.prompt_text,
+      }));
 
-        const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-        worksheet['!cols'] = [{ wch: 15 }, { wch: 150 }];
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Prompts');
-        const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      worksheet['!cols'] = [{ wch: 15 }, { wch: 150 }];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Prompts');
+      const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
 
-        // This function triggers a download in the browser and also works in Electron,
-        // opening a "Save As" dialog.
+      if (isElectron) {
+        // In Electron, use IPC to trigger a native save dialog
+        const { ipcRenderer } = (window as any).require('electron');
+        const fileContent = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        
+        const result = await ipcRenderer.invoke('save-file-dialog', {
+            defaultPath: `${safeFileName}.xlsx`,
+            fileContent: fileContent
+        });
+
+        if (result.success) {
+            setFeedback({ type: 'success', message: `Thành công! File đã được lưu tại: ${result.filePath}` });
+        } else if (result.error && result.error !== 'Save dialog canceled') {
+            // Only show error if it's not a user cancellation
+            throw new Error(result.error);
+        }
+      } else {
+        // In a standard browser, trigger a download
         XLSX.writeFile(workbook, `${safeFileName}.xlsx`);
-
         setFeedback({ type: 'success', message: 'Thành công! File kịch bản của bạn đang được tải xuống.' });
-
+      }
     } catch (err: any) {
         console.error('Error exporting file:', err);
         setFeedback({ type: 'error', message: 'Đã có lỗi xảy ra khi xuất file Excel.' });
