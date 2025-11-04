@@ -6,13 +6,12 @@ import React, {
   useRef,
 } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
+import * as XLSX from 'xlsx';
+import CryptoJS from 'crypto-js';
 import { Scene, VideoType, FormData } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
 import { LoaderIcon, CopyIcon } from './components/Icons';
-
-declare const XLSX: any;
-declare const CryptoJS: any;
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 
