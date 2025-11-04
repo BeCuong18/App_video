@@ -1,9 +1,11 @@
 
+
 import React, {
   useState,
   useCallback,
   ChangeEvent,
   useEffect,
+  useRef,
 } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { Scene, VideoType, FormData } from './types';
@@ -12,6 +14,56 @@ import Results from './components/Results';
 import { LoaderIcon, CopyIcon } from './components/Icons';
 
 declare const XLSX: any;
+declare const CryptoJS: any;
+
+// --- IndexedDB Helpers for FileSystemDirectoryHandle ---
+const DB_NAME = 'PromptGeneratorDB';
+const STORE_NAME = 'FileHandles';
+
+function openDb() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+  });
+}
+
+async function getHandleFromDb(): Promise<FileSystemDirectoryHandle | null> {
+  const db = await openDb();
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const request = tx.objectStore(STORE_NAME).get('directoryHandle');
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => resolve(null);
+  });
+}
+
+async function saveHandleToDb(handle: FileSystemDirectoryHandle) {
+  const db = await openDb();
+  return new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).put(handle, 'directoryHandle');
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function deleteHandleFromDb() {
+    const db = await openDb();
+    return new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).delete('directoryHandle');
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+}
+
 
 // --- Activation Component ---
 interface ActivationProps {
@@ -24,6 +76,7 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [isActivating, setIsActivating] = useState(false);
+  const machineIdInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,10 +88,21 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
     setIsActivating(false);
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(machineId);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(machineId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy using navigator.clipboard:', err);
+      if (machineIdInputRef.current) {
+        machineIdInputRef.current.select();
+        machineIdInputRef.current.setSelectionRange(0, 99999);
+        alert('Không thể tự động sao chép. Vui lòng nhấn Ctrl+C để sao chép thủ công.');
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    }
   };
 
   return (
@@ -58,6 +122,7 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
             </label>
             <div className="relative">
               <input
+                ref={machineIdInputRef}
                 type="text"
                 readOnly
                 value={machineId}
@@ -111,6 +176,57 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
   );
 };
 
+// --- API Key Input Component ---
+interface ApiKeyInputProps {
+    onKeySubmit: (key: string) => void;
+}
+
+const ApiKeyInputScreen: React.FC<ApiKeyInputProps> = ({ onKeySubmit }) => {
+    const [apiKey, setApiKey] = useState('');
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (apiKey.trim()) {
+            onKeySubmit(apiKey.trim());
+        }
+    };
+
+    return (
+        <div className="text-white min-h-screen flex items-center justify-center p-4">
+            <div className="w-full max-w-md mx-auto">
+                <form onSubmit={handleSubmit} className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl text-center">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
+                        Nhập API Key
+                    </h1>
+                    <p className="text-indigo-200 mb-6">
+                        Vui lòng nhập Google AI API Key của bạn để tiếp tục. Khóa sẽ được lưu tạm thời trong phiên làm việc này.
+                    </p>
+                    <div>
+                        <label htmlFor="apiKey" className="block text-sm font-medium text-indigo-100 mb-2">
+                            Google AI API Key
+                        </label>
+                        <input
+                            id="apiKey"
+                            type="password"
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                            className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                            placeholder="Dán API Key của bạn vào đây"
+                            required
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        className="w-full mt-6 bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
+                    >
+                        Lưu và Tiếp tục
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 
 const App: React.FC = () => {
   const [videoType, setVideoType] = useState<VideoType>('story');
@@ -127,81 +243,102 @@ const App: React.FC = () => {
     aspectRatio: '16:9',
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
   const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
   
   const [isActivated, setIsActivated] = useState<boolean | null>(null);
   const [machineId, setMachineId] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [directoryHandle, setDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
 
-  // This public key is used to VERIFY the license. It is safe to be in the client-side code.
-  // It corresponds to a private key that ONLY the admin should have.
-  const publicKeyJwk = {"kty":"EC","crv":"P-256","ext":true,"key_ops":["verify"],"x":"d_vjY8fL4oK1c-U-tI-wB7rS9kH_jG6vC3dE-nN5aB-","y":"-lK9jM7bQ1-XyL_nF-pH4oJ3u1iA-sD-fG_hJ-kL8mN"};
+
+  // This secret key MUST be identical to the one in the keygen.html tool.
+  const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
   const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
-      if (!machineId) return false;
-
-      try {
-          const str2ab = (str: string) => {
-              const cleanedBase64 = str.replace(/-/g, '+').replace(/_/g, '/');
-              const binary_string = window.atob(cleanedBase64);
-              const len = binary_string.length;
-              const bytes = new Uint8Array(len);
-              for (let i = 0; i < len; i++) {
-                  bytes[i] = binary_string.charCodeAt(i);
-              }
-              return bytes.buffer;
-          };
-          
-          const signature = str2ab(key.trim());
-          const data = new TextEncoder().encode(machineId);
-
-          const cryptoKey = await window.crypto.subtle.importKey(
-              'jwk',
-              publicKeyJwk,
-              { name: 'ECDSA', namedCurve: 'P-256' },
-              true,
-              ['verify']
-          );
-
-          return await window.crypto.subtle.verify(
-              { name: 'ECDSA', hash: { name: 'SHA-256' } },
-              cryptoKey,
-              signature,
-              data
-          );
-      } catch (e) {
-          console.error('Error during license validation:', e);
-          return false;
-      }
+    if (!machineId) return false;
+    try {
+      const parts = key.trim().split('.');
+      if (parts.length !== 2) return false;
+      const [receivedMachineId, receivedSignature] = parts;
+      if (receivedMachineId !== machineId) return false;
+      const expectedSignature = CryptoJS.HmacSHA256(machineId, SECRET_KEY).toString(CryptoJS.enc.Hex);
+      return receivedSignature === expectedSignature;
+    } catch (e) {
+      console.error('Error during license validation:', e);
+      return false;
+    }
   }, [machineId]);
 
   const handleActivate = useCallback(async (key: string): Promise<boolean> => {
       const isValid = await validateLicenseKey(key);
       if (isValid) {
-          localStorage.setItem('license_activated', 'true');
+          localStorage.setItem('license_key', key);
           setIsActivated(true);
           return true;
       }
       return false;
   }, [validateLicenseKey]);
+  
+  const handleApiKeySubmit = (key: string) => {
+    sessionStorage.setItem('api_key', key);
+    setApiKey(key);
+  };
 
   useEffect(() => {
-      // Small delay to prevent flashing screen
-      setTimeout(() => {
-          const storedActivated = localStorage.getItem('license_activated');
-          if (storedActivated === 'true') {
-              setIsActivated(true);
-          } else {
-              let storedMachineId = localStorage.getItem('machine_id');
-              if (!storedMachineId) {
-                  storedMachineId = crypto.randomUUID();
-                  localStorage.setItem('machine_id', storedMachineId);
-              }
-              setMachineId(storedMachineId);
-              setIsActivated(false);
-          }
-      }, 100);
+    // Check Activation Status
+    setTimeout(() => {
+        const storedLicenseKey = localStorage.getItem('license_key');
+        let storedMachineId = localStorage.getItem('machine_id');
+
+        if (!storedMachineId) {
+            storedMachineId = crypto.randomUUID();
+            localStorage.setItem('machine_id', storedMachineId);
+        }
+        
+        const currentMachineId = storedMachineId;
+        setMachineId(currentMachineId);
+
+        let activationStatus = false;
+        if (storedLicenseKey) {
+            const parts = storedLicenseKey.split('.');
+            if (parts.length === 2 && parts[0] === currentMachineId) {
+                const expectedSignature = CryptoJS.HmacSHA256(currentMachineId, SECRET_KEY).toString(CryptoJS.enc.Hex);
+                if (parts[1] === expectedSignature) {
+                    activationStatus = true;
+                }
+            }
+        }
+        setIsActivated(activationStatus);
+
+        if (activationStatus) {
+            const storedApiKey = sessionStorage.getItem('api_key');
+            if (storedApiKey) {
+                setApiKey(storedApiKey);
+            }
+        }
+    }, 100);
+
+    // Load saved directory handle from IndexedDB
+    const loadHandle = async () => {
+        if (!('showDirectoryPicker' in window)) return;
+        try {
+            const handle = await getHandleFromDb();
+            if (handle) {
+                const options = { mode: 'readwrite' as const };
+                if ((await (handle as any).queryPermission(options)) === 'granted' || (await (handle as any).requestPermission(options)) === 'granted') {
+                    setDirectoryHandle(handle);
+                } else {
+                    await deleteHandleFromDb();
+                }
+            }
+        } catch (error) {
+            console.error("Error loading directory handle:", error);
+        }
+    };
+    loadHandle();
   }, []);
+
 
   const handleInputChange = useCallback(
     (
@@ -242,15 +379,19 @@ const App: React.FC = () => {
   }, []);
 
   const generatePrompts = async () => {
+    if (!apiKey) {
+      setFeedback({ type: 'error', message: 'API Key không tồn tại. Vui lòng làm mới và nhập lại.' });
+      return;
+    }
     setIsLoading(true);
-    setError(null);
+    setFeedback(null);
     setGeneratedScenes([]);
 
     const totalSeconds =
       (parseInt(formData.songMinutes) || 0) * 60 +
       (parseInt(formData.songSeconds) || 0);
     if (totalSeconds <= 0) {
-      setError('Vui lòng nhập thời lượng bài hát hợp lệ.');
+      setFeedback({ type: 'error', message: 'Vui lòng nhập thời lượng bài hát hợp lệ.' });
       setIsLoading(false);
       return;
     }
@@ -264,7 +405,7 @@ const App: React.FC = () => {
 
     if (videoType === 'story') {
       if (!formData.idea.trim()) {
-        setError('Vui lòng nhập Ý tưởng cho MV.');
+        setFeedback({ type: 'error', message: 'Vui lòng nhập Ý tưởng cho MV.' });
         setIsLoading(false);
         return;
       }
@@ -276,9 +417,7 @@ const App: React.FC = () => {
         !formData.liveArtist.trim() &&
         !formData.liveArtistImage
       ) {
-        setError(
-          'Vui lòng nhập ít nhất một thông tin cho Video Trình Diễn Live.',
-        );
+        setFeedback({ type: 'error', message: 'Vui lòng nhập ít nhất một thông tin cho Video Trình Diễn Live.' });
         setIsLoading(false);
         return;
       }
@@ -303,7 +442,7 @@ const App: React.FC = () => {
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: formData.model,
         contents: { parts: parts },
@@ -344,56 +483,85 @@ const App: React.FC = () => {
       let displayMessage = err.message || 'An unknown error occurred.';
       if (err.message?.includes('API key not valid')) {
         displayMessage =
-          'Lỗi xác thực. API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại.';
+          'Lỗi xác thực. API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại API Key của bạn.';
       } else if (err.message?.includes('quota')) {
         displayMessage =
           'Bạn đã vượt quá hạn ngạch sử dụng cho Khóa API này.';
       } else if (err.message?.includes('Requested entity was not found')) {
         displayMessage = `Model "${formData.model}" không tồn tại hoặc bạn không có quyền truy cập. Vui lòng chọn model khác.`;
       }
-      setError(`Đã có lỗi xảy ra: ${displayMessage}`);
+      setFeedback({ type: 'error', message: `Đã có lỗi xảy ra: ${displayMessage}` });
     } finally {
       setIsLoading(false);
     }
   };
   
-  const exportToExcel = () => {
+  const startProcess = async () => {
     if (generatedScenes.length === 0) {
-      setError('Chưa có dữ liệu prompt để xuất!');
+      setFeedback({ type: 'error', message: 'Chưa có dữ liệu prompt để bắt đầu quá trình!' });
       return;
     }
-
-    const now = new Date();
-    const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(
-      now.getMonth() + 1,
-    ).padStart(2, '0')}`;
-    const prefix =
-      formData.projectName.trim().replace(/[^a-z0-9_]/gi, '_').toUpperCase() ||
-      'PROJECT';
+     if (!directoryHandle) {
+      setFeedback({ type: 'error', message: 'Vui lòng chọn thư mục lưu trước khi bắt đầu.' });
+      return;
+    }
+    setFeedback(null);
 
     const dataToExport = generatedScenes.map((p, index) => ({
       JOB_ID: `Job_${index + 1}`,
       PROMPT: p.prompt_text,
-      IMAGE_PATH: '',
-      STATUS: '',
-      VIDEO_NAME: `${prefix}_${dateStr}_${index + 1}`,
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-    worksheet['!cols'] = [
-      { wch: 15 },
-      { wch: 150 },
-      { wch: 20 },
-      { wch: 20 },
-      { wch: 30 },
-    ];
+    worksheet['!cols'] = [{ wch: 15 }, { wch: 150 }];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Prompts');
+    const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
 
-    const safeFileName = (formData.projectName.trim() || 'Prompt_Script')
-      .replace(/[^a-z0-9_]/gi, '_')
-      .toLowerCase();
-    XLSX.writeFile(workbook, `${safeFileName}.xlsx`);
+    try {
+        const options = { mode: 'readwrite' as const };
+        if ((await (directoryHandle as any).requestPermission(options)) !== 'granted') {
+          setFeedback({ type: 'error', message: 'Không có quyền ghi vào thư mục đã chọn. Vui lòng chọn lại.' });
+          setDirectoryHandle(null);
+          await deleteHandleFromDb();
+          return;
+        }
+
+        const fileHandle = await directoryHandle.getFileHandle(`${safeFileName}.xlsx`, { create: true });
+        const writable = await fileHandle.createWritable();
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        await writable.write(excelBuffer);
+        await writable.close();
+        setFeedback({ type: 'success', message: `Thành công! File đã được lưu tại thư mục: ${directoryHandle.name}` });
+
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          setFeedback({ type: 'info', message: 'Người dùng đã hủy quá trình.' });
+        } else {
+          console.error('Error saving file:', err);
+          setFeedback({ type: 'error', message: 'Lỗi lưu file. Sẽ thử tải xuống trực tiếp.' });
+          XLSX.writeFile(workbook, `${safeFileName}.xlsx`);
+        }
+      }
+  };
+
+  const selectDirectory = async () => {
+    if ('showDirectoryPicker' in window) {
+        try {
+            // @ts-ignore
+            const handle = await window.showDirectoryPicker();
+            await saveHandleToDb(handle);
+            setDirectoryHandle(handle);
+            setFeedback({ type: 'success', message: `Thư mục lưu đã được chọn: ${handle.name}` });
+        } catch (err: any) {
+            if (err.name !== 'AbortError') {
+                console.error('Error picking directory:', err);
+                setFeedback({ type: 'error', message: 'Không thể chọn thư mục.' });
+            }
+        }
+    } else {
+        setFeedback({ type: 'info', message: 'Trình duyệt của bạn không hỗ trợ tính năng này.' });
+    }
   };
 
   const RadioLabel: React.FC<{
@@ -436,13 +604,17 @@ const App: React.FC = () => {
   if (!isActivated && machineId) {
     return <Activation machineId={machineId} onActivate={handleActivate} />;
   }
+
+  if (isActivated && !apiKey) {
+    return <ApiKeyInputScreen onKeySubmit={handleApiKeySubmit} />;
+  }
   
   return (
     <>
       <div className="text-white min-h-screen flex items-center justify-center p-4">
         <div className="w-full max-w-5xl mx-auto">
           <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
-            <header className="text-center mb-8">
+            <header className="text-center mb-6">
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
                 🎬 Prompt Generator Pro
               </h1>
@@ -452,6 +624,28 @@ const App: React.FC = () => {
             </header>
 
             <main>
+              { 'showDirectoryPicker' in window &&
+                <div className="mb-6 p-4 rounded-lg bg-black/20 border border-white/10 text-center">
+                    <h2 className="text-lg font-semibold text-indigo-100 mb-2">Thư mục lưu trữ</h2>
+                    {directoryHandle ? (
+                        <div>
+                            <p className="text-white mb-2">
+                                File sẽ được lưu tại: <span className="font-mono bg-white/10 px-2 py-1 rounded">{directoryHandle.name}</span>
+                            </p>
+                            <button onClick={selectDirectory} className="text-indigo-300 hover:text-white text-sm underline transition">
+                                Thay đổi thư mục
+                            </button>
+                        </div>
+                    ) : (
+                        <div>
+                            <p className="text-yellow-300 mb-3">Vui lòng chọn thư mục để lưu file kịch bản của bạn.</p>
+                             <button onClick={selectDirectory} className="bg-indigo-600 text-white font-bold py-2 px-6 rounded-full hover:bg-indigo-700 transition-transform transform hover:scale-105 shadow-lg">
+                                Chọn thư mục
+                            </button>
+                        </div>
+                    )}
+                </div>
+              }
               <div className="space-y-6 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
@@ -678,16 +872,21 @@ const App: React.FC = () => {
               <div className="text-center">
                 <button
                   onClick={generatePrompts}
-                  disabled={isLoading}
+                  disabled={isLoading || !directoryHandle}
                   className="bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100"
+                  title={!directoryHandle ? "Vui lòng chọn thư mục lưu trước" : "Tạo kịch bản"}
                 >
                   {isLoading ? <LoaderIcon /> : <span>Tạo Kịch Bản Prompt</span>}
                 </button>
               </div>
-
-              {error && (
-                <div className="text-center mt-6 text-red-300 font-medium bg-red-900/50 p-3 rounded-lg">
-                  {error}
+              
+              {feedback && (
+                <div className={`text-center mt-6 font-medium p-3 rounded-lg ${
+                  feedback.type === 'error' ? 'text-red-300 bg-red-900/50' :
+                  feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' :
+                  'text-blue-300 bg-blue-900/50'
+                }`}>
+                  {feedback.message}
                 </div>
               )}
 
@@ -698,10 +897,10 @@ const App: React.FC = () => {
                   </h3>
                   <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
                     <button
-                      onClick={exportToExcel}
+                      onClick={startProcess}
                       className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto"
                     >
-                      Xuất ra File Excel
+                       Bắt đầu quá trình
                     </button>
                   </div>
                 </div>
