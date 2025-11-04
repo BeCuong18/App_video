@@ -2,7 +2,7 @@
   "name": "prompt-generator-pro",
   "version": "1.0.0",
   "description": "An application to generate professional visual scripts for Music Videos and Live Shows by transforming ideas into detailed prompts for AI video models.",
-  "main": "electron.js",
+  "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder"
