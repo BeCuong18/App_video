@@ -1,5 +1,6 @@
 
 
+
 import React, {
   useState,
   useCallback,
@@ -471,6 +472,9 @@ const App: React.FC = () => {
       });
 
       const jsonText = response.text;
+      if (!jsonText) {
+        throw new Error('Received an empty response from the AI. The prompt may have been blocked or the model failed to generate content.');
+      }
       const parsedData = JSON.parse(jsonText);
 
       if (parsedData.prompts && Array.isArray(parsedData.prompts)) {
