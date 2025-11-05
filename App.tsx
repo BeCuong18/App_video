@@ -1,3 +1,4 @@
+
 import React, {
   useState,
   useCallback,
@@ -436,13 +437,26 @@ const App: React.FC = () => {
     setFeedback(null);
 
     try {
-      const dataToExport = generatedScenes.map((p, index) => ({
-        JOB_ID: `Job_${index + 1}`,
-        PROMPT: p.prompt_text,
-      }));
+      const projectName = formData.projectName.trim() || 'MV';
+      const dataToExport = generatedScenes.map((p, index) => {
+        const sequenceNumber = index + 1;
+        return {
+          JOB_ID: `Job_${sequenceNumber}`,
+          PROMPT: p.prompt_text,
+          IMAGE_PATH: '',
+          STATUS: '',
+          VIDEO_NAME: `${projectName}_${sequenceNumber}`,
+        };
+      });
 
       const worksheet = XLSX.utils.json_to_sheet(dataToExport);
-      worksheet['!cols'] = [{ wch: 15 }, { wch: 150 }];
+      worksheet['!cols'] = [
+        { wch: 15 }, // JOB_ID
+        { wch: 150 },// PROMPT
+        { wch: 30 }, // IMAGE_PATH
+        { wch: 15 }, // STATUS
+        { wch: 30 }, // VIDEO_NAME
+      ];
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Prompts');
       const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
