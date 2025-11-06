@@ -444,8 +444,11 @@ const App: React.FC = () => {
           JOB_ID: `Job_${sequenceNumber}`,
           PROMPT: p.prompt_text,
           IMAGE_PATH: '',
+          IMAGE_PATH_2: '',
+          IMAGE_PATH_3: '',
           STATUS: '',
           VIDEO_NAME: `${projectName}_${sequenceNumber}`,
+          TYPE_VIDEO: videoType,
         };
       });
 
@@ -454,8 +457,11 @@ const App: React.FC = () => {
         { wch: 15 }, // JOB_ID
         { wch: 150 },// PROMPT
         { wch: 30 }, // IMAGE_PATH
+        { wch: 30 }, // IMAGE_PATH_2
+        { wch: 30 }, // IMAGE_PATH_3
         { wch: 15 }, // STATUS
         { wch: 30 }, // VIDEO_NAME
+        { wch: 15 }, // TYPE_VIDEO
       ];
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Prompts');
