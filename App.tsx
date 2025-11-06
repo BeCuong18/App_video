@@ -1,4 +1,5 @@
 
+
 import React, {
   useState,
   useCallback,
@@ -465,7 +466,8 @@ const App: React.FC = () => {
   }, [trackedFiles]);
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-      setFormData((prev) => ({ ...prev, [name]: e.target.value }));
+      // FIX: Use e.target.name for the computed property key. The 'name' variable was not defined.
+      setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     },[],
   );
 
