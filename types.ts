@@ -45,3 +45,9 @@ export interface TrackedFile {
   name: string;
   jobs: VideoJob[];
 }
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  value: string;
+}

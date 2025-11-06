@@ -9,10 +9,10 @@ import React, {
 import { GoogleGenAI, Type } from '@google/genai';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile } from './types';
+import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 
@@ -127,57 +127,131 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
   );
 };
 
-// --- API Key Input Component ---
-interface ApiKeyInputProps {
-    onKeySubmit: (key: string) => void;
+// --- API Key Manager Component ---
+interface ApiKeyManagerProps {
+  apiKeys: ApiKey[];
+  onKeySelect: (key: ApiKey) => void;
+  onKeyAdd: (key: ApiKey) => void;
+  onKeyDelete: (keyId: string) => void;
 }
 
-const ApiKeyInputScreen: React.FC<ApiKeyInputProps> = ({ onKeySubmit }) => {
-    const [apiKey, setApiKey] = useState('');
+const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onKeySelect, onKeyAdd, onKeyDelete }) => {
+    const [newKeyName, setNewKeyName] = useState('');
+    const [newKeyValue, setNewKeyValue] = useState('');
+    const [error, setError] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (apiKey.trim()) {
-            onKeySubmit(apiKey.trim());
+        setError('');
+        if (!newKeyName.trim() || !newKeyValue.trim()) {
+            setError('Biệt danh và giá trị khóa không được để trống.');
+            return;
         }
+        if (apiKeys.some(k => k.name === newKeyName.trim())) {
+            setError('Biệt danh này đã tồn tại. Vui lòng chọn một biệt danh khác.');
+            return;
+        }
+        onKeyAdd({
+            id: crypto.randomUUID(),
+            name: newKeyName.trim(),
+            value: newKeyValue.trim(),
+        });
+        setNewKeyName('');
+        setNewKeyValue('');
     };
+
+    const truncateKey = (key: string) => `${key.slice(0, 5)}...${key.slice(-4)}`;
 
     return (
         <div className="text-white min-h-screen flex items-center justify-center p-4">
-            <div className="w-full max-w-md mx-auto">
-                <form onSubmit={handleSubmit} className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl text-center">
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
-                        Nhập API Key
+            <div className="w-full max-w-2xl mx-auto">
+                <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2 text-center">
+                        Quản lý API Keys
                     </h1>
-                    <p className="text-indigo-200 mb-6">
-                        Vui lòng nhập Google AI API Key của bạn để tiếp tục. Khóa sẽ được lưu tạm thời trong phiên làm việc này.
+                    <p className="text-indigo-200 mb-6 text-center">
+                        Thêm, xóa, hoặc chọn một Google AI API Key để sử dụng.
                     </p>
-                    <div>
-                        <label htmlFor="apiKey" className="block text-sm font-medium text-indigo-100 mb-2">
-                            Google AI API Key
-                        </label>
-                        <input
-                            id="apiKey"
-                            type="password"
-                            value={apiKey}
-                            onChange={(e) => setApiKey(e.target.value)}
-                            className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                            placeholder="Dán API Key của bạn vào đây"
-                            required
-                        />
+
+                    {apiKeys.length > 0 && (
+                        <div className="mb-8">
+                            <h2 className="text-lg font-semibold text-indigo-100 mb-3">Khóa đã lưu</h2>
+                            <div className="space-y-3 key-list">
+                                {apiKeys.map(key => (
+                                    <div key={key.id} className="key-item">
+                                        <div className="flex items-center gap-3">
+                                            <KeyIcon className="w-5 h-5 text-indigo-300" />
+                                            <div>
+                                                <p className="font-semibold text-white">{key.name}</p>
+                                                <p className="text-sm text-gray-400 font-mono">{truncateKey(key.value)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => onKeySelect(key)}
+                                                className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition text-sm"
+                                            >
+                                                Sử dụng
+                                            </button>
+                                            <button
+                                                onClick={() => onKeyDelete(key.id)}
+                                                className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition"
+                                                title="Xóa khóa"
+                                            >
+                                                <TrashIcon className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="pt-6 border-t border-white/20">
+                        <h2 className="text-lg font-semibold text-indigo-100 mb-4">Thêm khóa mới</h2>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label htmlFor="keyName" className="block text-sm font-medium text-indigo-100 mb-2">
+                                    Biệt danh (Nickname)
+                                </label>
+                                <input
+                                    id="keyName"
+                                    type="text"
+                                    value={newKeyName}
+                                    onChange={(e) => setNewKeyName(e.target.value)}
+                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                                    placeholder="Ví dụ: Key cá nhân, Key công ty"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="keyValue" className="block text-sm font-medium text-indigo-100 mb-2">
+                                    Giá trị API Key
+                                </label>
+                                <input
+                                    id="keyValue"
+                                    type="password"
+                                    value={newKeyValue}
+                                    onChange={(e) => setNewKeyValue(e.target.value)}
+                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                                    placeholder="Dán API Key của bạn vào đây"
+                                    required
+                                />
+                            </div>
+                            {error && <p className="text-red-300 text-sm">{error}</p>}
+                            <button
+                                type="submit"
+                                className="w-full bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
+                            >
+                                Thêm và Lưu khóa
+                            </button>
+                        </form>
                     </div>
-                    <button
-                        type="submit"
-                        className="w-full mt-6 bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
-                    >
-                        Lưu và Tiếp tục
-                    </button>
-                </form>
+                </div>
             </div>
         </div>
     );
 };
-
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('generator');
@@ -199,8 +273,13 @@ const App: React.FC = () => {
   const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
   
   const [isActivated, setIsActivated] = useState<boolean | null>(null);
-  const [machineId, setMachineId] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [machineId, setMachineId] = useState<string>('');
+  
+  // API Key Management State
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [activeApiKey, setActiveApiKey] = useState<ApiKey | null>(null);
+  const [isManagingKeys, setIsManagingKeys] = useState(false);
+
 
   // State for Video Tracker
   const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
@@ -208,6 +287,43 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
+
+  const getEncryptionKey = useCallback(() => CryptoJS.SHA256(machineId + SECRET_KEY).toString(), [machineId]);
+
+  const encrypt = useCallback((text: string) => {
+    if (!machineId) return '';
+    return CryptoJS.AES.encrypt(text, getEncryptionKey()).toString();
+  }, [machineId, getEncryptionKey]);
+
+  const decrypt = useCallback((ciphertext: string) => {
+    if (!machineId) return '';
+    try {
+      const bytes = CryptoJS.AES.decrypt(ciphertext, getEncryptionKey());
+      return bytes.toString(CryptoJS.enc.Utf8);
+    } catch {
+      return ''; // Decryption failed
+    }
+  }, [machineId, getEncryptionKey]);
+
+  useEffect(() => {
+    // Load stored API keys
+    if (machineId) {
+      const storedKeysEncrypted = localStorage.getItem('api_keys_storage');
+      if (storedKeysEncrypted) {
+        const decryptedKeys = decrypt(storedKeysEncrypted);
+        if (decryptedKeys) {
+          try {
+            const parsedKeys: ApiKey[] = JSON.parse(decryptedKeys);
+            setApiKeys(parsedKeys);
+          } catch {
+            console.error("Failed to parse stored API keys.");
+            localStorage.removeItem('api_keys_storage'); // Clear corrupted data
+          }
+        }
+      }
+    }
+  }, [machineId, decrypt]);
+
 
   const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
     if (!machineId) return false;
@@ -234,9 +350,26 @@ const App: React.FC = () => {
       return false;
   }, [validateLicenseKey]);
   
-  const handleApiKeySubmit = (key: string) => {
-    sessionStorage.setItem('api_key', key);
-    setApiKey(key);
+  const handleKeyAdd = (newKey: ApiKey) => {
+    const updatedKeys = [...apiKeys, newKey];
+    setApiKeys(updatedKeys);
+    localStorage.setItem('api_keys_storage', encrypt(JSON.stringify(updatedKeys)));
+  };
+
+  const handleKeyDelete = (keyId: string) => {
+    const updatedKeys = apiKeys.filter(k => k.id !== keyId);
+    setApiKeys(updatedKeys);
+    localStorage.setItem('api_keys_storage', encrypt(JSON.stringify(updatedKeys)));
+    if(activeApiKey?.id === keyId) {
+      setActiveApiKey(null);
+      sessionStorage.removeItem('active_api_key_id');
+    }
+  };
+
+  const handleKeySelect = (key: ApiKey) => {
+    setActiveApiKey(key);
+    sessionStorage.setItem('active_api_key_id', key.id);
+    setIsManagingKeys(false);
   };
 
   useEffect(() => {
@@ -264,15 +397,21 @@ const App: React.FC = () => {
             }
         }
         setIsActivated(activationStatus);
-
-        if (activationStatus) {
-            const storedApiKey = sessionStorage.getItem('api_key');
-            if (storedApiKey) {
-                setApiKey(storedApiKey);
-            }
-        }
     }, 100);
   }, []);
+
+  useEffect(() => {
+    // Auto-select active key on app load
+    if(isActivated && apiKeys.length > 0 && !activeApiKey) {
+      const activeKeyId = sessionStorage.getItem('active_api_key_id');
+      if (activeKeyId) {
+        const keyToActivate = apiKeys.find(k => k.id === activeKeyId);
+        if (keyToActivate) {
+          setActiveApiKey(keyToActivate);
+        }
+      }
+    }
+  }, [isActivated, apiKeys, activeApiKey]);
 
 
   const handleInputChange = useCallback(
@@ -314,8 +453,9 @@ const App: React.FC = () => {
   }, []);
 
   const generatePrompts = async () => {
-    if (!apiKey) {
-      setFeedback({ type: 'error', message: 'API Key không tồn tại. Vui lòng làm mới và nhập lại.' });
+    if (!activeApiKey) {
+      setFeedback({ type: 'error', message: 'Vui lòng chọn một API Key đang hoạt động.' });
+      setIsManagingKeys(true);
       return;
     }
     setIsLoading(true);
@@ -377,7 +517,7 @@ const App: React.FC = () => {
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: activeApiKey.value });
       const response = await ai.models.generateContent({
         model: formData.model,
         contents: { parts: parts },
@@ -421,7 +561,8 @@ const App: React.FC = () => {
       let displayMessage = err.message || 'An unknown error occurred.';
       if (err.message?.includes('API key not valid')) {
         displayMessage =
-          'Lỗi xác thực. API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại API Key của bạn.';
+          'Lỗi xác thực. API key đang sử dụng không hợp lệ hoặc đã hết hạn. Vui lòng chọn hoặc thêm khóa khác.';
+          setIsManagingKeys(true);
       } else if (err.message?.includes('quota')) {
         displayMessage =
           'Bạn đã vượt quá hạn ngạch sử dụng cho Khóa API này.';
@@ -676,22 +817,41 @@ const App: React.FC = () => {
   if (!isActivated && machineId) {
     return <Activation machineId={machineId} onActivate={handleActivate} />;
   }
-
-  if (isActivated && !apiKey) {
-    return <ApiKeyInputScreen onKeySubmit={handleApiKeySubmit} />;
+  
+  if (isActivated && (!activeApiKey || isManagingKeys)) {
+    return <ApiKeyManagerScreen 
+        apiKeys={apiKeys} 
+        onKeyAdd={handleKeyAdd} 
+        onKeyDelete={handleKeyDelete} 
+        onKeySelect={handleKeySelect} 
+    />;
   }
   
   return (
     <>
       <div className="text-white min-h-screen p-4">
         <div className="w-full max-w-7xl mx-auto">
-          <header className="text-center mb-6">
+          <header className="text-center mb-6 relative">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
               🎬 Prompt Generator Pro
             </h1>
             <p className="text-lg text-indigo-200 mt-2">
               Biến ý tưởng thành kịch bản & theo dõi sản xuất video.
             </p>
+            {activeApiKey && (
+              <div className="absolute top-0 right-0">
+                  <div className="active-key-display">
+                      <KeyIcon className="w-4 h-4 text-emerald-400" />
+                      <span className="text-white font-semibold">{activeApiKey.name}</span>
+                      <button 
+                          onClick={() => setIsManagingKeys(true)}
+                          className="ml-2 text-indigo-300 hover:text-white font-bold text-sm"
+                      >
+                          (Thay đổi)
+                      </button>
+                  </div>
+              </div>
+            )}
           </header>
 
           <div className="flex space-x-2">

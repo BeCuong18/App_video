@@ -98,6 +98,32 @@
         .tab-close-btn:hover {
             background-color: rgba(255, 255, 255, 0.2);
         }
+        
+        /* API Key Manager Styles */
+        .key-list {
+            max-height: 250px;
+            overflow-y: auto;
+            padding-right: 8px; /* For scrollbar */
+        }
+        .key-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem;
+            background-color: rgba(0,0,0,0.2);
+            border-radius: 0.5rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .active-key-display {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background-color: rgba(0,0,0,0.2);
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
 
     </style>
 <script type="importmap">
