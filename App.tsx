@@ -446,7 +446,8 @@ const App: React.FC = () => {
       const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
       const fullFileName = `${safeFileName}.xlsx`;
   
-      const dataToExport: VideoJob[] = generatedScenes.map((p, index) => {
+      // Data for the app's internal state (tracker)
+      const dataForTracker: VideoJob[] = generatedScenes.map((p, index) => {
         const sequenceNumber = index + 1;
         return {
           id: `Job_${sequenceNumber}`,
@@ -454,13 +455,19 @@ const App: React.FC = () => {
           imagePath: '',
           imagePath2: '',
           imagePath3: '',
-          status: 'Pending',
+          status: 'Pending', // Internal state is 'Pending'
           videoName: `${projectName}_${sequenceNumber}`,
           typeVideo: '',
         };
       });
   
-      const worksheet = XLSX.utils.json_to_sheet(dataToExport, {
+      // Data specifically for the Excel export with empty status
+      const dataForExcel = dataForTracker.map(job => ({
+        ...job,
+        status: '', // Status is empty for the export
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(dataForExcel, {
         header: ['id', 'prompt', 'imagePath', 'imagePath2', 'imagePath3', 'status', 'videoName', 'typeVideo'],
         skipHeader: true, // We'll add custom headers
       });
@@ -497,7 +504,7 @@ const App: React.FC = () => {
       // Add to tracker and switch view
       const newTrackedFile: TrackedFile = {
         name: fullFileName,
-        jobs: dataToExport,
+        jobs: dataForTracker,
       };
       setTrackedFiles(prevFiles => [...prevFiles, newTrackedFile]);
       setActiveTrackerFileIndex(trackedFiles.length);
