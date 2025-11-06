@@ -433,7 +433,7 @@ const App: React.FC = () => {
     if (!ipcRenderer) return;
 
     const watchedPaths = new Set(trackedFiles.map(f => f.path).filter(Boolean));
-    const previousWatchedPaths = new Set(JSON.parse(sessionStorage.getItem('watchedPaths') || '[]'));
+    const previousWatchedPaths = new Set<string>(JSON.parse(sessionStorage.getItem('watchedPaths') || '[]') as string[]);
 
     watchedPaths.forEach(path => {
         if (!previousWatchedPaths.has(path)) {
@@ -449,8 +449,8 @@ const App: React.FC = () => {
     
     sessionStorage.setItem('watchedPaths', JSON.stringify(Array.from(watchedPaths)));
 
-    const handleFileUpdate = (event: any, { path, content }: { path: string, content: Buffer }) => {
-        const newJobs = parseExcelData(content.buffer);
+    const handleFileUpdate = (_event: any, { path, content }: { path: string, content: Buffer }) => {
+        const newJobs = parseExcelData(new Uint8Array(content).buffer);
         setTrackedFiles(prevFiles => 
             prevFiles.map(file => 
                 file.path === path ? { ...file, jobs: newJobs } : file
@@ -466,7 +466,6 @@ const App: React.FC = () => {
   }, [trackedFiles]);
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-      // FIX: Use e.target.name for the computed property key. The 'name' variable was not defined.
       setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     },[],
   );
@@ -481,10 +480,11 @@ const App: React.FC = () => {
     }
     const reader = new FileReader();
     reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
+      const result = reader.result;
+      if (typeof result === 'string') {
         setFormData((prev) => ({
           ...prev,
-          liveArtistImage: { base64: reader.result.split(',')[1], mimeType: file.type },
+          liveArtistImage: { base64: result.split(',')[1], mimeType: file.type },
         }));
       }
     };
@@ -569,6 +569,9 @@ const App: React.FC = () => {
         },
       });
 
+      if (!response.text) {
+        throw new Error('AI response was empty.');
+      }
       const parsedData = JSON.parse(response.text);
       if (parsedData.prompts && Array.isArray(parsedData.prompts)) {
         setGeneratedScenes(parsedData.prompts);
