@@ -448,7 +448,7 @@ const App: React.FC = () => {
           IMAGE_PATH_3: '',
           STATUS: '',
           VIDEO_NAME: `${projectName}_${sequenceNumber}`,
-          TYPE_VIDEO: videoType,
+          TYPE_VIDEO: '',
         };
       });
 
