@@ -9,10 +9,10 @@ import React, {
 import { GoogleGenAI, Type } from '@google/genai';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-import { Scene, VideoType, FormData } from './types';
+import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 
@@ -180,6 +180,7 @@ const ApiKeyInputScreen: React.FC<ApiKeyInputProps> = ({ onKeySubmit }) => {
 
 
 const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<ActiveTab>('generator');
   const [videoType, setVideoType] = useState<VideoType>('story');
   const [formData, setFormData] = useState<FormData>({
     idea: '',
@@ -201,7 +202,11 @@ const App: React.FC = () => {
   const [machineId, setMachineId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
 
-  // This secret key MUST be identical to the one in the keygen.html tool.
+  // State for Video Tracker
+  const [jobs, setJobs] = useState<VideoJob[]>([]);
+  const [fileName, setFileName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
   const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
@@ -494,6 +499,107 @@ const App: React.FC = () => {
     }
   };
 
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFileName(file.name);
+    setFeedback(null);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const json: any[] = XLSX.utils.sheet_to_json(worksheet);
+        
+        const validStatuses: JobStatus[] = ['Pending', 'Processing', 'Generating', 'Completed', 'Failed'];
+
+        const loadedJobs: VideoJob[] = json.map((row, index) => {
+          let statusStr = (row.STATUS || '').trim();
+          let status: JobStatus = 'Pending';
+          if (statusStr && validStatuses.includes(statusStr as JobStatus)) {
+              status = statusStr as JobStatus;
+          } else if (statusStr) {
+              console.warn(`Invalid status "${statusStr}" in row ${index + 2}. Defaulting to 'Pending'.`);
+              status = 'Pending';
+          }
+
+          return {
+            id: row.JOB_ID || `job_${index + 1}`,
+            prompt: row.PROMPT || '',
+            imagePath: row.IMAGE_PATH || '',
+            imagePath2: row.IMAGE_PATH_2 || '',
+            imagePath3: row.IMAGE_PATH_3 || '',
+            status: status,
+            videoName: row.VIDEO_NAME || '',
+            typeVideo: row.TYPE_VIDEO || '',
+          };
+        });
+        setJobs(loadedJobs);
+      } catch (error) {
+        console.error("Error parsing Excel file:", error);
+        setFeedback({ type: 'error', message: 'Không thể đọc file. File không đúng định dạng hoặc đã bị lỗi.' });
+        setJobs([]);
+        setFileName('');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const getStatusBadge = (status: JobStatus) => {
+    const baseClasses = "status-badge";
+    switch (status) {
+      case 'Pending': return `${baseClasses} status-pending`;
+      case 'Processing': return `${baseClasses} status-processing`;
+      case 'Generating': return `${baseClasses} status-generating`;
+      case 'Completed': return `${baseClasses} status-completed`;
+      case 'Failed': return `${baseClasses} status-failed`;
+      default: return baseClasses;
+    }
+  };
+
+  const renderResultCell = (job: VideoJob) => {
+    const containerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center";
+    switch(job.status) {
+      case 'Completed':
+        return (
+          <div className={containerClasses}>
+            <CheckIcon className="w-10 h-10 text-emerald-400" />
+          </div>
+        );
+      case 'Processing':
+      case 'Generating':
+         return (
+          <div className={containerClasses}>
+            <LoaderIcon />
+          </div>
+        );
+      case 'Pending':
+      case 'Failed':
+      default:
+        return (
+          <div className={containerClasses}>
+            <VideoIcon className="w-8 h-8 text-gray-400" />
+          </div>
+        );
+    }
+  }
+
+  const TabButton: React.FC<{ tabName: ActiveTab; children: React.ReactNode; }> = ({ tabName, children }) => (
+    <button
+        onClick={() => setActiveTab(tabName)}
+        className={`px-6 py-3 font-semibold rounded-t-lg transition-colors duration-300 focus:outline-none ${
+            activeTab === tabName
+                ? 'bg-white/20 text-white'
+                : 'bg-black/20 text-indigo-200 hover:bg-white/10'
+        }`}
+    >
+        {children}
+    </button>
+  );
+
   const RadioLabel: React.FC<{
     name: string;
     value: string;
@@ -541,281 +647,365 @@ const App: React.FC = () => {
   
   return (
     <>
-      <div className="text-white min-h-screen flex items-center justify-center p-4">
-        <div className="w-full max-w-5xl mx-auto">
-          <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
-            <header className="text-center mb-6">
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
-                🎬 Prompt Generator Pro
-              </h1>
-              <p className="text-lg text-indigo-200 mt-2">
-                Biến ý tưởng thành kịch bản hình ảnh cho MV &amp; Live Show.
-              </p>
-            </header>
+      <div className="text-white min-h-screen p-4">
+        <div className="w-full max-w-7xl mx-auto">
+          <header className="text-center mb-6">
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
+              🎬 Prompt Generator Pro
+            </h1>
+            <p className="text-lg text-indigo-200 mt-2">
+              Biến ý tưởng thành kịch bản & theo dõi sản xuất video.
+            </p>
+          </header>
 
-            <main>
-              <div className="space-y-6 mb-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <label className="block text-sm font-medium text-indigo-100 mb-2">
-                      1. Chọn loại Video
-                    </label>
-                    <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
-                      <RadioLabel
-                        name="videoType"
-                        value="story"
-                        checked={videoType === 'story'}
-                        onChange={setVideoType}
-                      >
-                        MV Kể Chuyện
-                      </RadioLabel>
-                      <RadioLabel
-                        name="videoType"
-                        value="live"
-                        checked={videoType === 'live'}
-                        onChange={setVideoType}
-                      >
-                        Live Acoustic
-                      </RadioLabel>
+          <div className="flex space-x-2">
+            <TabButton tabName="generator">Tạo Kịch Bản</TabButton>
+            <TabButton tabName="tracker">Theo Dõi Sản Xuất</TabButton>
+          </div>
+
+          <div className="glass-card rounded-b-2xl rounded-tr-2xl p-6 sm:p-8 shadow-2xl">
+            {activeTab === 'generator' && (
+              <main>
+                {/* Generator UI */}
+                <div className="space-y-6 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-indigo-100 mb-2">
+                        1. Chọn loại Video
+                      </label>
+                      <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
+                        <RadioLabel
+                          name="videoType"
+                          value="story"
+                          checked={videoType === 'story'}
+                          onChange={setVideoType}
+                        >
+                          MV Kể Chuyện
+                        </RadioLabel>
+                        <RadioLabel
+                          name="videoType"
+                          value="live"
+                          checked={videoType === 'live'}
+                          onChange={setVideoType}
+                        >
+                          Live Acoustic
+                        </RadioLabel>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-indigo-100 mb-2">
+                        2. Chọn Khung hình Video
+                      </label>
+                      <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
+                        <RadioLabel
+                          name="aspectRatio"
+                          value="16:9"
+                          checked={formData.aspectRatio === '16:9'}
+                          onChange={handleAspectRatioChange}
+                        >
+                          16:9 (Landscape)
+                        </RadioLabel>
+                        <RadioLabel
+                          name="aspectRatio"
+                          value="9:16"
+                          checked={formData.aspectRatio === '9:16'}
+                          onChange={handleAspectRatioChange}
+                        >
+                          9:16 (Portrait)
+                        </RadioLabel>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-indigo-100 mb-2">
-                      2. Chọn Khung hình Video
-                    </label>
-                    <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
-                      <RadioLabel
-                        name="aspectRatio"
-                        value="16:9"
-                        checked={formData.aspectRatio === '16:9'}
-                        onChange={handleAspectRatioChange}
-                      >
-                        16:9 (Landscape)
-                      </RadioLabel>
-                      <RadioLabel
-                        name="aspectRatio"
-                        value="9:16"
-                        checked={formData.aspectRatio === '9:16'}
-                        onChange={handleAspectRatioChange}
-                      >
-                        9:16 (Portrait)
-                      </RadioLabel>
-                    </div>
-                  </div>
-                </div>
 
-                <div className={`${videoType === 'story' ? 'block' : 'hidden'} space-y-6`}>
-                  <div>
-                    <label
-                      htmlFor="idea"
-                      className="block text-sm font-medium text-indigo-100 mb-2"
-                    >
-                      Lời bài hát / Ý tưởng MV (Chủ đề chính)
-                    </label>
-                    <textarea
-                      id="idea"
-                      name="idea"
-                      value={formData.idea}
-                      onChange={handleInputChange}
-                      rows={4}
-                      className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                      placeholder="Dán lời bài hát vào đây, hoặc mô tả ý tưởng chính cho MV của bạn..."
-                    ></textarea>
-                  </div>
-                </div>
-
-                <div className={`${videoType === 'live' ? 'block' : 'hidden'} space-y-6`}>
-                  <div>
-                    <label
-                      htmlFor="liveAtmosphere"
-                      className="block text-sm font-medium text-indigo-100 mb-2"
-                    >
-                      Mô tả Bối cảnh &amp; Không khí (Cho buổi diễn Acoustic)
-                    </label>
-                    <textarea
-                      id="liveAtmosphere"
-                      name="liveAtmosphere"
-                      value={formData.liveAtmosphere}
-                      onChange={handleInputChange}
-                      rows={3}
-                      className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                      placeholder="Ví dụ: Một góc phòng thu ấm cúng với vài cây nến..."
-                    ></textarea>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-indigo-100 mb-2">
-                      Tải ảnh ca sĩ (Để AI nhận diện chính xác nhất)
-                    </label>
-                    <div className="flex items-center space-x-4">
+                  <div className={`${videoType === 'story' ? 'block' : 'hidden'} space-y-6`}>
+                    <div>
                       <label
-                        htmlFor="liveArtistImage"
-                        className="cursor-pointer inline-block px-6 py-3 bg-white/10 border-2 border-dashed border-white/30 rounded-lg text-center transition hover:bg-white/20 hover:border-white/50"
+                        htmlFor="idea"
+                        className="block text-sm font-medium text-indigo-100 mb-2"
                       >
-                        <span>Chọn ảnh...</span>
+                        Lời bài hát / Ý tưởng MV (Chủ đề chính)
+                      </label>
+                      <textarea
+                        id="idea"
+                        name="idea"
+                        value={formData.idea}
+                        onChange={handleInputChange}
+                        rows={4}
+                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                        placeholder="Dán lời bài hát vào đây, hoặc mô tả ý tưởng chính cho MV của bạn..."
+                      ></textarea>
+                    </div>
+                  </div>
+
+                  <div className={`${videoType === 'live' ? 'block' : 'hidden'} space-y-6`}>
+                    <div>
+                      <label
+                        htmlFor="liveAtmosphere"
+                        className="block text-sm font-medium text-indigo-100 mb-2"
+                      >
+                        Mô tả Bối cảnh &amp; Không khí (Cho buổi diễn Acoustic)
+                      </label>
+                      <textarea
+                        id="liveAtmosphere"
+                        name="liveAtmosphere"
+                        value={formData.liveAtmosphere}
+                        onChange={handleInputChange}
+                        rows={3}
+                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                        placeholder="Ví dụ: Một góc phòng thu ấm cúng với vài cây nến..."
+                      ></textarea>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-indigo-100 mb-2">
+                        Tải ảnh ca sĩ (Để AI nhận diện chính xác nhất)
+                      </label>
+                      <div className="flex items-center space-x-4">
+                        <label
+                          htmlFor="liveArtistImage"
+                          className="cursor-pointer inline-block px-6 py-3 bg-white/10 border-2 border-dashed border-white/30 rounded-lg text-center transition hover:bg-white/20 hover:border-white/50"
+                        >
+                          <span>Chọn ảnh...</span>
+                        </label>
+                        <input
+                          type="file"
+                          id="liveArtistImage"
+                          name="liveArtistImage"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                          accept="image/png, image/jpeg, image/webp"
+                        />
+                        {formData.liveArtistImage && (
+                          <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-white/30">
+                            <img
+                              src={`data:${formData.liveArtistImage.mimeType};base64,${formData.liveArtistImage.base64}`}
+                              alt="Image Preview"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="liveArtistName"
+                        className="block text-sm font-medium text-indigo-100 mb-2"
+                      >
+                        Tên Ca Sĩ (Nếu là người nổi tiếng)
                       </label>
                       <input
-                        type="file"
-                        id="liveArtistImage"
-                        name="liveArtistImage"
-                        onChange={handleImageUpload}
-                        className="hidden"
-                        accept="image/png, image/jpeg, image/webp"
+                        type="text"
+                        id="liveArtistName"
+                        name="liveArtistName"
+                        value={formData.liveArtistName}
+                        onChange={handleInputChange}
+                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                        placeholder="Ví dụ: Taylor Swift, Sơn Tùng M-TP..."
                       />
-                      {formData.liveArtistImage && (
-                        <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-white/30">
-                          <img
-                            src={`data:${formData.liveArtistImage.mimeType};base64,${formData.liveArtistImage.base64}`}
-                            alt="Image Preview"
-                            className="w-full h-full object-cover"
-                          />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="liveArtist"
+                        className="block text-sm font-medium text-indigo-100 mb-2"
+                      >
+                        Mô tả Nghệ sĩ &amp; Phong cách trình diễn
+                      </label>
+                      <textarea
+                        id="liveArtist"
+                        name="liveArtist"
+                        value={formData.liveArtist}
+                        onChange={handleInputChange}
+                        rows={3}
+                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                        placeholder="Ví dụ: Nữ ca sĩ với giọng hát trong trẻo, mặc váy trắng, chơi đàn piano..."
+                      ></textarea>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/10">
+                    <div>
+                      <label className="block text-sm font-medium text-indigo-100 mb-2">
+                        Thời lượng bài hát (để tính số cảnh)
+                      </label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="number"
+                          id="songMinutes"
+                          name="songMinutes"
+                          value={formData.songMinutes}
+                          onChange={handleInputChange}
+                          className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                          placeholder="Phút"
+                          min="0"
+                        />
+                        <span className="text-xl">:</span>
+                        <input
+                          type="number"
+                          id="songSeconds"
+                          name="songSeconds"
+                          value={formData.songSeconds}
+                          onChange={handleInputChange}
+                          className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                          placeholder="Giây"
+                          min="0"
+                          max="59"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="projectName"
+                        className="block text-sm font-medium text-indigo-100 mb-2"
+                      >
+                        Tên Dự Án (Để đặt tên file)
+                      </label>
+                      <input
+                        type="text"
+                        id="projectName"
+                        name="projectName"
+                        value={formData.projectName}
+                        onChange={handleInputChange}
+                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                        placeholder="Ví dụ: MV_Bai_Hat_Moi"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="model"
+                        className="block text-sm font-medium text-indigo-100 mb-2"
+                      >
+                        Chọn Model AI
+                      </label>
+                      <select
+                        id="model"
+                        name="model"
+                        value={formData.model}
+                        onChange={handleInputChange}
+                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                      >
+                        <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
+                        <option value="gemini-flash-latest">Gemini Flash</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-center">
+                  <button
+                    onClick={generatePrompts}
+                    disabled={isLoading}
+                    className="bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100"
+                    title="Tạo kịch bản"
+                  >
+                    {isLoading ? <LoaderIcon /> : <span>Tạo Kịch Bản Prompt</span>}
+                  </button>
+                </div>
+                
+                {feedback && (
+                  <div className={`text-center mt-6 font-medium p-3 rounded-lg ${
+                    feedback.type === 'error' ? 'text-red-300 bg-red-900/50' :
+                    feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' :
+                    'text-blue-300 bg-blue-900/50'
+                  }`}>
+                    {feedback.message}
+                  </div>
+                )}
+
+                {generatedScenes.length > 0 && (
+                  <div className="text-center mt-8 pt-6 border-t border-white/20 space-y-4">
+                    <h3 className="text-xl font-bold">
+                      Hoàn thành! Kịch bản của bạn đã sẵn sàng.
+                    </h3>
+                    <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
+                      <button
+                        onClick={startProcess}
+                        className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto"
+                      >
+                         Lưu kịch bản ra File Excel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <Results scenes={generatedScenes} />
+              </main>
+            )}
+            {activeTab === 'tracker' && (
+                <main>
+                    {/* Video Tracker UI */}
+                    <div className="space-y-6">
+                        <div>
+                            <h2 className="text-2xl font-bold text-center mb-2">Bảng Theo Dõi Sản Xuất Video</h2>
+                            <p className="text-indigo-200 text-center">Tải lên file kịch bản Excel để theo dõi trạng thái tạo video.</p>
                         </div>
-                      )}
+
+                        {feedback && (
+                            <div className={`text-center font-medium p-3 rounded-lg ${
+                                feedback.type === 'error' ? 'text-red-300 bg-red-900/50' :
+                                feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' :
+                                'text-blue-300 bg-blue-900/50'
+                            }`}>
+                                {feedback.message}
+                            </div>
+                        )}
+                        
+                        {jobs.length === 0 ? (
+                             <div className="text-center py-10 border-2 border-dashed border-white/20 rounded-lg">
+                                 <UploadIcon className="mx-auto h-12 w-12 text-indigo-300" />
+                                 <h3 className="mt-2 text-lg font-medium">Tải lên file kịch bản</h3>
+                                 <p className="mt-1 text-sm text-indigo-200">Bắt đầu bằng cách chọn file Excel đã được tạo từ tab "Tạo Kịch Bản".</p>
+                                 <div className="mt-6">
+                                     <button
+                                         onClick={() => fileInputRef.current?.click()}
+                                         className="bg-white text-indigo-700 font-bold py-2 px-6 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
+                                     >
+                                         Chọn File
+                                     </button>
+                                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                                 </div>
+                             </div>
+                        ) : (
+                            <div>
+                                <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+                                    <p className="text-indigo-100 font-medium">
+                                        Đang theo dõi file: <span className="font-bold text-white">{fileName}</span>
+                                    </p>
+                                    <button
+                                        onClick={() => { setJobs([]); setFileName(''); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                                        className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition"
+                                    >
+                                        Tải File Khác
+                                    </button>
+                                </div>
+                                <div className="overflow-x-auto bg-black/20 rounded-lg">
+                                    <table className="w-full text-white job-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Job ID</th>
+                                                <th>Trạng Thái</th>
+                                                <th>Tên Video</th>
+                                                <th>Kết Quả</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {jobs.map(job => (
+                                                <tr key={job.id}>
+                                                    <td className="font-mono text-sm">{job.id}</td>
+                                                    <td><span className={getStatusBadge(job.status)}>{job.status}</span></td>
+                                                    <td className="font-medium">{job.videoName}</td>
+                                                    <td>
+                                                      {renderResultCell(job)}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="liveArtistName"
-                      className="block text-sm font-medium text-indigo-100 mb-2"
-                    >
-                      Tên Ca Sĩ (Nếu là người nổi tiếng)
-                    </label>
-                    <input
-                      type="text"
-                      id="liveArtistName"
-                      name="liveArtistName"
-                      value={formData.liveArtistName}
-                      onChange={handleInputChange}
-                      className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                      placeholder="Ví dụ: Taylor Swift, Sơn Tùng M-TP..."
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="liveArtist"
-                      className="block text-sm font-medium text-indigo-100 mb-2"
-                    >
-                      Mô tả Nghệ sĩ &amp; Phong cách trình diễn
-                    </label>
-                    <textarea
-                      id="liveArtist"
-                      name="liveArtist"
-                      value={formData.liveArtist}
-                      onChange={handleInputChange}
-                      rows={3}
-                      className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                      placeholder="Ví dụ: Nữ ca sĩ với giọng hát trong trẻo, mặc váy trắng, chơi đàn piano..."
-                    ></textarea>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/10">
-                  <div>
-                    <label className="block text-sm font-medium text-indigo-100 mb-2">
-                      Thời lượng bài hát (để tính số cảnh)
-                    </label>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="number"
-                        id="songMinutes"
-                        name="songMinutes"
-                        value={formData.songMinutes}
-                        onChange={handleInputChange}
-                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                        placeholder="Phút"
-                        min="0"
-                      />
-                      <span className="text-xl">:</span>
-                      <input
-                        type="number"
-                        id="songSeconds"
-                        name="songSeconds"
-                        value={formData.songSeconds}
-                        onChange={handleInputChange}
-                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                        placeholder="Giây"
-                        min="0"
-                        max="59"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="projectName"
-                      className="block text-sm font-medium text-indigo-100 mb-2"
-                    >
-                      Tên Dự Án (Để đặt tên file)
-                    </label>
-                    <input
-                      type="text"
-                      id="projectName"
-                      name="projectName"
-                      value={formData.projectName}
-                      onChange={handleInputChange}
-                      className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                      placeholder="Ví dụ: MV_Bai_Hat_Moi"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="model"
-                      className="block text-sm font-medium text-indigo-100 mb-2"
-                    >
-                      Chọn Model AI
-                    </label>
-                    <select
-                      id="model"
-                      name="model"
-                      value={formData.model}
-                      onChange={handleInputChange}
-                      className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                    >
-                      <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
-                      <option value="gemini-flash-latest">Gemini Flash</option>
-                      <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-center">
-                <button
-                  onClick={generatePrompts}
-                  disabled={isLoading}
-                  className="bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100"
-                  title="Tạo kịch bản"
-                >
-                  {isLoading ? <LoaderIcon /> : <span>Tạo Kịch Bản Prompt</span>}
-                </button>
-              </div>
-              
-              {feedback && (
-                <div className={`text-center mt-6 font-medium p-3 rounded-lg ${
-                  feedback.type === 'error' ? 'text-red-300 bg-red-900/50' :
-                  feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' :
-                  'text-blue-300 bg-blue-900/50'
-                }`}>
-                  {feedback.message}
-                </div>
-              )}
-
-              {generatedScenes.length > 0 && (
-                <div className="text-center mt-8 pt-6 border-t border-white/20 space-y-4">
-                  <h3 className="text-xl font-bold">
-                    Hoàn thành! Kịch bản của bạn đã sẵn sàng.
-                  </h3>
-                  <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-                    <button
-                      onClick={startProcess}
-                      className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto"
-                    >
-                       Lưu kịch bản ra File Excel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <Results scenes={generatedScenes} />
-            </main>
+                </main>
+            )}
           </div>
         </div>
       </div>

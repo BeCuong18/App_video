@@ -1,4 +1,7 @@
 export type VideoType = 'story' | 'live';
+export type ActiveTab = 'generator' | 'tracker';
+export type JobStatus = 'Pending' | 'Processing' | 'Generating' | 'Completed' | 'Failed';
+
 
 export interface ScenePrompt {
   scene_number: number;
@@ -26,3 +29,14 @@ export interface FormData {
   model: string;
   aspectRatio: '16:9' | '9:16';
 }
+
+export interface VideoJob {
+    id: string;
+    prompt: string;
+    imagePath: string;
+    imagePath2: string;
+    imagePath3: string;
+    status: JobStatus;
+    videoName: string;
+    typeVideo: string;
+  }

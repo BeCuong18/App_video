@@ -32,6 +32,35 @@
             background-size: 1em;
             padding-right: 2.5rem;
         }
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25em 0.6em;
+            font-size: 0.8em;
+            font-weight: 600;
+            border-radius: 9999px;
+            white-space: nowrap;
+        }
+        .status-pending { background-color: #4b5563; color: #f9fafb; }
+        .status-processing { background-color: #3b82f6; color: #f9fafb; }
+        .status-generating { background-color: #f59e0b; color: #f9fafb; }
+        .status-completed { background-color: #10b981; color: #f9fafb; }
+        .status-failed { background-color: #ef4444; color: #f9fafb; }
+
+        .job-table th, .job-table td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .job-table th {
+            text-align: left;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #d1d5db;
+        }
+        .job-table tr:last-child td {
+            border-bottom: none;
+        }
     </style>
 <script type="importmap">
 {
