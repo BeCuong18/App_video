@@ -2,6 +2,11 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
+
+// Configure logging for autoUpdater
+autoUpdater.logger = require('electron-log');
+autoUpdater.logger.transports.file.level = 'info';
 
 function createWindow() {
   // Create the browser window.
@@ -24,6 +29,10 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
+
+  // Start checking for updates after the window is created.
+  // This will check, download, and notify the user when ready.
+  autoUpdater.checkForUpdatesAndNotify();
 
   ipcMain.handle('save-file-dialog', async (event, { defaultPath, fileContent }) => {
     const mainWindow = BrowserWindow.getFocusedWindow();
@@ -50,6 +59,30 @@ app.whenReady().then(() => {
     }
   });
 });
+
+// --- AutoUpdater Event Listeners for logging/debugging ---
+autoUpdater.on('checking-for-update', () => {
+  console.log('Checking for update...');
+});
+autoUpdater.on('update-available', (info) => {
+  console.log('Update available.', info);
+});
+autoUpdater.on('update-not-available', (info) => {
+  console.log('Update not available.', info);
+});
+autoUpdater.on('error', (err) => {
+  console.error('Error in auto-updater. ' + err);
+});
+autoUpdater.on('download-progress', (progressObj) => {
+  let log_message = "Download speed: " + progressObj.bytesPerSecond;
+  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
+  log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
+  console.log(log_message);
+});
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('Update downloaded.', info);
+});
+
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

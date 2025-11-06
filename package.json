@@ -18,7 +18,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "crypto-js": "^4.2.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "electron-updater": "^6.1.8"
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
@@ -33,6 +34,13 @@
   "build": {
     "appId": "com.promptgenerator.pro",
     "productName": "Prompt Generator Pro",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "BeCuong18",
+        "repo": "App_video"
+      }
+    ],
     "files": [
       "dist/**/*",
       "main.js"
