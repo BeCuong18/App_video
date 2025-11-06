@@ -1,5 +1,6 @@
 
 
+
 import React, {
   useState,
   useCallback,
@@ -400,8 +401,8 @@ const App: React.FC = () => {
     }
   }, [isActivated, apiKeys, activeApiKey]);
 
-  const parseExcelData = (data: ArrayBuffer): VideoJob[] => {
-    const workbook = XLSX.read(data, { type: 'array' });
+  const parseExcelData = (data: Buffer): VideoJob[] => {
+    const workbook = XLSX.read(data, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
     const json: any[] = XLSX.utils.sheet_to_json(worksheet);
@@ -432,7 +433,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!ipcRenderer) return;
 
-    const watchedPaths = new Set(trackedFiles.map(f => f.path).filter(Boolean));
+    const watchedPaths = new Set(trackedFiles.map(f => f.path).filter((path): path is string => !!path));
     const previousWatchedPaths = new Set<string>(JSON.parse(sessionStorage.getItem('watchedPaths') || '[]') as string[]);
 
     watchedPaths.forEach(path => {
@@ -450,7 +451,7 @@ const App: React.FC = () => {
     sessionStorage.setItem('watchedPaths', JSON.stringify(Array.from(watchedPaths)));
 
     const handleFileUpdate = (_event: any, { path, content }: { path: string, content: Buffer }) => {
-        const newJobs = parseExcelData(new Uint8Array(content).buffer);
+        const newJobs = parseExcelData(content);
         setTrackedFiles(prevFiles => 
             prevFiles.map(file => 
                 file.path === path ? { ...file, jobs: newJobs } : file
@@ -480,12 +481,14 @@ const App: React.FC = () => {
     }
     const reader = new FileReader();
     reader.onloadend = () => {
-      const result = reader.result;
-      if (typeof result === 'string') {
-        setFormData((prev) => ({
-          ...prev,
-          liveArtistImage: { base64: result.split(',')[1], mimeType: file.type },
-        }));
+      if (reader.result && typeof reader.result === 'string') {
+        const base64Data = reader.result.split(',')[1];
+        if (base64Data) {
+          setFormData((prev) => ({
+            ...prev,
+            liveArtistImage: { base64: base64Data, mimeType: file.type },
+          }));
+        }
       }
     };
     reader.readAsDataURL(file);
@@ -569,10 +572,12 @@ const App: React.FC = () => {
         },
       });
 
-      if (!response.text) {
+      const responseText = response.text;
+      if (!responseText) {
         throw new Error('AI response was empty.');
       }
-      const parsedData = JSON.parse(response.text);
+
+      const parsedData = JSON.parse(responseText);
       if (parsedData.prompts && Array.isArray(parsedData.prompts)) {
         setGeneratedScenes(parsedData.prompts);
       } else {
@@ -668,7 +673,7 @@ const App: React.FC = () => {
     const result = await ipcRenderer.invoke('open-file-dialog');
     if (result.success) {
         try {
-            const loadedJobs = parseExcelData(result.content.buffer);
+            const loadedJobs = parseExcelData(result.content);
             const newTrackedFile: TrackedFile = {
                 name: result.name,
                 jobs: loadedJobs,
