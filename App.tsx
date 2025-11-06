@@ -9,7 +9,7 @@ import React, {
 import { GoogleGenAI, Type } from '@google/genai';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus } from './types';
+import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
 import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon } from './components/Icons';
@@ -203,8 +203,8 @@ const App: React.FC = () => {
   const [apiKey, setApiKey] = useState<string | null>(null);
 
   // State for Video Tracker
-  const [jobs, setJobs] = useState<VideoJob[]>([]);
-  const [fileName, setFileName] = useState('');
+  const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
+  const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
@@ -440,59 +440,69 @@ const App: React.FC = () => {
       return;
     }
     setFeedback(null);
-
+  
     try {
       const projectName = formData.projectName.trim() || 'MV';
-      const dataToExport = generatedScenes.map((p, index) => {
+      const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
+      const fullFileName = `${safeFileName}.xlsx`;
+  
+      const dataToExport: VideoJob[] = generatedScenes.map((p, index) => {
         const sequenceNumber = index + 1;
         return {
-          JOB_ID: `Job_${sequenceNumber}`,
-          PROMPT: p.prompt_text,
-          IMAGE_PATH: '',
-          IMAGE_PATH_2: '',
-          IMAGE_PATH_3: '',
-          STATUS: '',
-          VIDEO_NAME: `${projectName}_${sequenceNumber}`,
-          TYPE_VIDEO: '',
+          id: `Job_${sequenceNumber}`,
+          prompt: p.prompt_text,
+          imagePath: '',
+          imagePath2: '',
+          imagePath3: '',
+          status: 'Pending',
+          videoName: `${projectName}_${sequenceNumber}`,
+          typeVideo: '',
         };
       });
+  
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport, {
+        header: ['id', 'prompt', 'imagePath', 'imagePath2', 'imagePath3', 'status', 'videoName', 'typeVideo'],
+        skipHeader: true, // We'll add custom headers
+      });
+      
+      // Add custom header
+      XLSX.utils.sheet_add_aoa(worksheet, [['JOB_ID', 'PROMPT', 'IMAGE_PATH', 'IMAGE_PATH_2', 'IMAGE_PATH_3', 'STATUS', 'VIDEO_NAME', 'TYPE_VIDEO']], { origin: 'A1' });
 
-      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
       worksheet['!cols'] = [
-        { wch: 15 }, // JOB_ID
-        { wch: 150 },// PROMPT
-        { wch: 30 }, // IMAGE_PATH
-        { wch: 30 }, // IMAGE_PATH_2
-        { wch: 30 }, // IMAGE_PATH_3
-        { wch: 15 }, // STATUS
-        { wch: 30 }, // VIDEO_NAME
-        { wch: 15 }, // TYPE_VIDEO
+        { wch: 15 }, { wch: 150 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 30 }, { wch: 15 },
       ];
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Prompts');
-      const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
-
+  
+      // Save the file
       if (isElectron) {
-        // In Electron, use IPC to trigger a native save dialog
         const { ipcRenderer } = (window as any).require('electron');
         const fileContent = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
         
         const result = await ipcRenderer.invoke('save-file-dialog', {
-            defaultPath: `${safeFileName}.xlsx`,
+            defaultPath: fullFileName,
             fileContent: fileContent
         });
-
+  
         if (result.success) {
             setFeedback({ type: 'success', message: `Thành công! File đã được lưu tại: ${result.filePath}` });
         } else if (result.error && result.error !== 'Save dialog canceled') {
-            // Only show error if it's not a user cancellation
             throw new Error(result.error);
         }
       } else {
-        // In a standard browser, trigger a download
-        XLSX.writeFile(workbook, `${safeFileName}.xlsx`);
+        XLSX.writeFile(workbook, fullFileName);
         setFeedback({ type: 'success', message: 'Thành công! File kịch bản của bạn đang được tải xuống.' });
       }
+
+      // Add to tracker and switch view
+      const newTrackedFile: TrackedFile = {
+        name: fullFileName,
+        jobs: dataToExport,
+      };
+      setTrackedFiles(prevFiles => [...prevFiles, newTrackedFile]);
+      setActiveTrackerFileIndex(trackedFiles.length);
+      setActiveTab('tracker');
+
     } catch (err: any) {
         console.error('Error exporting file:', err);
         setFeedback({ type: 'error', message: 'Đã có lỗi xảy ra khi xuất file Excel.' });
@@ -503,7 +513,6 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setFileName(file.name);
     setFeedback(null);
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -537,15 +546,35 @@ const App: React.FC = () => {
             typeVideo: row.TYPE_VIDEO || '',
           };
         });
-        setJobs(loadedJobs);
+
+        const newTrackedFile: TrackedFile = {
+          name: file.name,
+          jobs: loadedJobs,
+        };
+
+        setTrackedFiles(prev => [...prev, newTrackedFile]);
+        setActiveTrackerFileIndex(trackedFiles.length);
+
       } catch (error) {
         console.error("Error parsing Excel file:", error);
         setFeedback({ type: 'error', message: 'Không thể đọc file. File không đúng định dạng hoặc đã bị lỗi.' });
-        setJobs([]);
-        setFileName('');
+      } finally {
+        // Reset file input so the same file can be re-uploaded
+        if(fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  const handleCloseTrackerTab = (indexToClose: number) => {
+    setTrackedFiles(prev => prev.filter((_, index) => index !== indexToClose));
+    
+    if (activeTrackerFileIndex >= indexToClose) {
+        // If the closed tab is before or is the current tab, adjust the active index
+        setActiveTrackerFileIndex(prevIndex => Math.max(0, prevIndex - 1));
+    }
   };
 
   const getStatusBadge = (status: JobStatus) => {
@@ -921,7 +950,7 @@ const App: React.FC = () => {
                         onClick={startProcess}
                         className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto"
                       >
-                         Lưu kịch bản ra File Excel
+                         Lưu kịch bản & Theo dõi
                       </button>
                     </div>
                   </div>
@@ -936,71 +965,87 @@ const App: React.FC = () => {
                     <div className="space-y-6">
                         <div>
                             <h2 className="text-2xl font-bold text-center mb-2">Bảng Theo Dõi Sản Xuất Video</h2>
-                            <p className="text-indigo-200 text-center">Tải lên file kịch bản Excel để theo dõi trạng thái tạo video.</p>
+                            <p className="text-indigo-200 text-center">Theo dõi trạng thái các file kịch bản hoặc tải lên file mới.</p>
                         </div>
 
                         {feedback && (
                             <div className={`text-center font-medium p-3 rounded-lg ${
-                                feedback.type === 'error' ? 'text-red-300 bg-red-900/50' :
-                                feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' :
-                                'text-blue-300 bg-blue-900/50'
+                                feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : ''
                             }`}>
                                 {feedback.message}
                             </div>
                         )}
                         
-                        {jobs.length === 0 ? (
+                        {trackedFiles.length === 0 ? (
                              <div className="text-center py-10 border-2 border-dashed border-white/20 rounded-lg">
                                  <UploadIcon className="mx-auto h-12 w-12 text-indigo-300" />
-                                 <h3 className="mt-2 text-lg font-medium">Tải lên file kịch bản</h3>
-                                 <p className="mt-1 text-sm text-indigo-200">Bắt đầu bằng cách chọn file Excel đã được tạo từ tab "Tạo Kịch Bản".</p>
+                                 <h3 className="mt-2 text-lg font-medium">Chưa có file nào được theo dõi</h3>
+                                 <p className="mt-1 text-sm text-indigo-200">Tạo một kịch bản mới hoặc tải lên một file Excel để bắt đầu.</p>
                                  <div className="mt-6">
                                      <button
                                          onClick={() => fileInputRef.current?.click()}
                                          className="bg-white text-indigo-700 font-bold py-2 px-6 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
                                      >
-                                         Chọn File
+                                         Tải File Mới
                                      </button>
                                      <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
                                  </div>
                              </div>
                         ) : (
                             <div>
-                                <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-                                    <p className="text-indigo-100 font-medium">
-                                        Đang theo dõi file: <span className="font-bold text-white">{fileName}</span>
-                                    </p>
-                                    <button
-                                        onClick={() => { setJobs([]); setFileName(''); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                                        className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition"
-                                    >
-                                        Tải File Khác
-                                    </button>
-                                </div>
-                                <div className="overflow-x-auto bg-black/20 rounded-lg">
-                                    <table className="w-full text-white job-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Job ID</th>
-                                                <th>Trạng Thái</th>
-                                                <th>Tên Video</th>
-                                                <th>Kết Quả</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {jobs.map(job => (
-                                                <tr key={job.id}>
-                                                    <td className="font-mono text-sm">{job.id}</td>
-                                                    <td><span className={getStatusBadge(job.status)}>{job.status}</span></td>
-                                                    <td className="font-medium">{job.videoName}</td>
-                                                    <td>
-                                                      {renderResultCell(job)}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                               <div className="flex justify-between items-center mb-4">
+                                  <div className="tracker-tabs flex-grow">
+                                      {trackedFiles.map((file, index) => (
+                                          <button 
+                                              key={index}
+                                              className={`tracker-tab ${activeTrackerFileIndex === index ? 'active' : ''}`}
+                                              onClick={() => setActiveTrackerFileIndex(index)}
+                                          >
+                                              <span>{file.name}</span>
+                                              <span 
+                                                  className="tab-close-btn"
+                                                  onClick={(e) => { e.stopPropagation(); handleCloseTrackerTab(index); }}
+                                              >
+                                                  &times;
+                                              </span>
+                                          </button>
+                                      ))}
+                                  </div>
+                                  <button
+                                      onClick={() => fileInputRef.current?.click()}
+                                      className="ml-4 bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap"
+                                  >
+                                      Tải File Mới
+                                  </button>
+                                  <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                               </div>
+
+                                {trackedFiles[activeTrackerFileIndex] && (
+                                  <div className="overflow-x-auto bg-black/20 rounded-lg">
+                                      <table className="w-full text-white job-table">
+                                          <thead>
+                                              <tr>
+                                                  <th>Job ID</th>
+                                                  <th>Trạng Thái</th>
+                                                  <th>Tên Video</th>
+                                                  <th>Kết Quả</th>
+                                              </tr>
+                                          </thead>
+                                          <tbody>
+                                              {trackedFiles[activeTrackerFileIndex].jobs.map(job => (
+                                                  <tr key={job.id}>
+                                                      <td className="font-mono text-sm">{job.id}</td>
+                                                      <td><span className={getStatusBadge(job.status)}>{job.status}</span></td>
+                                                      <td className="font-medium">{job.videoName}</td>
+                                                      <td>
+                                                        {renderResultCell(job)}
+                                                      </td>
+                                                  </tr>
+                                              ))}
+                                          </tbody>
+                                      </table>
+                                  </div>
+                                )}
                             </div>
                         )}
                     </div>

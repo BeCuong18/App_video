@@ -40,3 +40,8 @@ export interface VideoJob {
     videoName: string;
     typeVideo: string;
   }
+  
+export interface TrackedFile {
+  name: string;
+  jobs: VideoJob[];
+}
