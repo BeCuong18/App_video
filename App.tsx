@@ -15,6 +15,8 @@ import Results from './components/Results';
 import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
+const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
+
 
 // --- Activation Component ---
 interface ActivationProps {
@@ -275,16 +277,12 @@ const App: React.FC = () => {
   const [isActivated, setIsActivated] = useState<boolean | null>(null);
   const [machineId, setMachineId] = useState<string>('');
   
-  // API Key Management State
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [activeApiKey, setActiveApiKey] = useState<ApiKey | null>(null);
   const [isManagingKeys, setIsManagingKeys] = useState(false);
 
-
-  // State for Video Tracker
   const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
   const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
@@ -301,29 +299,25 @@ const App: React.FC = () => {
       const bytes = CryptoJS.AES.decrypt(ciphertext, getEncryptionKey());
       return bytes.toString(CryptoJS.enc.Utf8);
     } catch {
-      return ''; // Decryption failed
+      return '';
     }
   }, [machineId, getEncryptionKey]);
 
   useEffect(() => {
-    // Load stored API keys
     if (machineId) {
       const storedKeysEncrypted = localStorage.getItem('api_keys_storage');
       if (storedKeysEncrypted) {
         const decryptedKeys = decrypt(storedKeysEncrypted);
         if (decryptedKeys) {
           try {
-            const parsedKeys: ApiKey[] = JSON.parse(decryptedKeys);
-            setApiKeys(parsedKeys);
+            setApiKeys(JSON.parse(decryptedKeys));
           } catch {
-            console.error("Failed to parse stored API keys.");
-            localStorage.removeItem('api_keys_storage'); // Clear corrupted data
+            localStorage.removeItem('api_keys_storage');
           }
         }
       }
     }
   }, [machineId, decrypt]);
-
 
   const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
     if (!machineId) return false;
@@ -335,7 +329,6 @@ const App: React.FC = () => {
       const expectedSignature = CryptoJS.HmacSHA256(machineId, SECRET_KEY).toString(CryptoJS.enc.Hex);
       return receivedSignature === expectedSignature;
     } catch (e) {
-      console.error('Error during license validation:', e);
       return false;
     }
   }, [machineId]);
@@ -373,24 +366,20 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Check Activation Status
     setTimeout(() => {
-        const storedLicenseKey = localStorage.getItem('license_key');
         let storedMachineId = localStorage.getItem('machine_id');
-
         if (!storedMachineId) {
             storedMachineId = crypto.randomUUID();
             localStorage.setItem('machine_id', storedMachineId);
         }
-        
-        const currentMachineId = storedMachineId;
-        setMachineId(currentMachineId);
+        setMachineId(storedMachineId);
 
         let activationStatus = false;
+        const storedLicenseKey = localStorage.getItem('license_key');
         if (storedLicenseKey) {
             const parts = storedLicenseKey.split('.');
-            if (parts.length === 2 && parts[0] === currentMachineId) {
-                const expectedSignature = CryptoJS.HmacSHA256(currentMachineId, SECRET_KEY).toString(CryptoJS.enc.Hex);
+            if (parts.length === 2 && parts[0] === storedMachineId) {
+                const expectedSignature = CryptoJS.HmacSHA256(storedMachineId, SECRET_KEY).toString(CryptoJS.enc.Hex);
                 if (parts[1] === expectedSignature) {
                     activationStatus = true;
                 }
@@ -401,34 +390,86 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    // Auto-select active key on app load
     if(isActivated && apiKeys.length > 0 && !activeApiKey) {
       const activeKeyId = sessionStorage.getItem('active_api_key_id');
       if (activeKeyId) {
         const keyToActivate = apiKeys.find(k => k.id === activeKeyId);
-        if (keyToActivate) {
-          setActiveApiKey(keyToActivate);
-        }
+        if (keyToActivate) setActiveApiKey(keyToActivate);
       }
     }
   }, [isActivated, apiKeys, activeApiKey]);
 
+  const parseExcelData = (data: ArrayBuffer): VideoJob[] => {
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const json: any[] = XLSX.utils.sheet_to_json(worksheet);
+    
+    const validStatuses: JobStatus[] = ['Pending', 'Processing', 'Generating', 'Completed', 'Failed'];
 
-  const handleInputChange = useCallback(
-    (
-      e: ChangeEvent<
-        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-      >,
-    ) => {
-      const { name, value } = e.target;
-      setFormData((prev) => ({ ...prev, [name]: value }));
-    },
-    [],
+    return json.map((row, index) => {
+      let statusStr = (row.STATUS || '').toString().trim();
+      let status: JobStatus = 'Pending';
+      if (statusStr && validStatuses.includes(statusStr as JobStatus)) {
+          status = statusStr as JobStatus;
+      } else if (statusStr) {
+          status = 'Pending';
+      }
+      return {
+        id: row.JOB_ID || `job_${index + 1}`,
+        prompt: row.PROMPT || '',
+        imagePath: row.IMAGE_PATH || '',
+        imagePath2: row.IMAGE_PATH_2 || '',
+        imagePath3: row.IMAGE_PATH_3 || '',
+        status: status,
+        videoName: row.VIDEO_NAME || '',
+        typeVideo: row.TYPE_VIDEO || '',
+      };
+    });
+  };
+
+  useEffect(() => {
+    if (!ipcRenderer) return;
+
+    const watchedPaths = new Set(trackedFiles.map(f => f.path).filter(Boolean));
+    const previousWatchedPaths = new Set(JSON.parse(sessionStorage.getItem('watchedPaths') || '[]'));
+
+    watchedPaths.forEach(path => {
+        if (!previousWatchedPaths.has(path)) {
+            ipcRenderer.send('start-watching-file', path);
+        }
+    });
+
+    previousWatchedPaths.forEach(path => {
+        if (!watchedPaths.has(path)) {
+            ipcRenderer.send('stop-watching-file', path);
+        }
+    });
+    
+    sessionStorage.setItem('watchedPaths', JSON.stringify(Array.from(watchedPaths)));
+
+    const handleFileUpdate = (event: any, { path, content }: { path: string, content: Buffer }) => {
+        const newJobs = parseExcelData(content.buffer);
+        setTrackedFiles(prevFiles => 
+            prevFiles.map(file => 
+                file.path === path ? { ...file, jobs: newJobs } : file
+            )
+        );
+    };
+
+    ipcRenderer.on('file-content-updated', handleFileUpdate);
+
+    return () => {
+        ipcRenderer.removeListener('file-content-updated', handleFileUpdate);
+    };
+  }, [trackedFiles]);
+
+  const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+      setFormData((prev) => ({ ...prev, [name]: e.target.value }));
+    },[],
   );
 
-  const handleAspectRatioChange = (value: '16:9' | '9:16') => {
-    setFormData((prev) => ({ ...prev, aspectRatio: value }));
-  };
+  const handleAspectRatioChange = (value: '16:9' | '9:16') => setFormData((prev) => ({ ...prev, aspectRatio: value }));
 
   const handleImageUpload = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -439,13 +480,9 @@ const App: React.FC = () => {
     const reader = new FileReader();
     reader.onloadend = () => {
       if (typeof reader.result === 'string') {
-        const base64String = reader.result.split(',')[1];
         setFormData((prev) => ({
           ...prev,
-          liveArtistImage: {
-            base64: base64String,
-            mimeType: file.type,
-          },
+          liveArtistImage: { base64: reader.result.split(',')[1], mimeType: file.type },
         }));
       }
     };
@@ -462,20 +499,16 @@ const App: React.FC = () => {
     setFeedback(null);
     setGeneratedScenes([]);
 
-    const totalSeconds =
-      (parseInt(formData.songMinutes) || 0) * 60 +
-      (parseInt(formData.songSeconds) || 0);
+    const totalSeconds = (parseInt(formData.songMinutes) || 0) * 60 + (parseInt(formData.songSeconds) || 0);
     if (totalSeconds <= 0) {
       setFeedback({ type: 'error', message: 'Vui lòng nhập thời lượng bài hát hợp lệ.' });
       setIsLoading(false);
       return;
     }
 
-    let sceneCount = Math.round(totalSeconds / 7);
-    if (sceneCount < 3) sceneCount = 3;
+    let sceneCount = Math.max(3, Math.round(totalSeconds / 7));
 
-    const systemPrompt =
-      videoType === 'story' ? storySystemPrompt : liveSystemPrompt;
+    const systemPrompt = videoType === 'story' ? storySystemPrompt : liveSystemPrompt;
     let userPrompt = `Generate prompts for a music video.`;
 
     if (videoType === 'story') {
@@ -486,22 +519,14 @@ const App: React.FC = () => {
       }
       userPrompt += ` The core idea is: "${formData.idea.trim()}".`;
     } else {
-      if (
-        !formData.liveAtmosphere.trim() &&
-        !formData.liveArtistName.trim() &&
-        !formData.liveArtist.trim() &&
-        !formData.liveArtistImage
-      ) {
+      if (!formData.liveAtmosphere.trim() && !formData.liveArtistName.trim() && !formData.liveArtist.trim() && !formData.liveArtistImage) {
         setFeedback({ type: 'error', message: 'Vui lòng nhập ít nhất một thông tin cho Video Trình Diễn Live.' });
         setIsLoading(false);
         return;
       }
-      if (formData.liveAtmosphere.trim())
-        userPrompt += ` The Stage & Atmosphere is: "${formData.liveAtmosphere.trim()}".`;
-      if (formData.liveArtistName.trim())
-        userPrompt += ` The Artist Name is: "${formData.liveArtistName.trim()}".`;
-      if (formData.liveArtist.trim())
-        userPrompt += ` The Artist & Performance Style is: "${formData.liveArtist.trim()}".`;
+      if (formData.liveAtmosphere.trim()) userPrompt += ` The Stage & Atmosphere is: "${formData.liveAtmosphere.trim()}".`;
+      if (formData.liveArtistName.trim()) userPrompt += ` The Artist Name is: "${formData.liveArtistName.trim()}".`;
+      if (formData.liveArtist.trim()) userPrompt += ` The Artist & Performance Style is: "${formData.liveArtist.trim()}".`;
     }
 
     userPrompt += ` The video should have exactly ${sceneCount} scenes, structured with a clear visual arc. The aspect ratio will be ${formData.aspectRatio}.`;
@@ -509,10 +534,7 @@ const App: React.FC = () => {
     const parts: any[] = [{ text: userPrompt }];
     if (videoType === 'live' && formData.liveArtistImage) {
       parts.push({
-        inlineData: {
-          mimeType: formData.liveArtistImage.mimeType,
-          data: formData.liveArtistImage.base64,
-        },
+        inlineData: { mimeType: formData.liveArtistImage.mimeType, data: formData.liveArtistImage.base64 },
       });
     }
 
@@ -545,12 +567,7 @@ const App: React.FC = () => {
         },
       });
 
-      const jsonText = response.text;
-      if (!jsonText) {
-        throw new Error('Received an empty response from the AI. The prompt may have been blocked or the model failed to generate content.');
-      }
-      const parsedData = JSON.parse(jsonText);
-
+      const parsedData = JSON.parse(response.text);
       if (parsedData.prompts && Array.isArray(parsedData.prompts)) {
         setGeneratedScenes(parsedData.prompts);
       } else {
@@ -560,12 +577,10 @@ const App: React.FC = () => {
       console.error('Error generating prompts:', err);
       let displayMessage = err.message || 'An unknown error occurred.';
       if (err.message?.includes('API key not valid')) {
-        displayMessage =
-          'Lỗi xác thực. API key đang sử dụng không hợp lệ hoặc đã hết hạn. Vui lòng chọn hoặc thêm khóa khác.';
-          setIsManagingKeys(true);
+        displayMessage = 'Lỗi xác thực. API key đang sử dụng không hợp lệ hoặc đã hết hạn. Vui lòng chọn hoặc thêm khóa khác.';
+        setIsManagingKeys(true);
       } else if (err.message?.includes('quota')) {
-        displayMessage =
-          'Bạn đã vượt quá hạn ngạch sử dụng cho Khóa API này.';
+        displayMessage = 'Bạn đã vượt quá hạn ngạch sử dụng cho Khóa API này.';
       } else if (err.message?.includes('Requested entity was not found')) {
         displayMessage = `Model "${formData.model}" không tồn tại hoặc bạn không có quyền truy cập. Vui lòng chọn model khác.`;
       }
@@ -587,33 +602,22 @@ const App: React.FC = () => {
       const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
       const fullFileName = `${safeFileName}.xlsx`;
   
-      // Data for the app's internal state (tracker)
-      const dataForTracker: VideoJob[] = generatedScenes.map((p, index) => {
-        const sequenceNumber = index + 1;
-        return {
-          id: `Job_${sequenceNumber}`,
+      const dataForTracker: VideoJob[] = generatedScenes.map((p, index) => ({
+          id: `Job_${index + 1}`,
           prompt: p.prompt_text,
-          imagePath: '',
-          imagePath2: '',
-          imagePath3: '',
-          status: 'Pending', // Internal state is 'Pending'
-          videoName: `${projectName}_${sequenceNumber}`,
+          imagePath: '', imagePath2: '', imagePath3: '',
+          status: 'Pending',
+          videoName: `${projectName}_${index + 1}`,
           typeVideo: '',
-        };
-      });
-  
-      // Data specifically for the Excel export with empty status
-      const dataForExcel = dataForTracker.map(job => ({
-        ...job,
-        status: '', // Status is empty for the export
       }));
+  
+      const dataForExcel = dataForTracker.map(job => ({ ...job, status: '' }));
 
       const worksheet = XLSX.utils.json_to_sheet(dataForExcel, {
         header: ['id', 'prompt', 'imagePath', 'imagePath2', 'imagePath3', 'status', 'videoName', 'typeVideo'],
-        skipHeader: true, // We'll add custom headers
+        skipHeader: true,
       });
       
-      // Add custom header
       XLSX.utils.sheet_add_aoa(worksheet, [['JOB_ID', 'PROMPT', 'IMAGE_PATH', 'IMAGE_PATH_2', 'IMAGE_PATH_3', 'STATUS', 'VIDEO_NAME', 'TYPE_VIDEO']], { origin: 'A1' });
 
       worksheet['!cols'] = [
@@ -622,18 +626,14 @@ const App: React.FC = () => {
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Prompts');
   
-      // Save the file
-      if (isElectron) {
-        const { ipcRenderer } = (window as any).require('electron');
+      let filePath: string | undefined;
+      if (isElectron && ipcRenderer) {
         const fileContent = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-        
-        const result = await ipcRenderer.invoke('save-file-dialog', {
-            defaultPath: fullFileName,
-            fileContent: fileContent
-        });
+        const result = await ipcRenderer.invoke('save-file-dialog', { defaultPath: fullFileName, fileContent: fileContent });
   
         if (result.success) {
             setFeedback({ type: 'success', message: `Thành công! File đã được lưu tại: ${result.filePath}` });
+            filePath = result.filePath;
         } else if (result.error && result.error !== 'Save dialog canceled') {
             throw new Error(result.error);
         }
@@ -642,10 +642,10 @@ const App: React.FC = () => {
         setFeedback({ type: 'success', message: 'Thành công! File kịch bản của bạn đang được tải xuống.' });
       }
 
-      // Add to tracker and switch view
       const newTrackedFile: TrackedFile = {
         name: fullFileName,
         jobs: dataForTracker,
+        path: filePath,
       };
       setTrackedFiles(prevFiles => [...prevFiles, newTrackedFile]);
       setActiveTrackerFileIndex(trackedFiles.length);
@@ -657,70 +657,32 @@ const App: React.FC = () => {
     }
   };
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const handleOpenNewFile = async () => {
+    if (!ipcRenderer) return;
     setFeedback(null);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const json: any[] = XLSX.utils.sheet_to_json(worksheet);
-        
-        const validStatuses: JobStatus[] = ['Pending', 'Processing', 'Generating', 'Completed', 'Failed'];
-
-        const loadedJobs: VideoJob[] = json.map((row, index) => {
-          let statusStr = (row.STATUS || '').trim();
-          let status: JobStatus = 'Pending';
-          if (statusStr && validStatuses.includes(statusStr as JobStatus)) {
-              status = statusStr as JobStatus;
-          } else if (statusStr) {
-              console.warn(`Invalid status "${statusStr}" in row ${index + 2}. Defaulting to 'Pending'.`);
-              status = 'Pending';
-          }
-
-          return {
-            id: row.JOB_ID || `job_${index + 1}`,
-            prompt: row.PROMPT || '',
-            imagePath: row.IMAGE_PATH || '',
-            imagePath2: row.IMAGE_PATH_2 || '',
-            imagePath3: row.IMAGE_PATH_3 || '',
-            status: status,
-            videoName: row.VIDEO_NAME || '',
-            typeVideo: row.TYPE_VIDEO || '',
-          };
-        });
-
-        const newTrackedFile: TrackedFile = {
-          name: file.name,
-          jobs: loadedJobs,
-        };
-
-        setTrackedFiles(prev => [...prev, newTrackedFile]);
-        setActiveTrackerFileIndex(trackedFiles.length);
-
-      } catch (error) {
-        console.error("Error parsing Excel file:", error);
-        setFeedback({ type: 'error', message: 'Không thể đọc file. File không đúng định dạng hoặc đã bị lỗi.' });
-      } finally {
-        // Reset file input so the same file can be re-uploaded
-        if(fileInputRef.current) {
-          fileInputRef.current.value = '';
+    const result = await ipcRenderer.invoke('open-file-dialog');
+    if (result.success) {
+        try {
+            const loadedJobs = parseExcelData(result.content.buffer);
+            const newTrackedFile: TrackedFile = {
+                name: result.name,
+                jobs: loadedJobs,
+                path: result.path,
+            };
+            setTrackedFiles(prev => [...prev, newTrackedFile]);
+            setActiveTrackerFileIndex(trackedFiles.length);
+        } catch (error) {
+            console.error("Error parsing Excel file:", error);
+            setFeedback({ type: 'error', message: 'Không thể đọc file. File không đúng định dạng hoặc đã bị lỗi.' });
         }
-      }
-    };
-    reader.readAsArrayBuffer(file);
+    } else if (result.error) {
+        setFeedback({ type: 'error', message: `Lỗi mở file: ${result.error}` });
+    }
   };
 
   const handleCloseTrackerTab = (indexToClose: number) => {
     setTrackedFiles(prev => prev.filter((_, index) => index !== indexToClose));
-    
     if (activeTrackerFileIndex >= indexToClose) {
-        // If the closed tab is before or is the current tab, adjust the active index
         setActiveTrackerFileIndex(prevIndex => Math.max(0, prevIndex - 1));
     }
   };
@@ -740,91 +702,38 @@ const App: React.FC = () => {
   const renderResultCell = (job: VideoJob) => {
     const containerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center";
     switch(job.status) {
-      case 'Completed':
-        return (
-          <div className={containerClasses}>
-            <CheckIcon className="w-10 h-10 text-emerald-400" />
-          </div>
-        );
+      case 'Completed': return <div className={containerClasses}><CheckIcon className="w-10 h-10 text-emerald-400" /></div>;
       case 'Processing':
-      case 'Generating':
-         return (
-          <div className={containerClasses}>
-            <LoaderIcon />
-          </div>
-        );
-      case 'Pending':
-      case 'Failed':
-      default:
-        return (
-          <div className={containerClasses}>
-            <VideoIcon className="w-8 h-8 text-gray-400" />
-          </div>
-        );
+      case 'Generating': return <div className={containerClasses}><LoaderIcon /></div>;
+      default: return <div className={containerClasses}><VideoIcon className="w-8 h-8 text-gray-400" /></div>;
     }
   }
 
   const TabButton: React.FC<{ tabName: ActiveTab; children: React.ReactNode; }> = ({ tabName, children }) => (
     <button
         onClick={() => setActiveTab(tabName)}
-        className={`px-6 py-3 font-semibold rounded-t-lg transition-colors duration-300 focus:outline-none ${
-            activeTab === tabName
-                ? 'bg-white/20 text-white'
-                : 'bg-black/20 text-indigo-200 hover:bg-white/10'
-        }`}
+        className={`px-6 py-3 font-semibold rounded-t-lg transition-colors duration-300 focus:outline-none ${ activeTab === tabName ? 'bg-white/20 text-white' : 'bg-black/20 text-indigo-200 hover:bg-white/10' }`}
     >
         {children}
     </button>
   );
 
-  const RadioLabel: React.FC<{
-    name: string;
-    value: string;
-    checked: boolean;
-    onChange: (value: any) => void;
-    children: React.ReactNode;
-  }> = ({ name, value, checked, onChange, children }) => {
-    return (
-      <label className="relative flex items-center space-x-2 cursor-pointer p-2 rounded-md flex-1 justify-center text-center transition-colors">
-        <input
-          type="radio"
-          name={name}
-          value={value}
-          className="absolute opacity-0 w-full h-full"
-          checked={checked}
-          onChange={() => onChange(value)}
-        />
-        <span className={`relative z-10 ${checked ? 'font-bold text-white' : ''}`}>
-          {children}
-        </span>
-        <div
-          className={`absolute top-0 left-0 w-full h-full rounded-md transition-colors ${
-            checked ? 'bg-indigo-500/50' : ''
-          }`}
-        ></div>
-      </label>
-    );
-  };
+  const RadioLabel: React.FC<{ name: string; value: string; checked: boolean; onChange: (value: any) => void; children: React.ReactNode; }> = ({ name, value, checked, onChange, children }) => (
+    <label className="relative flex items-center space-x-2 cursor-pointer p-2 rounded-md flex-1 justify-center text-center transition-colors">
+      <input type="radio" name={name} value={value} className="absolute opacity-0 w-full h-full" checked={checked} onChange={() => onChange(value)} />
+      <span className={`relative z-10 ${checked ? 'font-bold text-white' : ''}`}>{children}</span>
+      <div className={`absolute top-0 left-0 w-full h-full rounded-md transition-colors ${ checked ? 'bg-indigo-500/50' : '' }`}></div>
+    </label>
+  );
 
   if (isActivated === null) {
-    return (
-      <div className="text-white min-h-screen flex items-center justify-center p-4">
-        <LoaderIcon />
-      </div>
-    );
+    return <div className="text-white min-h-screen flex items-center justify-center p-4"><LoaderIcon /></div>;
   }
-
   if (!isActivated && machineId) {
     return <Activation machineId={machineId} onActivate={handleActivate} />;
   }
-  
   if (isActivated && (!activeApiKey || isManagingKeys)) {
-    return <ApiKeyManagerScreen 
-        apiKeys={apiKeys} 
-        onKeyAdd={handleKeyAdd} 
-        onKeyDelete={handleKeyDelete} 
-        onKeySelect={handleKeySelect} 
-    />;
+    return <ApiKeyManagerScreen apiKeys={apiKeys} onKeyAdd={handleKeyAdd} onKeyDelete={handleKeyDelete} onKeySelect={handleKeySelect} />;
   }
   
   return (
@@ -832,23 +741,14 @@ const App: React.FC = () => {
       <div className="text-white min-h-screen p-4">
         <div className="w-full max-w-7xl mx-auto">
           <header className="text-center mb-6 relative">
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
-              🎬 Prompt Generator Pro
-            </h1>
-            <p className="text-lg text-indigo-200 mt-2">
-              Biến ý tưởng thành kịch bản & theo dõi sản xuất video.
-            </p>
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">🎬 Prompt Generator Pro</h1>
+            <p className="text-lg text-indigo-200 mt-2">Biến ý tưởng thành kịch bản & theo dõi sản xuất video.</p>
             {activeApiKey && (
               <div className="absolute top-0 right-0">
                   <div className="active-key-display">
                       <KeyIcon className="w-4 h-4 text-emerald-400" />
                       <span className="text-white font-semibold">{activeApiKey.name}</span>
-                      <button 
-                          onClick={() => setIsManagingKeys(true)}
-                          className="ml-2 text-indigo-300 hover:text-white font-bold text-sm"
-                      >
-                          (Thay đổi)
-                      </button>
+                      <button onClick={() => setIsManagingKeys(true)} className="ml-2 text-indigo-300 hover:text-white font-bold text-sm">(Thay đổi)</button>
                   </div>
               </div>
             )}
@@ -862,222 +762,70 @@ const App: React.FC = () => {
           <div className="glass-card rounded-b-2xl rounded-tr-2xl p-6 sm:p-8 shadow-2xl">
             {activeTab === 'generator' && (
               <main>
-                {/* Generator UI */}
                 <div className="space-y-6 mb-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                      <label className="block text-sm font-medium text-indigo-100 mb-2">
-                        1. Chọn loại Video
-                      </label>
+                      <label className="block text-sm font-medium text-indigo-100 mb-2">1. Chọn loại Video</label>
                       <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
-                        <RadioLabel
-                          name="videoType"
-                          value="story"
-                          checked={videoType === 'story'}
-                          onChange={setVideoType}
-                        >
-                          MV Kể Chuyện
-                        </RadioLabel>
-                        <RadioLabel
-                          name="videoType"
-                          value="live"
-                          checked={videoType === 'live'}
-                          onChange={setVideoType}
-                        >
-                          Live Acoustic
-                        </RadioLabel>
+                        <RadioLabel name="videoType" value="story" checked={videoType === 'story'} onChange={setVideoType}>MV Kể Chuyện</RadioLabel>
+                        <RadioLabel name="videoType" value="live" checked={videoType === 'live'} onChange={setVideoType}>Live Acoustic</RadioLabel>
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-indigo-100 mb-2">
-                        2. Chọn Khung hình Video
-                      </label>
+                      <label className="block text-sm font-medium text-indigo-100 mb-2">2. Chọn Khung hình Video</label>
                       <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
-                        <RadioLabel
-                          name="aspectRatio"
-                          value="16:9"
-                          checked={formData.aspectRatio === '16:9'}
-                          onChange={handleAspectRatioChange}
-                        >
-                          16:9 (Landscape)
-                        </RadioLabel>
-                        <RadioLabel
-                          name="aspectRatio"
-                          value="9:16"
-                          checked={formData.aspectRatio === '9:16'}
-                          onChange={handleAspectRatioChange}
-                        >
-                          9:16 (Portrait)
-                        </RadioLabel>
+                        <RadioLabel name="aspectRatio" value="16:9" checked={formData.aspectRatio === '16:9'} onChange={handleAspectRatioChange}>16:9 (Landscape)</RadioLabel>
+                        <RadioLabel name="aspectRatio" value="9:16" checked={formData.aspectRatio === '9:16'} onChange={handleAspectRatioChange}>9:16 (Portrait)</RadioLabel>
                       </div>
                     </div>
                   </div>
 
                   <div className={`${videoType === 'story' ? 'block' : 'hidden'} space-y-6`}>
                     <div>
-                      <label
-                        htmlFor="idea"
-                        className="block text-sm font-medium text-indigo-100 mb-2"
-                      >
-                        Lời bài hát / Ý tưởng MV (Chủ đề chính)
-                      </label>
-                      <textarea
-                        id="idea"
-                        name="idea"
-                        value={formData.idea}
-                        onChange={handleInputChange}
-                        rows={4}
-                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                        placeholder="Dán lời bài hát vào đây, hoặc mô tả ý tưởng chính cho MV của bạn..."
-                      ></textarea>
+                      <label htmlFor="idea" className="block text-sm font-medium text-indigo-100 mb-2">Lời bài hát / Ý tưởng MV (Chủ đề chính)</label>
+                      <textarea id="idea" name="idea" value={formData.idea} onChange={handleInputChange} rows={4} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Dán lời bài hát vào đây, hoặc mô tả ý tưởng chính cho MV của bạn..."></textarea>
                     </div>
                   </div>
 
                   <div className={`${videoType === 'live' ? 'block' : 'hidden'} space-y-6`}>
                     <div>
-                      <label
-                        htmlFor="liveAtmosphere"
-                        className="block text-sm font-medium text-indigo-100 mb-2"
-                      >
-                        Mô tả Bối cảnh &amp; Không khí (Cho buổi diễn Acoustic)
-                      </label>
-                      <textarea
-                        id="liveAtmosphere"
-                        name="liveAtmosphere"
-                        value={formData.liveAtmosphere}
-                        onChange={handleInputChange}
-                        rows={3}
-                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                        placeholder="Ví dụ: Một góc phòng thu ấm cúng với vài cây nến..."
-                      ></textarea>
+                      <label htmlFor="liveAtmosphere" className="block text-sm font-medium text-indigo-100 mb-2">Mô tả Bối cảnh &amp; Không khí (Cho buổi diễn Acoustic)</label>
+                      <textarea id="liveAtmosphere" name="liveAtmosphere" value={formData.liveAtmosphere} onChange={handleInputChange} rows={3} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Ví dụ: Một góc phòng thu ấm cúng với vài cây nến..."></textarea>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-indigo-100 mb-2">
-                        Tải ảnh ca sĩ (Để AI nhận diện chính xác nhất)
-                      </label>
+                      <label className="block text-sm font-medium text-indigo-100 mb-2">Tải ảnh ca sĩ (Để AI nhận diện chính xác nhất)</label>
                       <div className="flex items-center space-x-4">
-                        <label
-                          htmlFor="liveArtistImage"
-                          className="cursor-pointer inline-block px-6 py-3 bg-white/10 border-2 border-dashed border-white/30 rounded-lg text-center transition hover:bg-white/20 hover:border-white/50"
-                        >
-                          <span>Chọn ảnh...</span>
-                        </label>
-                        <input
-                          type="file"
-                          id="liveArtistImage"
-                          name="liveArtistImage"
-                          onChange={handleImageUpload}
-                          className="hidden"
-                          accept="image/png, image/jpeg, image/webp"
-                        />
-                        {formData.liveArtistImage && (
-                          <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-white/30">
-                            <img
-                              src={`data:${formData.liveArtistImage.mimeType};base64,${formData.liveArtistImage.base64}`}
-                              alt="Image Preview"
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                        )}
+                        <label htmlFor="liveArtistImage" className="cursor-pointer inline-block px-6 py-3 bg-white/10 border-2 border-dashed border-white/30 rounded-lg text-center transition hover:bg-white/20 hover:border-white/50"><span>Chọn ảnh...</span></label>
+                        <input type="file" id="liveArtistImage" name="liveArtistImage" onChange={handleImageUpload} className="hidden" accept="image/png, image/jpeg, image/webp" />
+                        {formData.liveArtistImage && ( <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-white/30"><img src={`data:${formData.liveArtistImage.mimeType};base64,${formData.liveArtistImage.base64}`} alt="Image Preview" className="w-full h-full object-cover" /></div> )}
                       </div>
                     </div>
                     <div>
-                      <label
-                        htmlFor="liveArtistName"
-                        className="block text-sm font-medium text-indigo-100 mb-2"
-                      >
-                        Tên Ca Sĩ (Nếu là người nổi tiếng)
-                      </label>
-                      <input
-                        type="text"
-                        id="liveArtistName"
-                        name="liveArtistName"
-                        value={formData.liveArtistName}
-                        onChange={handleInputChange}
-                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                        placeholder="Ví dụ: Taylor Swift, Sơn Tùng M-TP..."
-                      />
+                      <label htmlFor="liveArtistName" className="block text-sm font-medium text-indigo-100 mb-2">Tên Ca Sĩ (Nếu là người nổi tiếng)</label>
+                      <input type="text" id="liveArtistName" name="liveArtistName" value={formData.liveArtistName} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Ví dụ: Taylor Swift, Sơn Tùng M-TP..." />
                     </div>
                     <div>
-                      <label
-                        htmlFor="liveArtist"
-                        className="block text-sm font-medium text-indigo-100 mb-2"
-                      >
-                        Mô tả Nghệ sĩ &amp; Phong cách trình diễn
-                      </label>
-                      <textarea
-                        id="liveArtist"
-                        name="liveArtist"
-                        value={formData.liveArtist}
-                        onChange={handleInputChange}
-                        rows={3}
-                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                        placeholder="Ví dụ: Nữ ca sĩ với giọng hát trong trẻo, mặc váy trắng, chơi đàn piano..."
-                      ></textarea>
+                      <label htmlFor="liveArtist" className="block text-sm font-medium text-indigo-100 mb-2">Mô tả Nghệ sĩ &amp; Phong cách trình diễn</label>
+                      <textarea id="liveArtist" name="liveArtist" value={formData.liveArtist} onChange={handleInputChange} rows={3} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Ví dụ: Nữ ca sĩ với giọng hát trong trẻo, mặc váy trắng, chơi đàn piano..."></textarea>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/10">
                     <div>
-                      <label className="block text-sm font-medium text-indigo-100 mb-2">
-                        Thời lượng bài hát (để tính số cảnh)
-                      </label>
+                      <label className="block text-sm font-medium text-indigo-100 mb-2">Thời lượng bài hát (để tính số cảnh)</label>
                       <div className="flex items-center space-x-2">
-                        <input
-                          type="number"
-                          id="songMinutes"
-                          name="songMinutes"
-                          value={formData.songMinutes}
-                          onChange={handleInputChange}
-                          className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                          placeholder="Phút"
-                          min="0"
-                        />
+                        <input type="number" id="songMinutes" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Phút" min="0" />
                         <span className="text-xl">:</span>
-                        <input
-                          type="number"
-                          id="songSeconds"
-                          name="songSeconds"
-                          value={formData.songSeconds}
-                          onChange={handleInputChange}
-                          className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                          placeholder="Giây"
-                          min="0"
-                          max="59"
-                        />
+                        <input type="number" id="songSeconds" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Giây" min="0" max="59" />
                       </div>
                     </div>
                     <div>
-                      <label
-                        htmlFor="projectName"
-                        className="block text-sm font-medium text-indigo-100 mb-2"
-                      >
-                        Tên Dự Án (Để đặt tên file)
-                      </label>
-                      <input
-                        type="text"
-                        id="projectName"
-                        name="projectName"
-                        value={formData.projectName}
-                        onChange={handleInputChange}
-                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                        placeholder="Ví dụ: MV_Bai_Hat_Moi"
-                      />
+                      <label htmlFor="projectName" className="block text-sm font-medium text-indigo-100 mb-2">Tên Dự Án (Để đặt tên file)</label>
+                      <input type="text" id="projectName" name="projectName" value={formData.projectName} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Ví dụ: MV_Bai_Hat_Moi" />
                     </div>
                     <div>
-                      <label
-                        htmlFor="model"
-                        className="block text-sm font-medium text-indigo-100 mb-2"
-                      >
-                        Chọn Model AI
-                      </label>
-                      <select
-                        id="model"
-                        name="model"
-                        value={formData.model}
-                        onChange={handleInputChange}
-                        className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                      >
+                      <label htmlFor="model" className="block text-sm font-medium text-indigo-100 mb-2">Chọn Model AI</label>
+                      <select id="model" name="model" value={formData.model} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition">
                         <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
                         <option value="gemini-flash-latest">Gemini Flash</option>
                         <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
@@ -1087,61 +835,32 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="text-center">
-                  <button
-                    onClick={generatePrompts}
-                    disabled={isLoading}
-                    className="bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100"
-                    title="Tạo kịch bản"
-                  >
+                  <button onClick={generatePrompts} disabled={isLoading} className="bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100" title="Tạo kịch bản">
                     {isLoading ? <LoaderIcon /> : <span>Tạo Kịch Bản Prompt</span>}
                   </button>
                 </div>
                 
-                {feedback && (
-                  <div className={`text-center mt-6 font-medium p-3 rounded-lg ${
-                    feedback.type === 'error' ? 'text-red-300 bg-red-900/50' :
-                    feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' :
-                    'text-blue-300 bg-blue-900/50'
-                  }`}>
-                    {feedback.message}
-                  </div>
-                )}
-
+                {feedback && ( <div className={`text-center mt-6 font-medium p-3 rounded-lg ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>{feedback.message}</div> )}
                 {generatedScenes.length > 0 && (
                   <div className="text-center mt-8 pt-6 border-t border-white/20 space-y-4">
-                    <h3 className="text-xl font-bold">
-                      Hoàn thành! Kịch bản của bạn đã sẵn sàng.
-                    </h3>
+                    <h3 className="text-xl font-bold">Hoàn thành! Kịch bản của bạn đã sẵn sàng.</h3>
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-                      <button
-                        onClick={startProcess}
-                        className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto"
-                      >
-                         Lưu kịch bản & Theo dõi
-                      </button>
+                      <button onClick={startProcess} className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto">Lưu kịch bản & Theo dõi</button>
                     </div>
                   </div>
                 )}
-
                 <Results scenes={generatedScenes} />
               </main>
             )}
             {activeTab === 'tracker' && (
                 <main>
-                    {/* Video Tracker UI */}
                     <div className="space-y-6">
                         <div>
                             <h2 className="text-2xl font-bold text-center mb-2">Bảng Theo Dõi Sản Xuất Video</h2>
-                            <p className="text-indigo-200 text-center">Theo dõi trạng thái các file kịch bản hoặc tải lên file mới.</p>
+                            <p className="text-indigo-200 text-center">Trạng thái được cập nhật tự động khi file Excel thay đổi.</p>
                         </div>
 
-                        {feedback && (
-                            <div className={`text-center font-medium p-3 rounded-lg ${
-                                feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : ''
-                            }`}>
-                                {feedback.message}
-                            </div>
-                        )}
+                        {feedback && ( <div className={`text-center font-medium p-3 rounded-lg ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : '' }`}>{feedback.message}</div> )}
                         
                         {trackedFiles.length === 0 ? (
                              <div className="text-center py-10 border-2 border-dashed border-white/20 rounded-lg">
@@ -1149,13 +868,7 @@ const App: React.FC = () => {
                                  <h3 className="mt-2 text-lg font-medium">Chưa có file nào được theo dõi</h3>
                                  <p className="mt-1 text-sm text-indigo-200">Tạo một kịch bản mới hoặc tải lên một file Excel để bắt đầu.</p>
                                  <div className="mt-6">
-                                     <button
-                                         onClick={() => fileInputRef.current?.click()}
-                                         className="bg-white text-indigo-700 font-bold py-2 px-6 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
-                                     >
-                                         Tải File Mới
-                                     </button>
-                                     <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                                     <button onClick={handleOpenNewFile} className="bg-white text-indigo-700 font-bold py-2 px-6 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300">Tải File Mới</button>
                                  </div>
                              </div>
                         ) : (
@@ -1163,28 +876,13 @@ const App: React.FC = () => {
                                <div className="flex justify-between items-center mb-4">
                                   <div className="tracker-tabs flex-grow">
                                       {trackedFiles.map((file, index) => (
-                                          <button 
-                                              key={index}
-                                              className={`tracker-tab ${activeTrackerFileIndex === index ? 'active' : ''}`}
-                                              onClick={() => setActiveTrackerFileIndex(index)}
-                                          >
+                                          <button key={index} className={`tracker-tab ${activeTrackerFileIndex === index ? 'active' : ''}`} onClick={() => setActiveTrackerFileIndex(index)}>
                                               <span>{file.name}</span>
-                                              <span 
-                                                  className="tab-close-btn"
-                                                  onClick={(e) => { e.stopPropagation(); handleCloseTrackerTab(index); }}
-                                              >
-                                                  &times;
-                                              </span>
+                                              <span className="tab-close-btn" onClick={(e) => { e.stopPropagation(); handleCloseTrackerTab(index); }}>&times;</span>
                                           </button>
                                       ))}
                                   </div>
-                                  <button
-                                      onClick={() => fileInputRef.current?.click()}
-                                      className="ml-4 bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap"
-                                  >
-                                      Tải File Mới
-                                  </button>
-                                  <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" accept=".xlsx, .xls" />
+                                  <button onClick={handleOpenNewFile} className="ml-4 bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap">Tải File Mới</button>
                                </div>
 
                                 {trackedFiles[activeTrackerFileIndex] && (
@@ -1204,9 +902,7 @@ const App: React.FC = () => {
                                                       <td className="font-mono text-sm">{job.id}</td>
                                                       <td><span className={getStatusBadge(job.status)}>{job.status}</span></td>
                                                       <td className="font-medium">{job.videoName}</td>
-                                                      <td>
-                                                        {renderResultCell(job)}
-                                                      </td>
+                                                      <td>{renderResultCell(job)}</td>
                                                   </tr>
                                               ))}
                                           </tbody>

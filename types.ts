@@ -44,6 +44,7 @@ export interface VideoJob {
 export interface TrackedFile {
   name: string;
   jobs: VideoJob[];
+  path?: string; // Path to the file on disk for watching
 }
 
 export interface ApiKey {

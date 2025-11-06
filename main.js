@@ -8,6 +8,8 @@ const { autoUpdater } = require('electron-updater');
 autoUpdater.logger = require('electron-log');
 autoUpdater.logger.transports.file.level = 'info';
 
+const fileWatchers = new Map();
+
 function createWindow() {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -30,8 +32,6 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  // Start checking for updates after the window is created.
-  // This will check, download, and notify the user when ready.
   autoUpdater.checkForUpdatesAndNotify();
 
   ipcMain.handle('save-file-dialog', async (event, { defaultPath, fileContent }) => {
@@ -39,17 +39,14 @@ app.whenReady().then(() => {
     if (!mainWindow) {
         return { success: false, error: 'Không tìm thấy cửa sổ ứng dụng.' };
     }
-
     const result = await dialog.showSaveDialog(mainWindow, {
         title: 'Lưu Kịch Bản Prompt',
         defaultPath: defaultPath,
         filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }]
     });
-
     if (result.canceled || !result.filePath) {
         return { success: false, error: 'Save dialog canceled' };
     }
-
     try {
         fs.writeFileSync(result.filePath, Buffer.from(fileContent));
         return { success: true, filePath: result.filePath };
@@ -58,33 +55,74 @@ app.whenReady().then(() => {
         return { success: false, error: err.message };
     }
   });
+
+  ipcMain.handle('open-file-dialog', async (event) => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) return { success: false, error: 'Window not found.' };
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openFile'],
+        filters: [{ name: 'Excel Files', extensions: ['xlsx', 'xls'] }]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+        return { success: false };
+    }
+    const filePath = result.filePaths[0];
+    try {
+        const content = fs.readFileSync(filePath);
+        return { success: true, path: filePath, content: content, name: path.basename(filePath) };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+  });
+
+  ipcMain.on('start-watching-file', (event, filePath) => {
+    if (!filePath || fileWatchers.has(filePath)) {
+        return;
+    }
+    try {
+        const watcher = fs.watch(filePath, (eventType) => {
+            if (eventType === 'change') {
+                try {
+                    const content = fs.readFileSync(filePath);
+                    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+                    mainWindow?.webContents.send('file-content-updated', { path: filePath, content });
+                } catch (readErr) {
+                    console.error(`Error reading watched file ${filePath}:`, readErr);
+                    // Inform renderer that the file might be gone
+                }
+            }
+        });
+
+        watcher.on('error', (err) => {
+            console.error(`Watcher error for ${filePath}:`, err);
+            ipcMain.emit('stop-watching-file', event, filePath);
+        });
+
+        fileWatchers.set(filePath, watcher);
+        console.log(`Started watching ${filePath}`);
+    } catch (watchErr) {
+        console.error(`Failed to start watching ${filePath}:`, watchErr);
+    }
+  });
+
+  ipcMain.on('stop-watching-file', (event, filePath) => {
+    if (fileWatchers.has(filePath)) {
+        fileWatchers.get(filePath).close();
+        fileWatchers.delete(filePath);
+        console.log(`Stopped watching ${filePath}`);
+    }
+  });
+
 });
 
-// --- AutoUpdater Event Listeners for logging/debugging ---
-autoUpdater.on('checking-for-update', () => {
-  console.log('Checking for update...');
-});
-autoUpdater.on('update-available', (info) => {
-  console.log('Update available.', info);
-});
-autoUpdater.on('update-not-available', (info) => {
-  console.log('Update not available.', info);
-});
-autoUpdater.on('error', (err) => {
-  console.error('Error in auto-updater. ' + err);
-});
-autoUpdater.on('download-progress', (progressObj) => {
-  let log_message = "Download speed: " + progressObj.bytesPerSecond;
-  log_message = log_message + ' - Downloaded ' + progressObj.percent + '%';
-  log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')';
-  console.log(log_message);
-});
-autoUpdater.on('update-downloaded', (info) => {
-  console.log('Update downloaded.', info);
-});
-
+autoUpdater.on('checking-for-update', () => console.log('Checking for update...'));
+autoUpdater.on('update-available', (info) => console.log('Update available.', info));
+autoUpdater.on('update-not-available', (info) => console.log('Update not available.', info));
+autoUpdater.on('error', (err) => console.error('Error in auto-updater. ' + err));
+autoUpdater.on('update-downloaded', (info) => console.log('Update downloaded.', info));
 
 app.on('window-all-closed', () => {
+  fileWatchers.forEach(watcher => watcher.close());
   if (process.platform !== 'darwin') {
     app.quit();
   }
