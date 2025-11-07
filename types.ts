@@ -39,12 +39,14 @@ export interface VideoJob {
     status: JobStatus;
     videoName: string;
     typeVideo: string;
+    videoPath?: string;
   }
   
 export interface TrackedFile {
   name: string;
   jobs: VideoJob[];
   path?: string; // Path to the file on disk for watching
+  targetDurationSeconds?: number;
 }
 
 export interface ApiKey {

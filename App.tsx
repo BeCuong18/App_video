@@ -1,7 +1,4 @@
 
-
-
-
 import React, {
   useState,
   useCallback,
@@ -12,12 +9,10 @@ import React, {
 import { GoogleGenAI, Type } from '@google/genai';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-// FIX: Add Buffer import to resolve "Cannot find name 'Buffer'" error in `parseExcelData` and `handleFileUpdate`.
-import { Buffer } from 'buffer';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, FolderIcon, ExternalLinkIcon, KeyIcon, TrashIcon, PlayIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, LinkIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -134,128 +129,131 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
   );
 };
 
-// --- API Key Manager ---
+// --- API Key Manager Component ---
 interface ApiKeyManagerProps {
   apiKeys: ApiKey[];
-  activeKeyId: string | null;
-  onAddKey: (name: string, value: string) => void;
-  onDeleteKey: (id: string) => void;
-  onSetActiveKey: (id: string) => void;
-  onClose: () => void;
+  onKeySelect: (key: ApiKey) => void;
+  onKeyAdd: (key: ApiKey) => void;
+  onKeyDelete: (keyId: string) => void;
 }
 
-const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ apiKeys, activeKeyId, onAddKey, onDeleteKey, onSetActiveKey, onClose }) => {
-  const [newName, setNewName] = useState('');
-  const [newValue, setNewValue] = useState('');
-  const [error, setError] = useState('');
+const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onKeySelect, onKeyAdd, onKeyDelete }) => {
+    const [newKeyName, setNewKeyName] = useState('');
+    const [newKeyValue, setNewKeyValue] = useState('');
+    const [error, setError] = useState('');
 
-  const handleAdd = () => {
-    if (!newName.trim() || !newValue.trim()) {
-      setError('Vui lòng nhập cả Tên và Giá trị cho API Key.');
-      return;
-    }
-    setError('');
-    onAddKey(newName.trim(), newValue.trim());
-    setNewName('');
-    setNewValue('');
-  };
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        if (!newKeyName.trim() || !newKeyValue.trim()) {
+            setError('Biệt danh và giá trị khóa không được để trống.');
+            return;
+        }
+        if (apiKeys.some(k => k.name === newKeyName.trim())) {
+            setError('Biệt danh này đã tồn tại. Vui lòng chọn một biệt danh khác.');
+            return;
+        }
+        onKeyAdd({
+            id: crypto.randomUUID(),
+            name: newKeyName.trim(),
+            value: newKeyValue.trim(),
+        });
+        setNewKeyName('');
+        setNewKeyValue('');
+    };
 
-  const hasActiveKey = apiKeys.length > 0 && activeKeyId;
+    const truncateKey = (key: string) => `${key.slice(0, 5)}...${key.slice(-4)}`;
 
-  return (
-    <div className="text-white min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl mx-auto">
-        <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-              Quản Lý API Keys
-            </h1>
-            {hasActiveKey && (
-              <button
-                onClick={onClose}
-                className="bg-white/10 hover:bg-white/20 text-white font-bold py-2 px-4 rounded-full transition text-sm"
-              >
-                Đóng
-              </button>
-            )}
-          </div>
-          
-          {!hasActiveKey && (
-            <p className="text-indigo-200 mb-6 text-center">
-              Bạn chưa có API key nào. Vui lòng thêm một key để bắt đầu sử dụng ứng dụng.
-            </p>
-          )}
+    return (
+        <div className="text-white min-h-screen flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl mx-auto">
+                <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
+                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2 text-center">
+                        Quản lý API Keys
+                    </h1>
+                    <p className="text-indigo-200 mb-6 text-center">
+                        Thêm, xóa, hoặc chọn một Google AI API Key để sử dụng.
+                    </p>
 
-          {/* Form for adding a new key */}
-          <div className="bg-black/20 p-4 rounded-lg border border-white/10 mb-6">
-            <h2 className="text-lg font-semibold mb-3">Thêm API Key Mới</h2>
-            <div className="space-y-4">
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="Tên gợi nhớ (ví dụ: Key cá nhân)"
-                className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-              />
-              <textarea
-                value={newValue}
-                onChange={(e) => setNewValue(e.target.value)}
-                rows={2}
-                placeholder="Dán giá trị API Key vào đây..."
-                className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-              />
-              <button
-                onClick={handleAdd}
-                className="w-full sm:w-auto bg-white text-indigo-700 font-bold py-2 px-6 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
-              >
-                Thêm Key
-              </button>
-              {error && (
-                <p className="text-red-300 font-medium mt-2">{error}</p>
-              )}
-            </div>
-          </div>
-          
-          {/* List of existing keys */}
-          {apiKeys.length > 0 && (
-            <div>
-              <h2 className="text-lg font-semibold mb-3">Danh sách API Keys</h2>
-              <div className="key-list space-y-3">
-                {apiKeys.map(key => (
-                  <div key={key.id} className={`key-item transition-all ${activeKeyId === key.id ? 'border-emerald-400' : ''}`}>
-                    <div className="flex-grow">
-                      <p className="font-bold text-white">{key.name}</p>
-                      <p className="font-mono text-sm text-gray-400">
-                        {`${key.value.substring(0, 4)}...${key.value.substring(key.value.length - 4)}`}
-                      </p>
+                    {apiKeys.length > 0 && (
+                        <div className="mb-8">
+                            <h2 className="text-lg font-semibold text-indigo-100 mb-3">Khóa đã lưu</h2>
+                            <div className="space-y-3 key-list">
+                                {apiKeys.map(key => (
+                                    <div key={key.id} className="key-item">
+                                        <div className="flex items-center gap-3">
+                                            <KeyIcon className="w-5 h-5 text-indigo-300" />
+                                            <div>
+                                                <p className="font-semibold text-white">{key.name}</p>
+                                                <p className="text-sm text-gray-400 font-mono">{truncateKey(key.value)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={() => onKeySelect(key)}
+                                                className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition text-sm"
+                                            >
+                                                Sử dụng
+                                            </button>
+                                            <button
+                                                onClick={() => onKeyDelete(key.id)}
+                                                className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition"
+                                                title="Xóa khóa"
+                                            >
+                                                <TrashIcon className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="pt-6 border-t border-white/20">
+                        <h2 className="text-lg font-semibold text-indigo-100 mb-4">Thêm khóa mới</h2>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label htmlFor="keyName" className="block text-sm font-medium text-indigo-100 mb-2">
+                                    Biệt danh (Nickname)
+                                </label>
+                                <input
+                                    id="keyName"
+                                    type="text"
+                                    value={newKeyName}
+                                    onChange={(e) => setNewKeyName(e.target.value)}
+                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                                    placeholder="Ví dụ: Key cá nhân, Key công ty"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label htmlFor="keyValue" className="block text-sm font-medium text-indigo-100 mb-2">
+                                    Giá trị API Key
+                                </label>
+                                <input
+                                    id="keyValue"
+                                    type="password"
+                                    value={newKeyValue}
+                                    onChange={(e) => setNewKeyValue(e.target.value)}
+                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                                    placeholder="Dán API Key của bạn vào đây"
+                                    required
+                                />
+                            </div>
+                            {error && <p className="text-red-300 text-sm">{error}</p>}
+                            <button
+                                type="submit"
+                                className="w-full bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
+                            >
+                                Thêm và Lưu khóa
+                            </button>
+                        </form>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => onDeleteKey(key.id)}
-                        className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition"
-                        title="Xóa Key"
-                      >
-                        <TrashIcon className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => onSetActiveKey(key.id)}
-                        disabled={activeKeyId === key.id}
-                        className="bg-teal-500 text-white font-bold py-1 px-4 rounded-full hover:bg-teal-600 transition text-sm disabled:bg-gray-500 disabled:cursor-not-allowed"
-                      >
-                        {activeKeyId === key.id ? 'Đang hoạt động' : 'Kích hoạt'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                </div>
             </div>
-          )}
         </div>
-      </div>
-    </div>
-  );
+    );
 };
-
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('generator');
@@ -280,19 +278,46 @@ const App: React.FC = () => {
   const [machineId, setMachineId] = useState<string>('');
   
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [activeApiKeyId, setActiveApiKeyId] = useState<string | null>(null);
-  const [isKeyManagerVisible, setIsKeyManagerVisible] = useState<boolean>(false);
-  const [appVersion, setAppVersion] = useState<string>('');
+  const [activeApiKey, setActiveApiKey] = useState<ApiKey | null>(null);
+  const [isManagingKeys, setIsManagingKeys] = useState(false);
 
   const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
   const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
-  const [videoFilePaths, setVideoFilePaths] = useState<Record<string, string>>({});
-  const [copiedPath, setCopiedPath] = useState(false);
-  const [copiedFolderPath, setCopiedFolderPath] = useState(false);
-  const [toolsFlowPath, setToolsFlowPath] = useState<string | null>(null);
-
 
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
+
+  const getEncryptionKey = useCallback(() => CryptoJS.SHA256(machineId + SECRET_KEY).toString(), [machineId]);
+
+  const encrypt = useCallback((text: string) => {
+    if (!machineId) return '';
+    return CryptoJS.AES.encrypt(text, getEncryptionKey()).toString();
+  }, [machineId, getEncryptionKey]);
+
+  const decrypt = useCallback((ciphertext: string) => {
+    if (!machineId) return '';
+    try {
+      const bytes = CryptoJS.AES.decrypt(ciphertext, getEncryptionKey());
+      return bytes.toString(CryptoJS.enc.Utf8);
+    } catch {
+      return '';
+    }
+  }, [machineId, getEncryptionKey]);
+
+  useEffect(() => {
+    if (machineId) {
+      const storedKeysEncrypted = localStorage.getItem('api_keys_storage');
+      if (storedKeysEncrypted) {
+        const decryptedKeys = decrypt(storedKeysEncrypted);
+        if (decryptedKeys) {
+          try {
+            setApiKeys(JSON.parse(decryptedKeys));
+          } catch {
+            localStorage.removeItem('api_keys_storage');
+          }
+        }
+      }
+    }
+  }, [machineId, decrypt]);
 
   const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
     if (!machineId) return false;
@@ -318,39 +343,27 @@ const App: React.FC = () => {
       return false;
   }, [validateLicenseKey]);
   
-  const handleAddApiKey = useCallback((name: string, value: string) => {
-    const newKey: ApiKey = { id: crypto.randomUUID(), name, value };
+  const handleKeyAdd = (newKey: ApiKey) => {
     const updatedKeys = [...apiKeys, newKey];
     setApiKeys(updatedKeys);
-    localStorage.setItem('gemini_api_keys_list', JSON.stringify(updatedKeys));
-    
-    if (!activeApiKeyId || apiKeys.length === 0) {
-        setActiveApiKeyId(newKey.id);
-        localStorage.setItem('gemini_active_api_key_id', newKey.id);
-    }
-  }, [apiKeys, activeApiKeyId]);
+    localStorage.setItem('api_keys_storage', encrypt(JSON.stringify(updatedKeys)));
+  };
 
-  const handleDeleteApiKey = useCallback((id: string) => {
-    const updatedKeys = apiKeys.filter(k => k.id !== id);
+  const handleKeyDelete = (keyId: string) => {
+    const updatedKeys = apiKeys.filter(k => k.id !== keyId);
     setApiKeys(updatedKeys);
-    localStorage.setItem('gemini_api_keys_list', JSON.stringify(updatedKeys));
-    
-    if (activeApiKeyId === id) {
-        if (updatedKeys.length > 0) {
-            const newActiveId = updatedKeys[0].id;
-            setActiveApiKeyId(newActiveId);
-            localStorage.setItem('gemini_active_api_key_id', newActiveId);
-        } else {
-            setActiveApiKeyId(null);
-            localStorage.removeItem('gemini_active_api_key_id');
-        }
+    localStorage.setItem('api_keys_storage', encrypt(JSON.stringify(updatedKeys)));
+    if(activeApiKey?.id === keyId) {
+      setActiveApiKey(null);
+      sessionStorage.removeItem('active_api_key_id');
     }
-  }, [apiKeys, activeApiKeyId]);
+  };
 
-  const handleSetActiveApiKey = useCallback((id: string) => {
-    setActiveApiKeyId(id);
-    localStorage.setItem('gemini_active_api_key_id', id);
-  }, []);
+  const handleKeySelect = (key: ApiKey) => {
+    setActiveApiKey(key);
+    sessionStorage.setItem('active_api_key_id', key.id);
+    setIsManagingKeys(false);
+  };
 
   useEffect(() => {
     setTimeout(() => {
@@ -373,45 +386,21 @@ const App: React.FC = () => {
             }
         }
         setIsActivated(activationStatus);
-
-        try {
-          const storedKeys = localStorage.getItem('gemini_api_keys_list');
-          const storedActiveId = localStorage.getItem('gemini_active_api_key_id');
-          
-          let loadedKeys: ApiKey[] = [];
-          if (storedKeys) {
-              loadedKeys = JSON.parse(storedKeys);
-              setApiKeys(loadedKeys);
-          }
-          
-          if (storedActiveId && loadedKeys.some(k => k.id === storedActiveId)) {
-              setActiveApiKeyId(storedActiveId);
-          } else if (loadedKeys.length > 0) {
-              const newActiveId = loadedKeys[0].id;
-              setActiveApiKeyId(newActiveId);
-              localStorage.setItem('gemini_active_api_key_id', newActiveId);
-          }
-        } catch (e) {
-            console.error("Failed to load API keys from storage", e);
-            localStorage.removeItem('gemini_api_keys_list');
-            localStorage.removeItem('gemini_active_api_key_id');
-        }
-
-        if (isElectron && ipcRenderer) {
-            ipcRenderer.invoke('get-app-version').then((version: string) => {
-                setAppVersion(version);
-            });
-            
-            const storedPath = localStorage.getItem('toolsflow_path');
-            if (storedPath) {
-                setToolsFlowPath(storedPath);
-            }
-        }
-
     }, 100);
   }, []);
 
-  const parseExcelData = (data: Buffer): VideoJob[] => {
+  useEffect(() => {
+    if(isActivated && apiKeys.length > 0 && !activeApiKey) {
+      const activeKeyId = sessionStorage.getItem('active_api_key_id');
+      if (activeKeyId) {
+        const keyToActivate = apiKeys.find(k => k.id === activeKeyId);
+        if (keyToActivate) setActiveApiKey(keyToActivate);
+      }
+    }
+  }, [isActivated, apiKeys, activeApiKey]);
+
+  // FIX: Replace Node.js Buffer with Uint8Array for browser compatibility.
+  const parseExcelData = (data: Uint8Array): VideoJob[] => {
     const workbook = XLSX.read(data, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
@@ -428,7 +417,7 @@ const App: React.FC = () => {
           status = 'Pending';
       }
       return {
-        id: row.JOB_ID || `Job_${index + 1}`,
+        id: row.JOB_ID || `job_${index + 1}`,
         prompt: row.PROMPT || '',
         imagePath: row.IMAGE_PATH || '',
         imagePath2: row.IMAGE_PATH_2 || '',
@@ -436,6 +425,7 @@ const App: React.FC = () => {
         status: status,
         videoName: row.VIDEO_NAME || '',
         typeVideo: row.TYPE_VIDEO || '',
+        videoPath: row.VIDEO_PATH || undefined,
       };
     });
   };
@@ -460,7 +450,8 @@ const App: React.FC = () => {
     
     sessionStorage.setItem('watchedPaths', JSON.stringify(Array.from(watchedPaths)));
 
-    const handleFileUpdate = (_event: any, { path, content }: { path: string, content: Buffer }) => {
+    // FIX: Replace Node.js Buffer with Uint8Array for browser compatibility.
+    const handleFileUpdate = (_event: any, { path, content }: { path: string, content: Uint8Array }) => {
         const newJobs = parseExcelData(content);
         setTrackedFiles(prevFiles => 
             prevFiles.map(file => 
@@ -475,39 +466,6 @@ const App: React.FC = () => {
         ipcRenderer.removeListener('file-content-updated', handleFileUpdate);
     };
   }, [trackedFiles]);
-  
-  useEffect(() => {
-    if (!isElectron || !ipcRenderer || trackedFiles.length === 0 || activeTrackerFileIndex >= trackedFiles.length) {
-      setVideoFilePaths({});
-      return;
-    };
-
-    const currentFile = trackedFiles[activeTrackerFileIndex];
-    if (!currentFile || !currentFile.path) {
-      setVideoFilePaths({});
-      return;
-    }
-
-    const checkVideos = async () => {
-      const newVideoPaths: Record<string, string> = {};
-      
-      for (const job of currentFile.jobs) {
-        const videoFileName = `Video_${job.id}_${job.videoName}.mp4`;
-        const foundPath = await ipcRenderer.invoke('find-video-file', {
-          excelPath: currentFile.path,
-          videoFileName: videoFileName,
-        });
-
-        if (foundPath) {
-          newVideoPaths[job.id] = foundPath;
-        }
-      }
-      setVideoFilePaths(newVideoPaths);
-    };
-
-    checkVideos();
-  }, [activeTrackerFileIndex, trackedFiles]);
-
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -538,10 +496,9 @@ const App: React.FC = () => {
   }, []);
 
   const generatePrompts = async () => {
-    const activeKey = apiKeys.find(k => k.id === activeApiKeyId);
-    if (!activeKey) {
-      setFeedback({ type: 'error', message: 'Vui lòng thiết lập một API Key đang hoạt động để tạo prompt.' });
-      setIsKeyManagerVisible(true);
+    if (!activeApiKey) {
+      setFeedback({ type: 'error', message: 'Vui lòng chọn một API Key đang hoạt động.' });
+      setIsManagingKeys(true);
       return;
     }
     setIsLoading(true);
@@ -562,11 +519,11 @@ const App: React.FC = () => {
 
     if (videoType === 'story') {
       if (!formData.idea.trim()) {
-        setFeedback({ type: 'error', message: 'Vui lòng nhập Ý tưởng cho MV.' });
+        setFeedback({ type: 'error', message: 'Vui lòng nhập Lời bài hát.' });
         setIsLoading(false);
         return;
       }
-      userPrompt += ` The core idea is: "${formData.idea.trim()}".`;
+      userPrompt += ` The song lyrics are: "${formData.idea.trim()}".`;
     } else {
       if (!formData.liveAtmosphere.trim() && !formData.liveArtistName.trim() && !formData.liveArtist.trim() && !formData.liveArtistImage) {
         setFeedback({ type: 'error', message: 'Vui lòng nhập ít nhất một thông tin cho Video Trình Diễn Live.' });
@@ -588,7 +545,7 @@ const App: React.FC = () => {
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey: activeKey.value });
+      const ai = new GoogleGenAI({ apiKey: activeApiKey.value });
       const response = await ai.models.generateContent({
         model: formData.model,
         contents: { parts: parts },
@@ -629,13 +586,16 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Error generating prompts:', err);
-      let displayMessage = err.message || 'An unknown error occurred.';
-      if (err.message?.includes('API key not valid')) {
-        displayMessage = 'Lỗi xác thực. API key đang hoạt động không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại.';
-        setIsKeyManagerVisible(true);
-      } else if (err.message?.includes('quota')) {
+      // FIX: Ensure error message is a string to prevent type errors with .includes() and during rendering.
+      const errorMessage = String(err?.message || err || 'An unknown error occurred.');
+      let displayMessage = errorMessage;
+
+      if (errorMessage.includes('API key not valid')) {
+        displayMessage = 'Lỗi xác thực. API key đang sử dụng không hợp lệ hoặc đã hết hạn. Vui lòng chọn hoặc thêm khóa khác.';
+        setIsManagingKeys(true);
+      } else if (errorMessage.includes('quota')) {
         displayMessage = 'Bạn đã vượt quá hạn ngạch sử dụng cho Khóa API này.';
-      } else if (err.message?.includes('Requested entity was not found')) {
+      } else if (errorMessage.includes('Requested entity was not found')) {
         displayMessage = `Model "${formData.model}" không tồn tại hoặc bạn không có quyền truy cập. Vui lòng chọn model khác.`;
       }
       setFeedback({ type: 'error', message: `Đã có lỗi xảy ra: ${displayMessage}` });
@@ -665,19 +625,15 @@ const App: React.FC = () => {
           typeVideo: '',
       }));
   
-      const dataForExcel = dataForTracker.map(job => ({
-        'JOB_ID': job.id,
-        'PROMPT': job.prompt,
-        'IMAGE_PATH': job.imagePath,
-        'IMAGE_PATH_2': job.imagePath2,
-        'IMAGE_PATH_3': job.imagePath3,
-        'STATUS': '',
-        'VIDEO_NAME': job.videoName,
-        'TYPE_VIDEO': job.typeVideo,
-      }));
+      const dataForExcel = dataForTracker.map(job => ({ ...job, status: '' }));
 
-      const worksheet = XLSX.utils.json_to_sheet(dataForExcel);
+      const worksheet = XLSX.utils.json_to_sheet(dataForExcel, {
+        header: ['id', 'prompt', 'imagePath', 'imagePath2', 'imagePath3', 'status', 'videoName', 'typeVideo'],
+        skipHeader: true,
+      });
       
+      XLSX.utils.sheet_add_aoa(worksheet, [['JOB_ID', 'PROMPT', 'IMAGE_PATH', 'IMAGE_PATH_2', 'IMAGE_PATH_3', 'STATUS', 'VIDEO_NAME', 'TYPE_VIDEO']], { origin: 'A1' });
+
       worksheet['!cols'] = [
         { wch: 15 }, { wch: 150 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 30 }, { wch: 15 },
       ];
@@ -700,10 +656,12 @@ const App: React.FC = () => {
         setFeedback({ type: 'success', message: 'Thành công! File kịch bản của bạn đang được tải xuống.' });
       }
 
+      const totalSeconds = (parseInt(formData.songMinutes) || 0) * 60 + (parseInt(formData.songSeconds) || 0);
       const newTrackedFile: TrackedFile = {
         name: fullFileName,
         jobs: dataForTracker,
         path: filePath,
+        targetDurationSeconds: totalSeconds,
       };
       setTrackedFiles(prevFiles => [...prevFiles, newTrackedFile]);
       setActiveTrackerFileIndex(trackedFiles.length);
@@ -726,6 +684,7 @@ const App: React.FC = () => {
                 name: result.name,
                 jobs: loadedJobs,
                 path: result.path,
+                // Target duration is unknown for externally loaded files, maybe prompt user? For now, leave it undefined.
             };
             setTrackedFiles(prev => [...prev, newTrackedFile]);
             setActiveTrackerFileIndex(trackedFiles.length);
@@ -744,84 +703,85 @@ const App: React.FC = () => {
         setActiveTrackerFileIndex(prevIndex => Math.max(0, prevIndex - 1));
     }
   };
-
-  const handleLaunchVideoTool = async () => {
+  
+  const handleLinkVideo = async (jobId: string, fileIndex: number) => {
     if (!ipcRenderer) return;
-  
-    let currentPath = toolsFlowPath;
-  
-    if (!currentPath) {
-      const selectedPath = await ipcRenderer.invoke('select-toolsflow-path');
-      if (selectedPath) {
-        setToolsFlowPath(selectedPath);
-        localStorage.setItem('toolsflow_path', selectedPath);
-        currentPath = selectedPath;
-      }
-    }
-  
-    if (currentPath) {
-      ipcRenderer.send('launch-video-tool', currentPath);
-    } else {
-      // User cancelled the file selection dialog
-      setFeedback({ type: 'info', message: 'Hủy thao tác khởi chạy ToolsFlow.' });
-    }
-  };
-
-  const handleConfigureToolsFlowPath = async () => {
-    if (!ipcRenderer) return;
-    const selectedPath = await ipcRenderer.invoke('select-toolsflow-path');
-    if (selectedPath) {
-        setToolsFlowPath(selectedPath);
-        localStorage.setItem('toolsflow_path', selectedPath);
-        setFeedback({ type: 'success', message: 'Đã cập nhật đường dẫn ToolsFlow!' });
-    }
-  };
-  
-
-  const handleCopyPath = (path: string) => {
-      navigator.clipboard.writeText(path);
-      setCopiedPath(true);
-      setTimeout(() => setCopiedPath(false), 2000);
-  };
-
-  const handleCopyFolderPath = (path: string) => {
-    if (ipcRenderer && path) {
-        ipcRenderer.invoke('get-directory-path', path).then((dirPath: string | null) => {
-            if (dirPath) {
-                navigator.clipboard.writeText(dirPath);
-                setCopiedFolderPath(true);
-                setTimeout(() => setCopiedFolderPath(false), 2000);
-            }
+    const result = await ipcRenderer.invoke('open-video-file-dialog');
+    if (result.success && result.path) {
+        setTrackedFiles(prevFiles => {
+            const newFiles = [...prevFiles];
+            const fileToUpdate = { ...newFiles[fileIndex] };
+            fileToUpdate.jobs = fileToUpdate.jobs.map(job =>
+                job.id === jobId ? { ...job, videoPath: result.path } : job
+            );
+            newFiles[fileIndex] = fileToUpdate;
+            return newFiles;
         });
     }
   };
-
-  const handleOpenFolder = (path: string) => {
-      ipcRenderer?.send('open-file-location', path);
-  };
   
-  const handleOpenVideo = async (path: string) => {
-    if (!ipcRenderer) return;
-    const result = await ipcRenderer.invoke('open-video-file', path);
-    if (!result.success) {
-      setFeedback({ type: 'error', message: `Không thể mở video: ${result.error}` });
-    }
-  };
+  const handleGenerateCombineScript = async () => {
+    const currentFile = trackedFiles[activeTrackerFileIndex];
+    if (!currentFile) return;
 
-  const handleDeleteVideo = async (jobId: string, path: string) => {
-    if (!ipcRenderer) return;
-    const result = await ipcRenderer.invoke('delete-video-file', path);
-    if (result.success) {
-      setVideoFilePaths(prev => {
-        const newPaths = { ...prev };
-        delete newPaths[jobId];
-        return newPaths;
-      });
-      setFeedback({ type: 'success', message: 'Đã chuyển video vào thùng rác.' });
-    } else {
-      setFeedback({ type: 'error', message: `Lỗi khi xóa video: ${result.error}` });
+    const completedJobs = currentFile.jobs.filter(j => j.status === 'Completed' && j.videoPath);
+    if (completedJobs.length < 1) {
+        setFeedback({ type: 'error', message: 'Không có video hoàn thành nào được link để ghép.' });
+        return;
     }
-  };
+
+    const targetDuration = currentFile.targetDurationSeconds;
+    if (!targetDuration || targetDuration <= 0) {
+        setFeedback({ type: 'error', message: 'Không tìm thấy thời lượng mục tiêu cho file kịch bản này. Vui lòng tạo kịch bản từ đầu để sử dụng tính năng này.' });
+        return;
+    }
+
+    // Estimate source duration. Assume each clip is ~7s as per generation logic.
+    const estimatedSourceDuration = completedJobs.length * 7;
+    const speedFactor = estimatedSourceDuration / targetDuration;
+    
+    // Invert speed factor for ffmpeg setpts filter (lower number = faster, higher = slower)
+    const ptsMultiplier = (1 / speedFactor).toFixed(4);
+
+    const isWindows = navigator.userAgent.includes("Windows");
+
+    const inputFiles = completedJobs.map(job => `-i "${job.videoPath}"`).join(' ');
+
+    const filterParts = completedJobs.map((_, index) => `[${index}:v]setpts=${ptsMultiplier}*PTS[v${index}]`);
+    const concatInputs = completedJobs.map((_, index) => `[v${index}]`).join('');
+    const filterComplex = `${filterParts.join(';')};${concatInputs}concat=n=${completedJobs.length}:v=1:a=0[v]`;
+
+    const outputFileName = `combined_${currentFile.name.replace(/\.xlsx?$/, '.mp4')}`;
+    const command = `ffmpeg ${inputFiles} -filter_complex "${filterComplex}" -map "[v]" "${outputFileName}"`;
+
+    const scriptContent = isWindows 
+        ? `@echo off\nchcp 65001 > nul\nrem Script to combine and sync videos.\nrem Make sure you have ffmpeg installed and in your PATH.\n\n${command}\n\necho "Video combination process finished."\npause`
+        : `#!/bin/bash\n# Script to combine and sync videos.\n# Make sure you have ffmpeg installed and in your PATH.\n\n${command}\n\necho "Video combination process finished."`;
+
+    const scriptExtension = isWindows ? 'bat' : 'sh';
+    const scriptFileName = `combine_script.${scriptExtension}`;
+
+    if (isElectron && ipcRenderer) {
+        const result = await ipcRenderer.invoke('save-script-file-dialog', { defaultPath: scriptFileName, fileContent: scriptContent });
+        if (result.success) {
+            setFeedback({ type: 'success', message: `Script đã được lưu tại: ${result.filePath}. Chạy file này để ghép video (yêu cầu đã cài đặt ffmpeg).` });
+        } else if (result.error && result.error !== 'Save dialog canceled') {
+            setFeedback({ type: 'error', message: `Lỗi lưu script: ${result.error}` });
+        }
+    } else {
+        // Fallback for web browser
+        const blob = new Blob([scriptContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = scriptFileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setFeedback({ type: 'success', message: 'Script đã được tải xuống. Chạy file này để ghép video (yêu cầu đã cài đặt ffmpeg).' });
+    }
+};
 
 
   const getStatusBadge = (status: JobStatus) => {
@@ -836,53 +796,32 @@ const App: React.FC = () => {
     }
   };
 
-  const renderResultCell = (job: VideoJob) => {
-    const nativeVideoPath = videoFilePaths[job.id];
-    const previewContainerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center relative flex-shrink-0";
-  
-    const renderPreview = () => {
-      if (nativeVideoPath) {
-        // Format path for file:// URL, which requires forward slashes
-        const videoUrl = `file://${nativeVideoPath.replace(/\\/g, '/')}`;
+  const renderResultCell = (job: VideoJob, fileIndex: number) => {
+    const containerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center text-center p-2";
+    switch(job.status) {
+      case 'Completed':
+        if (job.videoPath) {
+          return (
+            <div className={`${containerClasses} flex-col`}>
+              <CheckIcon className="w-8 h-8 text-emerald-400 mb-1" />
+              <p className="text-xs text-gray-300 break-all" title={job.videoPath}>...{job.videoPath.slice(-20)}</p>
+              <button onClick={() => handleLinkVideo(job.id, fileIndex)} className="text-xs text-indigo-300 hover:underline mt-1">Thay đổi</button>
+            </div>
+          );
+        }
         return (
-          <div className={previewContainerClasses}>
-            <video src={videoUrl} controls className="w-full h-full object-contain bg-black/30 rounded-md" />
+          <div className={containerClasses}>
+            <button onClick={() => handleLinkVideo(job.id, fileIndex)} className="flex flex-col items-center justify-center text-indigo-200 hover:text-white transition">
+              <LinkIcon className="w-6 h-6 mb-1" />
+              <span className="text-sm font-semibold">Link Video</span>
+            </button>
           </div>
         );
-      }
-      switch (job.status) {
-        case 'Completed': return <div className={previewContainerClasses}><CheckIcon className="w-10 h-10 text-emerald-400" /></div>;
-        case 'Processing':
-        case 'Generating': return <div className={previewContainerClasses}><LoaderIcon /></div>;
-        default: return <div className={previewContainerClasses}><VideoIcon className="w-8 h-8 text-gray-400" /></div>;
-      }
-    };
-  
-    const renderActions = () => {
-      if (!nativeVideoPath) return null;
-      // Pass the original nativeVideoPath to handlers for IPC calls
-      return (
-        <div className="flex items-center gap-2">
-            <button onClick={() => handleOpenVideo(nativeVideoPath)} title="Mở Video" className="p-2 text-indigo-300 hover:bg-white/10 rounded-full transition">
-                <PlayIcon className="w-5 h-5" />
-            </button>
-            <button onClick={() => handleOpenFolder(nativeVideoPath)} title="Mở Thư mục" className="p-2 text-indigo-300 hover:bg-white/10 rounded-full transition">
-                <FolderIcon className="w-5 h-5" />
-            </button>
-            <button onClick={() => handleDeleteVideo(job.id, nativeVideoPath)} title="Xóa Video" className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition">
-                <TrashIcon className="w-5 h-5" />
-            </button>
-        </div>
-      );
-    };
-  
-    return (
-      <div className="flex items-center gap-4 py-2">
-        {renderPreview()}
-        {renderActions()}
-      </div>
-    );
-  };
+      case 'Processing':
+      case 'Generating': return <div className={containerClasses}><LoaderIcon /></div>;
+      default: return <div className={containerClasses}><VideoIcon className="w-8 h-8 text-gray-400" /></div>;
+    }
+  }
 
   const TabButton: React.FC<{ tabName: ActiveTab; children: React.ReactNode; }> = ({ tabName, children }) => (
     <button
@@ -907,21 +846,8 @@ const App: React.FC = () => {
   if (!isActivated && machineId) {
     return <Activation machineId={machineId} onActivate={handleActivate} />;
   }
-
-  const activeKey = apiKeys.find(k => k.id === activeApiKeyId);
-  if (!activeKey || isKeyManagerVisible) {
-      return <ApiKeyManager 
-          apiKeys={apiKeys}
-          activeKeyId={activeApiKeyId}
-          onAddKey={handleAddApiKey}
-          onDeleteKey={handleDeleteApiKey}
-          onSetActiveKey={handleSetActiveApiKey}
-          onClose={() => {
-              if (apiKeys.length > 0 && activeApiKeyId) {
-                  setIsKeyManagerVisible(false);
-              }
-          }}
-      />;
+  if (isActivated && (!activeApiKey || isManagingKeys)) {
+    return <ApiKeyManagerScreen apiKeys={apiKeys} onKeyAdd={handleKeyAdd} onKeyDelete={handleKeyDelete} onKeySelect={handleKeySelect} />;
   }
   
   return (
@@ -931,17 +857,15 @@ const App: React.FC = () => {
           <header className="text-center mb-6 relative">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">🎬 Prompt Generator Pro</h1>
             <p className="text-lg text-indigo-200 mt-2">Biến ý tưởng thành kịch bản & theo dõi sản xuất video.</p>
-            {appVersion && <p className="text-xs text-indigo-300 mt-1">Phiên bản {appVersion}</p>}
-            <div className="absolute top-0 right-0">
-                <button
-                    onClick={() => setIsKeyManagerVisible(true)}
-                    className="active-key-display"
-                    title="Quản lý API Keys"
-                >
-                    <KeyIcon className="w-4 h-4 text-emerald-400" />
-                    <span>{activeKey.name}</span>
-                </button>
-            </div>
+            {activeApiKey && (
+              <div className="absolute top-0 right-0">
+                  <div className="active-key-display">
+                      <KeyIcon className="w-4 h-4 text-emerald-400" />
+                      <span className="text-white font-semibold">{activeApiKey.name}</span>
+                      <button onClick={() => setIsManagingKeys(true)} className="ml-2 text-indigo-300 hover:text-white font-bold text-sm">(Thay đổi)</button>
+                  </div>
+              </div>
+            )}
           </header>
 
           <div className="flex space-x-2">
@@ -972,8 +896,8 @@ const App: React.FC = () => {
 
                   <div className={`${videoType === 'story' ? 'block' : 'hidden'} space-y-6`}>
                     <div>
-                      <label htmlFor="idea" className="block text-sm font-medium text-indigo-100 mb-2">Lời bài hát / Ý tưởng MV (Chủ đề chính)</label>
-                      <textarea id="idea" name="idea" value={formData.idea} onChange={handleInputChange} rows={4} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Dán lời bài hát vào đây, hoặc mô tả ý tưởng chính cho MV của bạn..."></textarea>
+                      <label htmlFor="idea" className="block text-sm font-medium text-indigo-100 mb-2">Nhập lời bài hát (Lyrics)</label>
+                      <textarea id="idea" name="idea" value={formData.idea} onChange={handleInputChange} rows={4} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Dán toàn bộ lời bài hát vào đây để AI phân tích và tạo kịch bản..."></textarea>
                     </div>
                   </div>
 
@@ -1050,7 +974,7 @@ const App: React.FC = () => {
                             <p className="text-indigo-200 text-center">Trạng thái được cập nhật tự động khi file Excel thay đổi.</p>
                         </div>
 
-                        {feedback && ( <div className={`text-center font-medium p-3 rounded-lg ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>{feedback.message}</div> )}
+                        {feedback && ( <div className={`text-center font-medium p-3 rounded-lg ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : 'text-emerald-300 bg-emerald-900/50' }`}>{feedback.message}</div> )}
                         
                         {trackedFiles.length === 0 ? (
                              <div className="text-center py-10 border-2 border-dashed border-white/20 rounded-lg">
@@ -1063,8 +987,8 @@ const App: React.FC = () => {
                              </div>
                         ) : (
                             <div>
-                               <div className="flex justify-between items-center mb-4 flex-wrap gap-y-4">
-                                  <div className="tracker-tabs flex-grow basis-full sm:basis-auto">
+                               <div className="flex justify-between items-center mb-4">
+                                  <div className="tracker-tabs flex-grow">
                                       {trackedFiles.map((file, index) => (
                                           <button key={index} className={`tracker-tab ${activeTrackerFileIndex === index ? 'active' : ''}`} onClick={() => setActiveTrackerFileIndex(index)}>
                                               <span>{file.name}</span>
@@ -1072,43 +996,18 @@ const App: React.FC = () => {
                                           </button>
                                       ))}
                                   </div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <button onClick={handleOpenNewFile} className="bg-white/10 text-white font-bold py-2 px-4 rounded-full hover:bg-white/20 transition whitespace-nowrap text-sm">Tải File Mới</button>
-                                    {isElectron && (
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={handleLaunchVideoTool} className="bg-purple-500 text-white font-bold py-2 px-4 rounded-full hover:bg-purple-600 transition whitespace-nowrap flex items-center gap-2 text-sm">
-                                                <ExternalLinkIcon className="w-4 h-4" />
-                                                {toolsFlowPath ? 'Bắt đầu với ToolsFlow' : 'Cấu hình ToolsFlow'}
-                                            </button>
-                                            {toolsFlowPath && (
-                                                <button onClick={handleConfigureToolsFlowPath} className="text-xs text-indigo-300 hover:text-white underline" title="Thay đổi đường dẫn ToolsFlow.exe">Thay đổi</button>
-                                            )}
-                                        </div>
-                                    )}
+                                  <div className="flex items-center space-x-2 ml-4">
+                                    <button onClick={handleOpenNewFile} className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap">Tải File Mới</button>
+                                    <button 
+                                      onClick={handleGenerateCombineScript}
+                                      disabled={!trackedFiles[activeTrackerFileIndex]?.jobs.some(j => j.status === 'Completed' && j.videoPath)}
+                                      className="bg-teal-500 text-white font-bold py-2 px-6 rounded-full hover:bg-teal-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                      title="Ghép các video đã hoàn thành và đồng bộ với thời lượng bài hát"
+                                    >
+                                      Ghép Video
+                                    </button>
                                   </div>
                                </div>
-
-                                {isElectron && trackedFiles[activeTrackerFileIndex]?.path && (
-                                  <div className="flex items-center gap-4 mb-4 bg-black/20 p-3 rounded-lg flex-wrap">
-                                    <p className="font-mono text-sm text-gray-300 truncate flex-1 basis-full md:basis-auto">
-                                        <strong className="text-gray-100">File:</strong> {trackedFiles[activeTrackerFileIndex].path}
-                                    </p>
-                                    <div className="flex items-center gap-4 flex-wrap">
-                                      <button onClick={() => handleCopyPath(trackedFiles[activeTrackerFileIndex].path!)} className="flex items-center gap-2 text-indigo-300 hover:text-white transition text-sm font-semibold">
-                                        {copiedPath ? <CheckIcon className="w-4 h-4 text-emerald-400" /> : <CopyIcon className="w-4 h-4" />}
-                                        {copiedPath ? 'Đã sao chép!' : 'Copy File Path'}
-                                      </button>
-                                      <button onClick={() => handleCopyFolderPath(trackedFiles[activeTrackerFileIndex].path!)} className="flex items-center gap-2 text-indigo-300 hover:text-white transition text-sm font-semibold">
-                                        {copiedFolderPath ? <CheckIcon className="w-4 h-4 text-emerald-400" /> : <CopyIcon className="w-4 h-4" />}
-                                        {copiedFolderPath ? 'Đã sao chép!' : 'Copy Folder Path'}
-                                      </button>
-                                      <button onClick={() => handleOpenFolder(trackedFiles[activeTrackerFileIndex].path!)} className="flex items-center gap-2 text-indigo-300 hover:text-white transition text-sm font-semibold">
-                                          <FolderIcon className="w-4 h-4" /> Open Folder
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-
 
                                 {trackedFiles[activeTrackerFileIndex] && (
                                   <div className="overflow-x-auto bg-black/20 rounded-lg">
@@ -1127,7 +1026,7 @@ const App: React.FC = () => {
                                                       <td className="font-mono text-sm">{job.id}</td>
                                                       <td><span className={getStatusBadge(job.status)}>{job.status}</span></td>
                                                       <td className="font-medium">{job.videoName}</td>
-                                                      <td>{renderResultCell(job)}</td>
+                                                      <td>{renderResultCell(job, activeTrackerFileIndex)}</td>
                                                   </tr>
                                               ))}
                                           </tbody>
@@ -1147,3 +1046,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+

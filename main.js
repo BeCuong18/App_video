@@ -1,24 +1,14 @@
-
-
 // main.js
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
-const { exec } = require('child_process');
-const { shell } = require('electron');
-const { version } = require('./package.json');
-
 
 // Configure logging for autoUpdater
 autoUpdater.logger = require('electron-log');
 autoUpdater.logger.transports.file.level = 'info';
 
 const fileWatchers = new Map();
-
-function getFilenameWithoutExt(filePath) {
-    return path.basename(filePath, path.extname(filePath));
-}
 
 function createWindow() {
   // Create the browser window.
@@ -43,10 +33,6 @@ app.whenReady().then(() => {
   createWindow();
 
   autoUpdater.checkForUpdatesAndNotify();
-
-  ipcMain.handle('get-app-version', () => {
-    return version;
-  });
 
   ipcMain.handle('save-file-dialog', async (event, { defaultPath, fileContent }) => {
     const mainWindow = BrowserWindow.getFocusedWindow();
@@ -88,6 +74,42 @@ app.whenReady().then(() => {
         return { success: false, error: err.message };
     }
   });
+  
+  ipcMain.handle('open-video-file-dialog', async (event) => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) return { success: false, error: 'Window not found.' };
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openFile'],
+        filters: [{ name: 'Video Files', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'] }]
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+        return { success: false };
+    }
+    const filePath = result.filePaths[0];
+    return { success: true, path: filePath };
+  });
+
+  ipcMain.handle('save-script-file-dialog', async (event, { defaultPath, fileContent }) => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) return { success: false, error: 'Window not found.' };
+    const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Lưu Script Ghép Video',
+        defaultPath: defaultPath,
+        filters: [
+            { name: 'Script File', extensions: ['bat', 'sh'] }
+        ]
+    });
+     if (result.canceled || !result.filePath) {
+        return { success: false, error: 'Save dialog canceled' };
+    }
+    try {
+        fs.writeFileSync(result.filePath, fileContent);
+        return { success: true, filePath: result.filePath };
+    } catch (err) {
+        return { success: false, error: err.message };
+    }
+  });
+
 
   ipcMain.on('start-watching-file', (event, filePath) => {
     if (!filePath || fileWatchers.has(filePath)) {
@@ -126,106 +148,6 @@ app.whenReady().then(() => {
         console.log(`Stopped watching ${filePath}`);
     }
   });
-
-  // --- New IPC Handlers ---
-  ipcMain.on('launch-video-tool', (event, filePath) => {
-    if (!filePath) {
-        dialog.showErrorBox('Lỗi', 'Đường dẫn đến ToolsFlow chưa được cấu hình.');
-        return;
-    }
-    // IMPORTANT: Wrap the file path in quotes to handle paths with spaces
-    const command = `"${filePath}"`;
-    exec(command, (error) => {
-        if (error) {
-            console.error(`exec error: ${error}`);
-            dialog.showErrorBox('Lỗi', `Không thể khởi động ứng dụng tại đường dẫn:\n${filePath}\n\nVui lòng kiểm tra lại đường dẫn và thử lại.\n\nChi tiết: ${error.message}`);
-        }
-    });
-  });
-
-  ipcMain.handle('select-toolsflow-path', async (event) => {
-    const mainWindow = BrowserWindow.getFocusedWindow();
-    if (!mainWindow) return null;
-
-    const result = await dialog.showOpenDialog(mainWindow, {
-        title: 'Chọn file thực thi ToolsFlow',
-        properties: ['openFile'],
-        filters: [
-            { name: 'Executable', extensions: ['exe'] },
-            { name: 'All Files', extensions: ['*'] }
-        ]
-    });
-
-    if (result.canceled || result.filePaths.length === 0) {
-        return null;
-    }
-    return result.filePaths[0];
-  });
-
-  ipcMain.on('open-file-location', (event, filePath) => {
-      if (filePath) {
-          shell.showItemInFolder(filePath);
-      }
-  });
-
-  ipcMain.handle('check-file-exists', (event, filePath) => {
-      if (!filePath) return false;
-      return fs.existsSync(filePath);
-  });
-  
-  ipcMain.handle('get-directory-path', (event, filePath) => {
-      if (!filePath) return null;
-      return path.dirname(filePath);
-  });
-
-  ipcMain.handle('path-join', (event, ...args) => {
-      return path.join(...args);
-  });
-
-  ipcMain.handle('find-video-file', async (event, { excelPath, videoFileName }) => {
-    if (!excelPath || !videoFileName) return null;
-    
-    const baseDir = path.dirname(excelPath);
-    const excelFilenameWithoutExt = getFilenameWithoutExt(excelPath);
-
-    // Path 1: Same directory as the excel file
-    const path1 = path.join(baseDir, videoFileName);
-    if (fs.existsSync(path1)) {
-        return path1;
-    }
-
-    // Path 2: Subdirectory with the same name as the excel file
-    const path2 = path.join(baseDir, excelFilenameWithoutExt, videoFileName);
-    if (fs.existsSync(path2)) {
-        return path2;
-    }
-
-    return null; // Not found
-  });
-
-  ipcMain.handle('delete-video-file', async (event, filePath) => {
-    try {
-        await shell.trashItem(filePath);
-        return { success: true };
-    } catch (error) {
-        console.error(`Failed to trash item ${filePath}:`, error);
-        return { success: false, error: error.message };
-    }
-  });
-
-  ipcMain.handle('open-video-file', async(event, filePath) => {
-    try {
-        const errorMessage = await shell.openPath(filePath);
-        if (errorMessage) {
-            return { success: false, error: errorMessage };
-        }
-        return { success: true };
-    } catch (error) {
-        console.error(`Failed to open item ${filePath}:`, error);
-        return { success: false, error: error.message };
-    }
-  });
-
 
 });
 

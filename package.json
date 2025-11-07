@@ -1,6 +1,6 @@
 {
   "name": "prompt-generator-pro",
-  "version": "1.1.2",
+  "version": "1.0.8",
   "description": "An application to generate professional visual scripts for Music Videos and Live Shows by transforming ideas into detailed prompts for AI video models.",
   "main": "main.js",
   "homepage": "./",
