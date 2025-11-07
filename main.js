@@ -1,4 +1,5 @@
 
+
 // main.js
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
@@ -6,6 +7,7 @@ const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 const { exec } = require('child_process');
 const { shell } = require('electron');
+const { version } = require('./package.json');
 
 
 // Configure logging for autoUpdater
@@ -37,6 +39,10 @@ app.whenReady().then(() => {
   createWindow();
 
   autoUpdater.checkForUpdatesAndNotify();
+
+  ipcMain.handle('get-app-version', () => {
+    return version;
+  });
 
   ipcMain.handle('save-file-dialog', async (event, { defaultPath, fileContent }) => {
     const mainWindow = BrowserWindow.getFocusedWindow();

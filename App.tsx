@@ -1,4 +1,5 @@
 
+
 import React, {
   useState,
   useCallback,
@@ -279,6 +280,7 @@ const App: React.FC = () => {
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [activeApiKeyId, setActiveApiKeyId] = useState<string | null>(null);
   const [isKeyManagerVisible, setIsKeyManagerVisible] = useState<boolean>(false);
+  const [appVersion, setAppVersion] = useState<string>('');
 
   const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
   const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
@@ -392,7 +394,11 @@ const App: React.FC = () => {
             localStorage.removeItem('gemini_active_api_key_id');
         }
 
-        if (isElectron) {
+        if (isElectron && ipcRenderer) {
+            ipcRenderer.invoke('get-app-version').then((version: string) => {
+                setAppVersion(version);
+            });
+            
             const storedPath = localStorage.getItem('toolsflow_path');
             if (storedPath) {
                 setToolsFlowPath(storedPath);
@@ -870,6 +876,7 @@ const App: React.FC = () => {
           <header className="text-center mb-6 relative">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">🎬 Prompt Generator Pro</h1>
             <p className="text-lg text-indigo-200 mt-2">Biến ý tưởng thành kịch bản & theo dõi sản xuất video.</p>
+            {appVersion && <p className="text-xs text-indigo-300 mt-1">Phiên bản {appVersion}</p>}
             <div className="absolute top-0 right-0">
                 <button
                     onClick={() => setIsKeyManagerVisible(true)}
