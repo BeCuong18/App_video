@@ -1,6 +1,4 @@
 
-
-
 import React, {
   useState,
   useCallback,
@@ -13,10 +11,10 @@ import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
 // FIX: Add Buffer import to resolve "Cannot find name 'Buffer'" error in `parseExcelData` and `handleFileUpdate`.
 import { Buffer } from 'buffer';
-import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile } from './types';
+import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, FolderIcon, ExternalLinkIcon, KeyIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, FolderIcon, ExternalLinkIcon, KeyIcon, TrashIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -135,70 +133,120 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
 
 // --- API Key Manager ---
 interface ApiKeyManagerProps {
-  onKeySave: (key: string) => void;
-  initialKey?: string;
+  apiKeys: ApiKey[];
+  activeKeyId: string | null;
+  onAddKey: (name: string, value: string) => void;
+  onDeleteKey: (id: string) => void;
+  onSetActiveKey: (id: string) => void;
+  onClose: () => void;
 }
 
-const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ onKeySave, initialKey }) => {
-  const [key, setKey] = useState(initialKey || '');
+const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ apiKeys, activeKeyId, onAddKey, onDeleteKey, onSetActiveKey, onClose }) => {
+  const [newName, setNewName] = useState('');
+  const [newValue, setNewValue] = useState('');
   const [error, setError] = useState('');
 
-  const handleSave = () => {
-    if (!key.trim()) {
-      setError('Vui lòng nhập một API key.');
+  const handleAdd = () => {
+    if (!newName.trim() || !newValue.trim()) {
+      setError('Vui lòng nhập cả Tên và Giá trị cho API Key.');
       return;
     }
     setError('');
-    onKeySave(key.trim());
+    onAddKey(newName.trim(), newValue.trim());
+    setNewName('');
+    setNewValue('');
   };
+
+  const hasActiveKey = apiKeys.length > 0 && activeKeyId;
 
   return (
     <div className="text-white min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md mx-auto">
-        <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl text-center">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
-            Thiết Lập API Key
-          </h1>
-          <p className="text-indigo-200 mb-6">
-            Vui lòng nhập Gemini API Key của bạn để tiếp tục.
-          </p>
-
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="apiKey" className="block text-sm font-medium text-indigo-100 mb-2">
-                Gemini API Key
-              </label>
-              <textarea
-                id="apiKey"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                rows={3}
-                className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                placeholder="Dán API Key của bạn vào đây..."
-                required
-              />
-            </div>
-
-            <p className="text-xs text-indigo-300">
-              Bạn có thể lấy API Key tại{' '}
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">
-                Google AI Studio
-              </a>.
-            </p>
-            
-            <button
-              onClick={handleSave}
-              className="w-full bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
-            >
-              Lưu và Tiếp Tục
-            </button>
-            
-            {error && (
-              <div className="text-red-300 font-medium bg-red-900/50 p-3 rounded-lg mt-4">
-                {error}
-              </div>
+      <div className="w-full max-w-2xl mx-auto">
+        <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+              Quản Lý API Keys
+            </h1>
+            {hasActiveKey && (
+              <button
+                onClick={onClose}
+                className="bg-white/10 hover:bg-white/20 text-white font-bold py-2 px-4 rounded-full transition text-sm"
+              >
+                Đóng
+              </button>
             )}
           </div>
+          
+          {!hasActiveKey && (
+            <p className="text-indigo-200 mb-6 text-center">
+              Bạn chưa có API key nào. Vui lòng thêm một key để bắt đầu sử dụng ứng dụng.
+            </p>
+          )}
+
+          {/* Form for adding a new key */}
+          <div className="bg-black/20 p-4 rounded-lg border border-white/10 mb-6">
+            <h2 className="text-lg font-semibold mb-3">Thêm API Key Mới</h2>
+            <div className="space-y-4">
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Tên gợi nhớ (ví dụ: Key cá nhân)"
+                className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+              />
+              <textarea
+                value={newValue}
+                onChange={(e) => setNewValue(e.target.value)}
+                rows={2}
+                placeholder="Dán giá trị API Key vào đây..."
+                className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+              />
+              <button
+                onClick={handleAdd}
+                className="w-full sm:w-auto bg-white text-indigo-700 font-bold py-2 px-6 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
+              >
+                Thêm Key
+              </button>
+              {error && (
+                <p className="text-red-300 font-medium mt-2">{error}</p>
+              )}
+            </div>
+          </div>
+          
+          {/* List of existing keys */}
+          {apiKeys.length > 0 && (
+            <div>
+              <h2 className="text-lg font-semibold mb-3">Danh sách API Keys</h2>
+              <div className="key-list space-y-3">
+                {apiKeys.map(key => (
+                  <div key={key.id} className={`key-item transition-all ${activeKeyId === key.id ? 'border-emerald-400' : ''}`}>
+                    <div className="flex-grow">
+                      <p className="font-bold text-white">{key.name}</p>
+                      <p className="font-mono text-sm text-gray-400">
+                        {`${key.value.substring(0, 4)}...${key.value.substring(key.value.length - 4)}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => onDeleteKey(key.id)}
+                        className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition"
+                        title="Xóa Key"
+                      >
+                        <TrashIcon className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => onSetActiveKey(key.id)}
+                        disabled={activeKeyId === key.id}
+                        className="bg-teal-500 text-white font-bold py-1 px-4 rounded-full hover:bg-teal-600 transition text-sm disabled:bg-gray-500 disabled:cursor-not-allowed"
+                      >
+                        {activeKeyId === key.id ? 'Đang hoạt động' : 'Kích hoạt'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -228,8 +276,9 @@ const App: React.FC = () => {
   const [isActivated, setIsActivated] = useState<boolean | null>(null);
   const [machineId, setMachineId] = useState<string>('');
   
-  const [apiKey, setApiKey] = useState<string>('');
-  const [showKeyManager, setShowKeyManager] = useState<boolean>(false);
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [activeApiKeyId, setActiveApiKeyId] = useState<string | null>(null);
+  const [isKeyManagerVisible, setIsKeyManagerVisible] = useState<boolean>(false);
 
   const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
   const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
@@ -263,14 +312,39 @@ const App: React.FC = () => {
       return false;
   }, [validateLicenseKey]);
   
-  const handleKeySave = (key: string) => {
-    const trimmedKey = key.trim();
-    if (trimmedKey) {
-        setApiKey(trimmedKey);
-        localStorage.setItem('gemini_api_key', trimmedKey);
-        setShowKeyManager(false);
+  const handleAddApiKey = useCallback((name: string, value: string) => {
+    const newKey: ApiKey = { id: crypto.randomUUID(), name, value };
+    const updatedKeys = [...apiKeys, newKey];
+    setApiKeys(updatedKeys);
+    localStorage.setItem('gemini_api_keys_list', JSON.stringify(updatedKeys));
+    
+    if (!activeApiKeyId || apiKeys.length === 0) {
+        setActiveApiKeyId(newKey.id);
+        localStorage.setItem('gemini_active_api_key_id', newKey.id);
     }
-  };
+  }, [apiKeys, activeApiKeyId]);
+
+  const handleDeleteApiKey = useCallback((id: string) => {
+    const updatedKeys = apiKeys.filter(k => k.id !== id);
+    setApiKeys(updatedKeys);
+    localStorage.setItem('gemini_api_keys_list', JSON.stringify(updatedKeys));
+    
+    if (activeApiKeyId === id) {
+        if (updatedKeys.length > 0) {
+            const newActiveId = updatedKeys[0].id;
+            setActiveApiKeyId(newActiveId);
+            localStorage.setItem('gemini_active_api_key_id', newActiveId);
+        } else {
+            setActiveApiKeyId(null);
+            localStorage.removeItem('gemini_active_api_key_id');
+        }
+    }
+  }, [apiKeys, activeApiKeyId]);
+
+  const handleSetActiveApiKey = useCallback((id: string) => {
+    setActiveApiKeyId(id);
+    localStorage.setItem('gemini_active_api_key_id', id);
+  }, []);
 
   useEffect(() => {
     setTimeout(() => {
@@ -294,9 +368,27 @@ const App: React.FC = () => {
         }
         setIsActivated(activationStatus);
 
-        const storedApiKey = localStorage.getItem('gemini_api_key');
-        if (storedApiKey) {
-            setApiKey(storedApiKey);
+        try {
+          const storedKeys = localStorage.getItem('gemini_api_keys_list');
+          const storedActiveId = localStorage.getItem('gemini_active_api_key_id');
+          
+          let loadedKeys: ApiKey[] = [];
+          if (storedKeys) {
+              loadedKeys = JSON.parse(storedKeys);
+              setApiKeys(loadedKeys);
+          }
+          
+          if (storedActiveId && loadedKeys.some(k => k.id === storedActiveId)) {
+              setActiveApiKeyId(storedActiveId);
+          } else if (loadedKeys.length > 0) {
+              const newActiveId = loadedKeys[0].id;
+              setActiveApiKeyId(newActiveId);
+              localStorage.setItem('gemini_active_api_key_id', newActiveId);
+          }
+        } catch (e) {
+            console.error("Failed to load API keys from storage", e);
+            localStorage.removeItem('gemini_api_keys_list');
+            localStorage.removeItem('gemini_active_api_key_id');
         }
 
     }, 100);
@@ -433,9 +525,10 @@ const App: React.FC = () => {
   }, []);
 
   const generatePrompts = async () => {
-    if (!apiKey) {
-      setFeedback({ type: 'error', message: 'Vui lòng thiết lập API Key trước khi tạo prompt.' });
-      setShowKeyManager(true);
+    const activeKey = apiKeys.find(k => k.id === activeApiKeyId);
+    if (!activeKey) {
+      setFeedback({ type: 'error', message: 'Vui lòng thiết lập một API Key đang hoạt động để tạo prompt.' });
+      setIsKeyManagerVisible(true);
       return;
     }
     setIsLoading(true);
@@ -482,7 +575,7 @@ const App: React.FC = () => {
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey: apiKey });
+      const ai = new GoogleGenAI({ apiKey: activeKey.value });
       const response = await ai.models.generateContent({
         model: formData.model,
         contents: { parts: parts },
@@ -525,8 +618,8 @@ const App: React.FC = () => {
       console.error('Error generating prompts:', err);
       let displayMessage = err.message || 'An unknown error occurred.';
       if (err.message?.includes('API key not valid')) {
-        displayMessage = 'Lỗi xác thực. API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại.';
-        setShowKeyManager(true);
+        displayMessage = 'Lỗi xác thực. API key đang hoạt động không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại.';
+        setIsKeyManagerVisible(true);
       } else if (err.message?.includes('quota')) {
         displayMessage = 'Bạn đã vượt quá hạn ngạch sử dụng cho Khóa API này.';
       } else if (err.message?.includes('Requested entity was not found')) {
@@ -716,8 +809,21 @@ const App: React.FC = () => {
   if (!isActivated && machineId) {
     return <Activation machineId={machineId} onActivate={handleActivate} />;
   }
-  if (!apiKey || showKeyManager) {
-    return <ApiKeyManagerScreen onKeySave={handleKeySave} initialKey={apiKey} />;
+
+  const activeKey = apiKeys.find(k => k.id === activeApiKeyId);
+  if (!activeKey || isKeyManagerVisible) {
+      return <ApiKeyManager 
+          apiKeys={apiKeys}
+          activeKeyId={activeApiKeyId}
+          onAddKey={handleAddApiKey}
+          onDeleteKey={handleDeleteApiKey}
+          onSetActiveKey={handleSetActiveApiKey}
+          onClose={() => {
+              if (apiKeys.length > 0 && activeApiKeyId) {
+                  setIsKeyManagerVisible(false);
+              }
+          }}
+      />;
   }
   
   return (
@@ -729,12 +835,12 @@ const App: React.FC = () => {
             <p className="text-lg text-indigo-200 mt-2">Biến ý tưởng thành kịch bản & theo dõi sản xuất video.</p>
             <div className="absolute top-0 right-0">
                 <button
-                    onClick={() => setShowKeyManager(true)}
+                    onClick={() => setIsKeyManagerVisible(true)}
                     className="active-key-display"
-                    title="Change API Key"
+                    title="Quản lý API Keys"
                 >
                     <KeyIcon className="w-4 h-4 text-emerald-400" />
-                    <span>API Key is Set</span>
+                    <span>{activeKey.name}</span>
                 </button>
             </div>
           </header>
