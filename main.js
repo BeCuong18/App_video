@@ -3,6 +3,9 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
+const { exec } = require('child_process');
+const { shell } = require('electron');
+
 
 // Configure logging for autoUpdater
 autoUpdater.logger = require('electron-log');
@@ -111,6 +114,37 @@ app.whenReady().then(() => {
         fileWatchers.delete(filePath);
         console.log(`Stopped watching ${filePath}`);
     }
+  });
+
+  // --- New IPC Handlers ---
+  ipcMain.on('launch-video-tool', () => {
+    const command = 'ToolsFlow.exe';
+    exec(command, (error) => {
+        if (error) {
+            console.error(`exec error: ${error}`);
+            dialog.showErrorBox('Lỗi', `Không thể khởi động ${command}. Vui lòng đảm bảo phần mềm đã được cài đặt và có trong PATH hệ thống.\n\nChi tiết: ${error.message}`);
+        }
+    });
+  });
+
+  ipcMain.on('open-file-location', (event, filePath) => {
+      if (filePath) {
+          shell.showItemInFolder(filePath);
+      }
+  });
+
+  ipcMain.handle('check-file-exists', (event, filePath) => {
+      if (!filePath) return false;
+      return fs.existsSync(filePath);
+  });
+  
+  ipcMain.handle('get-directory-path', (event, filePath) => {
+      if (!filePath) return null;
+      return path.dirname(filePath);
+  });
+
+  ipcMain.handle('path-join', (event, ...args) => {
+      return path.join(...args);
   });
 
 });

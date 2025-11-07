@@ -1,6 +1,4 @@
 
-
-
 import React, {
   useState,
   useCallback,
@@ -11,10 +9,12 @@ import React, {
 import { GoogleGenAI, Type } from '@google/genai';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey } from './types';
+// FIX: Add Buffer import to resolve "Cannot find name 'Buffer'" error in `parseExcelData` and `handleFileUpdate`.
+import { Buffer } from 'buffer';
+import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -131,131 +131,9 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
   );
 };
 
-// --- API Key Manager Component ---
-interface ApiKeyManagerProps {
-  apiKeys: ApiKey[];
-  onKeySelect: (key: ApiKey) => void;
-  onKeyAdd: (key: ApiKey) => void;
-  onKeyDelete: (keyId: string) => void;
-}
-
-const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onKeySelect, onKeyAdd, onKeyDelete }) => {
-    const [newKeyName, setNewKeyName] = useState('');
-    const [newKeyValue, setNewKeyValue] = useState('');
-    const [error, setError] = useState('');
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        if (!newKeyName.trim() || !newKeyValue.trim()) {
-            setError('Biệt danh và giá trị khóa không được để trống.');
-            return;
-        }
-        if (apiKeys.some(k => k.name === newKeyName.trim())) {
-            setError('Biệt danh này đã tồn tại. Vui lòng chọn một biệt danh khác.');
-            return;
-        }
-        onKeyAdd({
-            id: crypto.randomUUID(),
-            name: newKeyName.trim(),
-            value: newKeyValue.trim(),
-        });
-        setNewKeyName('');
-        setNewKeyValue('');
-    };
-
-    const truncateKey = (key: string) => `${key.slice(0, 5)}...${key.slice(-4)}`;
-
-    return (
-        <div className="text-white min-h-screen flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl mx-auto">
-                <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2 text-center">
-                        Quản lý API Keys
-                    </h1>
-                    <p className="text-indigo-200 mb-6 text-center">
-                        Thêm, xóa, hoặc chọn một Google AI API Key để sử dụng.
-                    </p>
-
-                    {apiKeys.length > 0 && (
-                        <div className="mb-8">
-                            <h2 className="text-lg font-semibold text-indigo-100 mb-3">Khóa đã lưu</h2>
-                            <div className="space-y-3 key-list">
-                                {apiKeys.map(key => (
-                                    <div key={key.id} className="key-item">
-                                        <div className="flex items-center gap-3">
-                                            <KeyIcon className="w-5 h-5 text-indigo-300" />
-                                            <div>
-                                                <p className="font-semibold text-white">{key.name}</p>
-                                                <p className="text-sm text-gray-400 font-mono">{truncateKey(key.value)}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => onKeySelect(key)}
-                                                className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition text-sm"
-                                            >
-                                                Sử dụng
-                                            </button>
-                                            <button
-                                                onClick={() => onKeyDelete(key.id)}
-                                                className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition"
-                                                title="Xóa khóa"
-                                            >
-                                                <TrashIcon className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="pt-6 border-t border-white/20">
-                        <h2 className="text-lg font-semibold text-indigo-100 mb-4">Thêm khóa mới</h2>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label htmlFor="keyName" className="block text-sm font-medium text-indigo-100 mb-2">
-                                    Biệt danh (Nickname)
-                                </label>
-                                <input
-                                    id="keyName"
-                                    type="text"
-                                    value={newKeyName}
-                                    onChange={(e) => setNewKeyName(e.target.value)}
-                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                                    placeholder="Ví dụ: Key cá nhân, Key công ty"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label htmlFor="keyValue" className="block text-sm font-medium text-indigo-100 mb-2">
-                                    Giá trị API Key
-                                </label>
-                                <input
-                                    id="keyValue"
-                                    type="password"
-                                    value={newKeyValue}
-                                    onChange={(e) => setNewKeyValue(e.target.value)}
-                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                                    placeholder="Dán API Key của bạn vào đây"
-                                    required
-                                />
-                            </div>
-                            {error && <p className="text-red-300 text-sm">{error}</p>}
-                            <button
-                                type="submit"
-                                className="w-full bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
-                            >
-                                Thêm và Lưu khóa
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
+// REFACTOR: The ApiKeyManagerScreen component and related logic have been removed 
+// to align with the @google/genai SDK best practices. The API key should be
+// managed via the `process.env.API_KEY` environment variable, not through the UI.
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('generator');
@@ -279,12 +157,14 @@ const App: React.FC = () => {
   const [isActivated, setIsActivated] = useState<boolean | null>(null);
   const [machineId, setMachineId] = useState<string>('');
   
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [activeApiKey, setActiveApiKey] = useState<ApiKey | null>(null);
-  const [isManagingKeys, setIsManagingKeys] = useState(false);
+  // REFACTOR: Removed state related to UI-based API key management.
+  // The API key will be sourced from `process.env.API_KEY`.
 
   const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
   const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
+  const [videoFilePaths, setVideoFilePaths] = useState<Record<string, string>>({});
+  const [copiedPath, setCopiedPath] = useState(false);
+  const [copiedFolderPath, setCopiedFolderPath] = useState(false);
 
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
@@ -306,19 +186,7 @@ const App: React.FC = () => {
   }, [machineId, getEncryptionKey]);
 
   useEffect(() => {
-    if (machineId) {
-      const storedKeysEncrypted = localStorage.getItem('api_keys_storage');
-      if (storedKeysEncrypted) {
-        const decryptedKeys = decrypt(storedKeysEncrypted);
-        if (decryptedKeys) {
-          try {
-            setApiKeys(JSON.parse(decryptedKeys));
-          } catch {
-            localStorage.removeItem('api_keys_storage');
-          }
-        }
-      }
-    }
+    // REFACTOR: Removed API key loading logic.
   }, [machineId, decrypt]);
 
   const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
@@ -345,27 +213,7 @@ const App: React.FC = () => {
       return false;
   }, [validateLicenseKey]);
   
-  const handleKeyAdd = (newKey: ApiKey) => {
-    const updatedKeys = [...apiKeys, newKey];
-    setApiKeys(updatedKeys);
-    localStorage.setItem('api_keys_storage', encrypt(JSON.stringify(updatedKeys)));
-  };
-
-  const handleKeyDelete = (keyId: string) => {
-    const updatedKeys = apiKeys.filter(k => k.id !== keyId);
-    setApiKeys(updatedKeys);
-    localStorage.setItem('api_keys_storage', encrypt(JSON.stringify(updatedKeys)));
-    if(activeApiKey?.id === keyId) {
-      setActiveApiKey(null);
-      sessionStorage.removeItem('active_api_key_id');
-    }
-  };
-
-  const handleKeySelect = (key: ApiKey) => {
-    setActiveApiKey(key);
-    sessionStorage.setItem('active_api_key_id', key.id);
-    setIsManagingKeys(false);
-  };
+  // REFACTOR: Removed API key management functions (`handleKeyAdd`, `handleKeyDelete`, `handleKeySelect`).
 
   useEffect(() => {
     setTimeout(() => {
@@ -391,15 +239,7 @@ const App: React.FC = () => {
     }, 100);
   }, []);
 
-  useEffect(() => {
-    if(isActivated && apiKeys.length > 0 && !activeApiKey) {
-      const activeKeyId = sessionStorage.getItem('active_api_key_id');
-      if (activeKeyId) {
-        const keyToActivate = apiKeys.find(k => k.id === activeKeyId);
-        if (keyToActivate) setActiveApiKey(keyToActivate);
-      }
-    }
-  }, [isActivated, apiKeys, activeApiKey]);
+  // REFACTOR: Removed useEffect for activating an API key from session storage.
 
   const parseExcelData = (data: Buffer): VideoJob[] => {
     const workbook = XLSX.read(data, { type: 'buffer' });
@@ -418,7 +258,7 @@ const App: React.FC = () => {
           status = 'Pending';
       }
       return {
-        id: row.JOB_ID || `job_${index + 1}`,
+        id: row.JOB_ID || `Job_${index + 1}`,
         prompt: row.PROMPT || '',
         imagePath: row.IMAGE_PATH || '',
         imagePath2: row.IMAGE_PATH_2 || '',
@@ -465,6 +305,43 @@ const App: React.FC = () => {
         ipcRenderer.removeListener('file-content-updated', handleFileUpdate);
     };
   }, [trackedFiles]);
+  
+  useEffect(() => {
+    if (!isElectron || !ipcRenderer || trackedFiles.length === 0 || activeTrackerFileIndex >= trackedFiles.length) {
+      setVideoFilePaths({});
+      return;
+    };
+
+    const currentFile = trackedFiles[activeTrackerFileIndex];
+    if (!currentFile || !currentFile.path) {
+      setVideoFilePaths({});
+      return;
+    }
+
+    const checkVideos = async () => {
+      const directoryPath = await ipcRenderer.invoke('get-directory-path', currentFile.path);
+      const newVideoPaths: Record<string, string> = {};
+      if (!directoryPath) {
+        setVideoFilePaths({});
+        return;
+      }
+
+      for (const job of currentFile.jobs) {
+        const videoFileName = `Video_${job.id}_${job.videoName}.mp4`;
+        const videoPath = await ipcRenderer.invoke('path-join', directoryPath, videoFileName);
+        if(videoPath) {
+            const exists = await ipcRenderer.invoke('check-file-exists', videoPath);
+            if (exists) {
+            newVideoPaths[job.id] = videoPath.replace(/\\/g, '/');
+            }
+        }
+      }
+      setVideoFilePaths(newVideoPaths);
+    };
+
+    checkVideos();
+  }, [activeTrackerFileIndex, trackedFiles]);
+
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -495,11 +372,8 @@ const App: React.FC = () => {
   }, []);
 
   const generatePrompts = async () => {
-    if (!activeApiKey) {
-      setFeedback({ type: 'error', message: 'Vui lòng chọn một API Key đang hoạt động.' });
-      setIsManagingKeys(true);
-      return;
-    }
+    // REFACTOR: Removed check for activeApiKey. The SDK will use the key
+    // from the environment variable `process.env.API_KEY`.
     setIsLoading(true);
     setFeedback(null);
     setGeneratedScenes([]);
@@ -544,7 +418,9 @@ const App: React.FC = () => {
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey: activeApiKey.value });
+      // REFACTOR: Initialize GoogleGenAI with the API key from environment variables
+      // as per @google/genai SDK guidelines.
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: formData.model,
         contents: { parts: parts },
@@ -586,9 +462,9 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error('Error generating prompts:', err);
       let displayMessage = err.message || 'An unknown error occurred.';
+      // REFACTOR: Updated error message for invalid API key to align with environment variable usage.
       if (err.message?.includes('API key not valid')) {
-        displayMessage = 'Lỗi xác thực. API key đang sử dụng không hợp lệ hoặc đã hết hạn. Vui lòng chọn hoặc thêm khóa khác.';
-        setIsManagingKeys(true);
+        displayMessage = 'Lỗi xác thực. API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra biến môi trường API_KEY của bạn.';
       } else if (err.message?.includes('quota')) {
         displayMessage = 'Bạn đã vượt quá hạn ngạch sử dụng cho Khóa API này.';
       } else if (err.message?.includes('Requested entity was not found')) {
@@ -621,15 +497,19 @@ const App: React.FC = () => {
           typeVideo: '',
       }));
   
-      const dataForExcel = dataForTracker.map(job => ({ ...job, status: '' }));
+      const dataForExcel = dataForTracker.map(job => ({
+        'JOB_ID': job.id,
+        'PROMPT': job.prompt,
+        'IMAGE_PATH': job.imagePath,
+        'IMAGE_PATH_2': job.imagePath2,
+        'IMAGE_PATH_3': job.imagePath3,
+        'STATUS': '',
+        'VIDEO_NAME': job.videoName,
+        'TYPE_VIDEO': job.typeVideo,
+      }));
 
-      const worksheet = XLSX.utils.json_to_sheet(dataForExcel, {
-        header: ['id', 'prompt', 'imagePath', 'imagePath2', 'imagePath3', 'status', 'videoName', 'typeVideo'],
-        skipHeader: true,
-      });
+      const worksheet = XLSX.utils.json_to_sheet(dataForExcel);
       
-      XLSX.utils.sheet_add_aoa(worksheet, [['JOB_ID', 'PROMPT', 'IMAGE_PATH', 'IMAGE_PATH_2', 'IMAGE_PATH_3', 'STATUS', 'VIDEO_NAME', 'TYPE_VIDEO']], { origin: 'A1' });
-
       worksheet['!cols'] = [
         { wch: 15 }, { wch: 150 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 30 }, { wch: 15 },
       ];
@@ -697,6 +577,32 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLaunchVideoTool = () => {
+    ipcRenderer?.send('launch-video-tool');
+  };
+
+  const handleCopyPath = (path: string) => {
+      navigator.clipboard.writeText(path);
+      setCopiedPath(true);
+      setTimeout(() => setCopiedPath(false), 2000);
+  };
+
+  const handleCopyFolderPath = (path: string) => {
+    if (ipcRenderer && path) {
+        ipcRenderer.invoke('get-directory-path', path).then((dirPath: string | null) => {
+            if (dirPath) {
+                navigator.clipboard.writeText(dirPath);
+                setCopiedFolderPath(true);
+                setTimeout(() => setCopiedFolderPath(false), 2000);
+            }
+        });
+    }
+  };
+
+  const handleOpenFolder = (path: string) => {
+      ipcRenderer?.send('open-file-location', path);
+  };
+
   const getStatusBadge = (status: JobStatus) => {
     const baseClasses = "status-badge";
     switch (status) {
@@ -710,7 +616,13 @@ const App: React.FC = () => {
   };
 
   const renderResultCell = (job: VideoJob) => {
+    const videoSrc = videoFilePaths[job.id];
     const containerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center";
+
+    if (videoSrc) {
+        return <video src={`file://${videoSrc}`} controls className="w-40 h-24 object-contain bg-black/30 rounded-md" />;
+    }
+    
     switch(job.status) {
       case 'Completed': return <div className={containerClasses}><CheckIcon className="w-10 h-10 text-emerald-400" /></div>;
       case 'Processing':
@@ -742,9 +654,8 @@ const App: React.FC = () => {
   if (!isActivated && machineId) {
     return <Activation machineId={machineId} onActivate={handleActivate} />;
   }
-  if (isActivated && (!activeApiKey || isManagingKeys)) {
-    return <ApiKeyManagerScreen apiKeys={apiKeys} onKeyAdd={handleKeyAdd} onKeyDelete={handleKeyDelete} onKeySelect={handleKeySelect} />;
-  }
+  // REFACTOR: Removed conditional rendering of ApiKeyManagerScreen.
+  // The app will now render directly if activated.
   
   return (
     <>
@@ -753,15 +664,7 @@ const App: React.FC = () => {
           <header className="text-center mb-6 relative">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">🎬 Prompt Generator Pro</h1>
             <p className="text-lg text-indigo-200 mt-2">Biến ý tưởng thành kịch bản & theo dõi sản xuất video.</p>
-            {activeApiKey && (
-              <div className="absolute top-0 right-0">
-                  <div className="active-key-display">
-                      <KeyIcon className="w-4 h-4 text-emerald-400" />
-                      <span className="text-white font-semibold">{activeApiKey.name}</span>
-                      <button onClick={() => setIsManagingKeys(true)} className="ml-2 text-indigo-300 hover:text-white font-bold text-sm">(Thay đổi)</button>
-                  </div>
-              </div>
-            )}
+            {/* REFACTOR: Removed the API key display from the header. */}
           </header>
 
           <div className="flex space-x-2">
@@ -883,8 +786,8 @@ const App: React.FC = () => {
                              </div>
                         ) : (
                             <div>
-                               <div className="flex justify-between items-center mb-4">
-                                  <div className="tracker-tabs flex-grow">
+                               <div className="flex justify-between items-center mb-4 flex-wrap gap-y-4">
+                                  <div className="tracker-tabs flex-grow basis-full sm:basis-auto">
                                       {trackedFiles.map((file, index) => (
                                           <button key={index} className={`tracker-tab ${activeTrackerFileIndex === index ? 'active' : ''}`} onClick={() => setActiveTrackerFileIndex(index)}>
                                               <span>{file.name}</span>
@@ -892,8 +795,36 @@ const App: React.FC = () => {
                                           </button>
                                       ))}
                                   </div>
-                                  <button onClick={handleOpenNewFile} className="ml-4 bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap">Tải File Mới</button>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <button onClick={handleOpenNewFile} className="bg-white/10 text-white font-bold py-2 px-4 rounded-full hover:bg-white/20 transition whitespace-nowrap text-sm">Tải File Mới</button>
+                                    {isElectron && <button onClick={handleLaunchVideoTool} className="bg-purple-500 text-white font-bold py-2 px-4 rounded-full hover:bg-purple-600 transition whitespace-nowrap flex items-center gap-2 text-sm">
+                                      <ExternalLinkIcon className="w-4 h-4" />
+                                      Bắt đầu với ToolsFlow
+                                    </button>}
+                                  </div>
                                </div>
+
+                                {isElectron && trackedFiles[activeTrackerFileIndex]?.path && (
+                                  <div className="flex items-center gap-4 mb-4 bg-black/20 p-3 rounded-lg flex-wrap">
+                                    <p className="font-mono text-sm text-gray-300 truncate flex-1 basis-full md:basis-auto">
+                                        <strong className="text-gray-100">File:</strong> {trackedFiles[activeTrackerFileIndex].path}
+                                    </p>
+                                    <div className="flex items-center gap-4 flex-wrap">
+                                      <button onClick={() => handleCopyPath(trackedFiles[activeTrackerFileIndex].path!)} className="flex items-center gap-2 text-indigo-300 hover:text-white transition text-sm font-semibold">
+                                        {copiedPath ? <CheckIcon className="w-4 h-4 text-emerald-400" /> : <CopyIcon className="w-4 h-4" />}
+                                        {copiedPath ? 'Đã sao chép!' : 'Copy File Path'}
+                                      </button>
+                                      <button onClick={() => handleCopyFolderPath(trackedFiles[activeTrackerFileIndex].path!)} className="flex items-center gap-2 text-indigo-300 hover:text-white transition text-sm font-semibold">
+                                        {copiedFolderPath ? <CheckIcon className="w-4 h-4 text-emerald-400" /> : <CopyIcon className="w-4 h-4" />}
+                                        {copiedFolderPath ? 'Đã sao chép!' : 'Copy Folder Path'}
+                                      </button>
+                                      <button onClick={() => handleOpenFolder(trackedFiles[activeTrackerFileIndex].path!)} className="flex items-center gap-2 text-indigo-300 hover:text-white transition text-sm font-semibold">
+                                          <FolderIcon className="w-4 h-4" /> Open Folder
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
 
                                 {trackedFiles[activeTrackerFileIndex] && (
                                   <div className="overflow-x-auto bg-black/20 rounded-lg">
