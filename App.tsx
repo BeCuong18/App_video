@@ -269,6 +269,8 @@ const App: React.FC = () => {
     projectName: '',
     model: 'gemini-flash-lite-latest',
     mvGenre: 'narrative',
+    country: 'Vietnamese',
+    characterConsistency: true,
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
@@ -293,6 +295,17 @@ const App: React.FC = () => {
     { value: 'lyrical', label: 'Minh hoạ lời bài hát (Lyrical Montage)' },
     { value: 'animation', label: 'Hoạt hình (Animation)' },
     { value: 'one-take', label: 'Một cú máy (One-take)' },
+  ];
+  
+  const countryOptions: { value: string, label: string }[] = [
+    { value: 'Vietnamese', label: 'Việt Nam' },
+    { value: 'American', label: 'Mỹ (American)' },
+    { value: 'British', label: 'Anh (British)' },
+    { value: 'South Korean', label: 'Hàn Quốc (South Korean)' },
+    { value: 'Japanese', label: 'Nhật Bản (Japanese)' },
+    { value: 'Chinese', label: 'Trung Quốc (Chinese)' },
+    { value: 'French', label: 'Pháp (French)' },
+    { value: 'Generic/International', label: 'Quốc tế / Không xác định' },
   ];
 
   const getEncryptionKey = useCallback(() => CryptoJS.SHA256(machineId + SECRET_KEY).toString(), [machineId]);
@@ -477,7 +490,13 @@ const App: React.FC = () => {
   }, [trackedFiles]);
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-      setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+      const { name, value, type } = e.target;
+      if (type === 'checkbox') {
+        const checked = (e.target as HTMLInputElement).checked;
+        setFormData((prev) => ({ ...prev, [name]: checked }));
+      } else {
+        setFormData((prev) => ({ ...prev, [name]: value }));
+      }
     },[],
   );
 
@@ -530,7 +549,13 @@ const App: React.FC = () => {
         setIsLoading(false);
         return;
       }
+      const selectedGenre = mvGenreOptions.find(o => o.value === formData.mvGenre)?.label || formData.mvGenre;
       userPrompt += ` The song lyrics are: "${formData.idea.trim()}".`;
+      userPrompt += `\n**User Specifications:**`;
+      userPrompt += `\n- **Nationality:** ${formData.country}`;
+      userPrompt += `\n- **Enforce Character Consistency:** ${formData.characterConsistency ? 'Yes' : 'No'}`;
+      userPrompt += `\n- **Music Video Genre:** "${selectedGenre}"`;
+
     } else {
       if (!formData.liveAtmosphere.trim() && !formData.liveArtistName.trim() && !formData.liveArtist.trim() && !formData.liveArtistImage) {
         setFeedback({ type: 'error', message: 'Vui lòng nhập ít nhất một thông tin cho Video Trình Diễn Live.' });
@@ -542,12 +567,7 @@ const App: React.FC = () => {
       if (formData.liveArtist.trim()) userPrompt += ` The Artist & Performance Style is: "${formData.liveArtist.trim()}".`;
     }
 
-    let genreDescription = '';
-    if (videoType === 'story') {
-        const selectedGenre = mvGenreOptions.find(o => o.value === formData.mvGenre)?.label || formData.mvGenre;
-        genreDescription = ` The music video genre is: "${selectedGenre}".`;
-    }
-    userPrompt += ` The video should have exactly ${sceneCount} scenes, structured with a clear visual arc.${genreDescription}`;
+    userPrompt += `\n**Task:** The video should have exactly ${sceneCount} scenes, structured with a clear visual arc and adhering to all specifications.`;
 
 
     const parts: any[] = [{ text: userPrompt }];
@@ -903,11 +923,26 @@ const App: React.FC = () => {
                       <label htmlFor="idea" className="block text-sm font-medium text-indigo-100 mb-2">Nhập lời bài hát (Lyrics)</label>
                       <textarea id="idea" name="idea" value={formData.idea} onChange={handleInputChange} rows={4} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Dán toàn bộ lời bài hát vào đây để AI phân tích và tạo kịch bản..."></textarea>
                     </div>
-                     <div>
-                        <label htmlFor="mvGenre" className="block text-sm font-medium text-indigo-100 mb-2">Chọn Thể Loại MV</label>
-                        <select id="mvGenre" name="mvGenre" value={formData.mvGenre} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition">
-                            {mvGenreOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                        </select>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label htmlFor="mvGenre" className="block text-sm font-medium text-indigo-100 mb-2">Chọn Thể Loại MV</label>
+                            <select id="mvGenre" name="mvGenre" value={formData.mvGenre} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
+                                {mvGenreOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                            </select>
+                        </div>
+                         <div>
+                            <label htmlFor="country" className="block text-sm font-medium text-indigo-100 mb-2">Quốc gia (Nationality)</label>
+                            <select id="country" name="country" value={formData.country} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
+                                {countryOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                            </select>
+                        </div>
+                     </div>
+                      <div>
+                        <label className="block text-sm font-medium text-indigo-100 mb-2">Đồng nhất nhân vật chính</label>
+                        <div className="flex items-center space-x-2 glass-card p-2 rounded-lg max-w-xs">
+                           <RadioLabel name="characterConsistency" value="true" checked={formData.characterConsistency} onChange={(val) => setFormData(p => ({ ...p, characterConsistency: val === 'true' }))}>Có</RadioLabel>
+                           <RadioLabel name="characterConsistency" value="false" checked={!formData.characterConsistency} onChange={(val) => setFormData(p => ({ ...p, characterConsistency: val === 'true' }))}>Không</RadioLabel>
+                        </div>
                     </div>
                   </div>
 
@@ -949,7 +984,7 @@ const App: React.FC = () => {
                     </div>
                     <div>
                       <label htmlFor="model" className="block text-sm font-medium text-indigo-100 mb-2">Chọn Model AI</label>
-                      <select id="model" name="model" value={formData.model} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition">
+                      <select id="model" name="model" value={formData.model} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
                         <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
                         <option value="gemini-flash-latest">Gemini Flash</option>
                         <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>

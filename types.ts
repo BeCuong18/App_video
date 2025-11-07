@@ -30,6 +30,8 @@ export interface FormData {
   projectName: string;
   model: string;
   mvGenre: MvGenre;
+  country: string;
+  characterConsistency: boolean;
 }
 
 export interface VideoJob {
