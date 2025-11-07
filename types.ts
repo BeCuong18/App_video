@@ -32,6 +32,7 @@ export interface FormData {
   mvGenre: MvGenre;
   country: string;
   characterConsistency: boolean;
+  characterCount: number;
 }
 
 export interface VideoJob {

@@ -9,6 +9,29 @@ autoUpdater.logger = require('electron-log');
 autoUpdater.logger.transports.file.level = 'info';
 
 const fileWatchers = new Map();
+const userDataPath = app.getPath('userData');
+const configPath = path.join(userDataPath, 'app-config.json');
+
+// --- Helper functions for config ---
+function readConfig() {
+  try {
+    if (fs.existsSync(configPath)) {
+      return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    }
+  } catch (error) {
+    console.error('Error reading config file:', error);
+  }
+  return {}; // Return empty object if file doesn't exist or is corrupted
+}
+
+function writeConfig(config) {
+  try {
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  } catch (error) {
+    console.error('Error writing config file:', error);
+  }
+}
+
 
 function createWindow() {
   // Create the browser window.
@@ -156,6 +179,47 @@ app.whenReady().then(() => {
   ipcMain.on('open-folder', (event, folderPath) => {
     if (folderPath) {
         shell.openPath(folderPath).catch(err => console.error("Failed to open path", err));
+    }
+  });
+
+  ipcMain.handle('open-tool-flow', async (event) => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) return { success: false, error: 'Window not found.' };
+
+    let config = readConfig();
+    let toolFlowPath = config.toolFlowPath;
+
+    if (!toolFlowPath || !fs.existsSync(toolFlowPath)) {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            title: 'Chọn ứng dụng ToolFlows',
+            properties: ['openFile'],
+            filters: process.platform === 'win32'
+                ? [{ name: 'Applications', extensions: ['exe'] }]
+                : [{ name: 'Applications', extensions: ['app', '*'] }]
+        });
+
+        if (result.canceled || result.filePaths.length === 0) {
+            return { success: false, error: 'User canceled selection.' };
+        }
+
+        toolFlowPath = result.filePaths[0];
+        config.toolFlowPath = toolFlowPath;
+        writeConfig(config);
+    }
+    
+    try {
+        const err = await shell.openPath(toolFlowPath);
+        if (err) {
+            console.error('Failed to open ToolFlows:', err);
+            let config = readConfig();
+            delete config.toolFlowPath;
+            writeConfig(config);
+            return { success: false, error: `Không thể mở ứng dụng. Vui lòng chọn lại. Lỗi: ${err}` };
+        }
+        return { success: true };
+    } catch (e) {
+        console.error('Exception opening ToolFlows:', e);
+        return { success: false, error: 'Đã xảy ra lỗi không mong muốn khi cố gắng mở ứng dụng.' };
     }
   });
 

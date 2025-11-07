@@ -1,4 +1,3 @@
-
 import React, {
   useState,
   useCallback,
@@ -12,7 +11,7 @@ import CryptoJS from 'crypto-js';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, LinkIcon, FolderIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, LinkIcon, FolderIcon, ExternalLinkIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -271,6 +270,7 @@ const App: React.FC = () => {
     mvGenre: 'narrative',
     country: 'Vietnamese',
     characterConsistency: true,
+    characterCount: 1,
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
@@ -311,7 +311,6 @@ const App: React.FC = () => {
     { value: 'Generic/International', label: 'Quốc tế / Không xác định' },
   ];
 
-  // FIX: Changed CryptoJS.SHA2256 to CryptoJS.SHA256
   const getEncryptionKey = useCallback(() => CryptoJS.SHA256(machineId + SECRET_KEY).toString(), [machineId]);
 
   const encrypt = useCallback((text: string) => {
@@ -502,7 +501,10 @@ const App: React.FC = () => {
       if (type === 'checkbox') {
         const checked = (e.target as HTMLInputElement).checked;
         setFormData((prev) => ({ ...prev, [name]: checked }));
-      } else {
+      } else if (name === 'characterCount') {
+        setFormData((prev) => ({ ...prev, [name]: parseInt(value, 10) }));
+      }
+      else {
         setFormData((prev) => ({ ...prev, [name]: value }));
       }
     },[],
@@ -562,6 +564,9 @@ const App: React.FC = () => {
       userPrompt += `\n**User Specifications:**`;
       userPrompt += `\n- **Nationality:** ${formData.country}`;
       userPrompt += `\n- **Enforce Character Consistency:** ${formData.characterConsistency ? 'Yes' : 'No'}`;
+      if (formData.characterConsistency) {
+        userPrompt += `\n- **Number of Consistent Characters:** ${formData.characterCount}`;
+      }
       userPrompt += `\n- **Music Video Genre:** "${selectedGenre}"`;
 
     } else {
@@ -847,6 +852,20 @@ const App: React.FC = () => {
     ipcRenderer.send('open-folder', getFolderPath(filePath));
   };
 
+  const handleOpenToolFlows = async () => {
+    if (!ipcRenderer) {
+        setFeedback({ type: 'error', message: 'Chức năng này chỉ có trên ứng dụng desktop.' });
+        return;
+    }
+    setFeedback({ type: 'info', message: 'Đang mở ToolFlows...' });
+    const result = await ipcRenderer.invoke('open-tool-flow');
+    if (!result.success && result.error !== 'User canceled selection.') {
+        setFeedback({ type: 'error', message: `Lỗi: ${result.error}` });
+    } else {
+        setFeedback(null); // Clear message on success or user cancel
+    }
+  };
+
 
   const getStatusBadge = (status: JobStatus) => {
     const baseClasses = "status-badge";
@@ -982,12 +1001,24 @@ const App: React.FC = () => {
                             </select>
                         </div>
                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-indigo-100 mb-2">Đồng nhất nhân vật chính</label>
-                        <div className="flex items-center space-x-2 glass-card p-2 rounded-lg max-w-xs">
-                           <RadioLabel name="characterConsistency" value="true" checked={formData.characterConsistency} onChange={(val) => setFormData(p => ({ ...p, characterConsistency: val === 'true' }))}>Có</RadioLabel>
-                           <RadioLabel name="characterConsistency" value="false" checked={!formData.characterConsistency} onChange={(val) => setFormData(p => ({ ...p, characterConsistency: val === 'true' }))}>Không</RadioLabel>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm font-medium text-indigo-100 mb-2">Đồng nhất nhân vật chính</label>
+                            <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
+                               <RadioLabel name="characterConsistency" value="true" checked={formData.characterConsistency} onChange={(val) => setFormData(p => ({ ...p, characterConsistency: val === 'true' }))}>Có</RadioLabel>
+                               <RadioLabel name="characterConsistency" value="false" checked={!formData.characterConsistency} onChange={(val) => setFormData(p => ({ ...p, characterConsistency: val === 'true' }))}>Không</RadioLabel>
+                            </div>
                         </div>
+                        {formData.characterConsistency && (
+                           <div>
+                                <label htmlFor="characterCount" className="block text-sm font-medium text-indigo-100 mb-2">Số lượng nhân vật đồng nhất</label>
+                                <select id="characterCount" name="characterCount" value={formData.characterCount} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
+                                    <option value={1}>1 nhân vật</option>
+                                    <option value={2}>2 nhân vật</option>
+                                    <option value={3}>3 nhân vật</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
                   </div>
 
@@ -1106,10 +1137,23 @@ const App: React.FC = () => {
                                           <div className="text-xs text-gray-400 uppercase tracking-wider">Thời lượng</div>
                                       </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <button onClick={() => handleOpenFolder(currentFile.path)} className="p-2 bg-white/10 rounded-full hover:bg-white/20" title="Mở thư mục chứa file"><FolderIcon className="w-5 h-5"/></button>
-                                        <button onClick={() => handleCopyPath(currentFile.path)} className="p-2 bg-white/10 rounded-full hover:bg-white/20" title="Sao chép đường dẫn file"><CopyIcon className="w-5 h-5"/></button>
-                                        <button onClick={() => handleCopyPath(getFolderPath(currentFile.path))} className="p-2 bg-white/10 rounded-full hover:bg-white/20" title="Sao chép đường dẫn thư mục"><CopyIcon className="w-5 h-5"/></button>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <button onClick={handleOpenToolFlows} className="flex items-center gap-2 bg-purple-500 text-white font-bold py-2 px-4 rounded-full hover:bg-purple-600 transition text-sm">
+                                            <ExternalLinkIcon className="w-4 h-4"/>
+                                            <span>Mở ToolFlows</span>
+                                        </button>
+                                        <button onClick={() => handleOpenFolder(currentFile.path)} className="flex items-center gap-2 bg-indigo-500 text-white font-bold py-2 px-4 rounded-full hover:bg-indigo-600 transition text-sm">
+                                            <FolderIcon className="w-4 h-4"/>
+                                            <span>Mở Thư mục</span>
+                                        </button>
+                                        <button onClick={() => handleCopyPath(currentFile.path)} className="flex items-center gap-2 bg-white/10 text-white py-2 px-4 rounded-full hover:bg-white/20 transition text-sm">
+                                            <CopyIcon className="w-4 h-4"/>
+                                            <span>Copy Path File</span>
+                                        </button>
+                                        <button onClick={() => handleCopyPath(getFolderPath(currentFile.path))} className="flex items-center gap-2 bg-white/10 text-white py-2 px-4 rounded-full hover:bg-white/20 transition text-sm">
+                                            <CopyIcon className="w-4 h-4"/>
+                                            <span>Copy Path Thư mục</span>
+                                        </button>
                                         <button 
                                           onClick={handleGenerateCombineScript}
                                           disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath)}
