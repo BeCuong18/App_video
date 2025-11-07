@@ -1,5 +1,6 @@
 
 
+
 import React, {
   useState,
   useCallback,
@@ -15,7 +16,7 @@ import { Buffer } from 'buffer';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, FolderIcon, ExternalLinkIcon, KeyIcon, TrashIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, FolderIcon, ExternalLinkIcon, KeyIcon, TrashIcon, MoreVerticalIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -288,6 +289,9 @@ const App: React.FC = () => {
   const [copiedPath, setCopiedPath] = useState(false);
   const [copiedFolderPath, setCopiedFolderPath] = useState(false);
   const [toolsFlowPath, setToolsFlowPath] = useState<string | null>(null);
+  const [optionsMenuJobId, setOptionsMenuJobId] = useState<string | null>(null);
+  const optionsMenuRef = useRef<HTMLDivElement>(null);
+
 
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
@@ -486,21 +490,17 @@ const App: React.FC = () => {
     }
 
     const checkVideos = async () => {
-      const directoryPath = await ipcRenderer.invoke('get-directory-path', currentFile.path);
       const newVideoPaths: Record<string, string> = {};
-      if (!directoryPath) {
-        setVideoFilePaths({});
-        return;
-      }
-
+      
       for (const job of currentFile.jobs) {
         const videoFileName = `Video_${job.id}_${job.videoName}.mp4`;
-        const videoPath = await ipcRenderer.invoke('path-join', directoryPath, videoFileName);
-        if(videoPath) {
-            const exists = await ipcRenderer.invoke('check-file-exists', videoPath);
-            if (exists) {
-            newVideoPaths[job.id] = videoPath.replace(/\\/g, '/');
-            }
+        const foundPath = await ipcRenderer.invoke('find-video-file', {
+          excelPath: currentFile.path,
+          videoFileName: videoFileName,
+        });
+
+        if (foundPath) {
+          newVideoPaths[job.id] = foundPath.replace(/\\/g, '/');
         }
       }
       setVideoFilePaths(newVideoPaths);
@@ -508,6 +508,16 @@ const App: React.FC = () => {
 
     checkVideos();
   }, [activeTrackerFileIndex, trackedFiles]);
+  
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node)) {
+        setOptionsMenuJobId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -800,6 +810,32 @@ const App: React.FC = () => {
   const handleOpenFolder = (path: string) => {
       ipcRenderer?.send('open-file-location', path);
   };
+  
+  const handleOpenVideo = async (path: string) => {
+    if (!ipcRenderer) return;
+    const result = await ipcRenderer.invoke('open-video-file', path);
+    if (!result.success) {
+      setFeedback({ type: 'error', message: `Không thể mở video: ${result.error}` });
+    }
+    setOptionsMenuJobId(null);
+  };
+
+  const handleDeleteVideo = async (jobId: string, path: string) => {
+    if (!ipcRenderer) return;
+    const result = await ipcRenderer.invoke('delete-video-file', path);
+    if (result.success) {
+      setVideoFilePaths(prev => {
+        const newPaths = { ...prev };
+        delete newPaths[jobId];
+        return newPaths;
+      });
+      setFeedback({ type: 'success', message: 'Đã chuyển video vào thùng rác.' });
+    } else {
+      setFeedback({ type: 'error', message: `Lỗi khi xóa video: ${result.error}` });
+    }
+    setOptionsMenuJobId(null);
+  };
+
 
   const getStatusBadge = (status: JobStatus) => {
     const baseClasses = "status-badge";
@@ -815,10 +851,27 @@ const App: React.FC = () => {
 
   const renderResultCell = (job: VideoJob) => {
     const videoSrc = videoFilePaths[job.id];
-    const containerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center";
+    const containerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center relative";
 
     if (videoSrc) {
-        return <video src={`file://${videoSrc}`} controls className="w-40 h-24 object-contain bg-black/30 rounded-md" />;
+        return (
+          <div className={containerClasses}>
+            <video src={`file://${videoSrc}`} controls className="w-full h-full object-contain bg-black/30 rounded-md" />
+            <button
+                onClick={(e) => { e.stopPropagation(); setOptionsMenuJobId(job.id); }}
+                className="absolute top-1 right-1 p-1 bg-black/50 rounded-full text-white hover:bg-black/80 transition"
+            >
+                <MoreVerticalIcon className="w-4 h-4" />
+            </button>
+            {optionsMenuJobId === job.id && (
+                <div ref={optionsMenuRef} className="absolute top-8 right-1 z-10 bg-gray-800 border border-gray-700 rounded-md shadow-lg py-1 w-40">
+                    <button onClick={() => handleOpenVideo(videoSrc)} className="block w-full text-left px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700">Mở Video</button>
+                    <button onClick={() => handleOpenFolder(videoSrc)} className="block w-full text-left px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700">Mở Thư mục</button>
+                    <button onClick={() => handleDeleteVideo(job.id, videoSrc)} className="block w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-gray-700">Xóa Video</button>
+                </div>
+            )}
+          </div>
+        );
     }
     
     switch(job.status) {

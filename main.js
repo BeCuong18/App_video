@@ -16,6 +16,10 @@ autoUpdater.logger.transports.file.level = 'info';
 
 const fileWatchers = new Map();
 
+function getFilenameWithoutExt(filePath) {
+    return path.basename(filePath, path.extname(filePath));
+}
+
 function createWindow() {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -177,6 +181,51 @@ app.whenReady().then(() => {
   ipcMain.handle('path-join', (event, ...args) => {
       return path.join(...args);
   });
+
+  ipcMain.handle('find-video-file', async (event, { excelPath, videoFileName }) => {
+    if (!excelPath || !videoFileName) return null;
+    
+    const baseDir = path.dirname(excelPath);
+    const excelFilenameWithoutExt = getFilenameWithoutExt(excelPath);
+
+    // Path 1: Same directory as the excel file
+    const path1 = path.join(baseDir, videoFileName);
+    if (fs.existsSync(path1)) {
+        return path1;
+    }
+
+    // Path 2: Subdirectory with the same name as the excel file
+    const path2 = path.join(baseDir, excelFilenameWithoutExt, videoFileName);
+    if (fs.existsSync(path2)) {
+        return path2;
+    }
+
+    return null; // Not found
+  });
+
+  ipcMain.handle('delete-video-file', async (event, filePath) => {
+    try {
+        await shell.trashItem(filePath);
+        return { success: true };
+    } catch (error) {
+        console.error(`Failed to trash item ${filePath}:`, error);
+        return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('open-video-file', async(event, filePath) => {
+    try {
+        const errorMessage = await shell.openPath(filePath);
+        if (errorMessage) {
+            return { success: false, error: errorMessage };
+        }
+        return { success: true };
+    } catch (error) {
+        console.error(`Failed to open item ${filePath}:`, error);
+        return { success: false, error: error.message };
+    }
+  });
+
 
 });
 
