@@ -285,6 +285,7 @@ const App: React.FC = () => {
   const [videoFilePaths, setVideoFilePaths] = useState<Record<string, string>>({});
   const [copiedPath, setCopiedPath] = useState(false);
   const [copiedFolderPath, setCopiedFolderPath] = useState(false);
+  const [toolsFlowPath, setToolsFlowPath] = useState<string | null>(null);
 
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
@@ -389,6 +390,13 @@ const App: React.FC = () => {
             console.error("Failed to load API keys from storage", e);
             localStorage.removeItem('gemini_api_keys_list');
             localStorage.removeItem('gemini_active_api_key_id');
+        }
+
+        if (isElectron) {
+            const storedPath = localStorage.getItem('toolsflow_path');
+            if (storedPath) {
+                setToolsFlowPath(storedPath);
+            }
         }
 
     }, 100);
@@ -732,9 +740,38 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLaunchVideoTool = () => {
-    ipcRenderer?.send('launch-video-tool');
+  const handleLaunchVideoTool = async () => {
+    if (!ipcRenderer) return;
+  
+    let currentPath = toolsFlowPath;
+  
+    if (!currentPath) {
+      const selectedPath = await ipcRenderer.invoke('select-toolsflow-path');
+      if (selectedPath) {
+        setToolsFlowPath(selectedPath);
+        localStorage.setItem('toolsflow_path', selectedPath);
+        currentPath = selectedPath;
+      }
+    }
+  
+    if (currentPath) {
+      ipcRenderer.send('launch-video-tool', currentPath);
+    } else {
+      // User cancelled the file selection dialog
+      setFeedback({ type: 'info', message: 'Hủy thao tác khởi chạy ToolsFlow.' });
+    }
   };
+
+  const handleConfigureToolsFlowPath = async () => {
+    if (!ipcRenderer) return;
+    const selectedPath = await ipcRenderer.invoke('select-toolsflow-path');
+    if (selectedPath) {
+        setToolsFlowPath(selectedPath);
+        localStorage.setItem('toolsflow_path', selectedPath);
+        setFeedback({ type: 'success', message: 'Đã cập nhật đường dẫn ToolsFlow!' });
+    }
+  };
+  
 
   const handleCopyPath = (path: string) => {
       navigator.clipboard.writeText(path);
@@ -951,7 +988,7 @@ const App: React.FC = () => {
                             <p className="text-indigo-200 text-center">Trạng thái được cập nhật tự động khi file Excel thay đổi.</p>
                         </div>
 
-                        {feedback && ( <div className={`text-center font-medium p-3 rounded-lg ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : '' }`}>{feedback.message}</div> )}
+                        {feedback && ( <div className={`text-center font-medium p-3 rounded-lg ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>{feedback.message}</div> )}
                         
                         {trackedFiles.length === 0 ? (
                              <div className="text-center py-10 border-2 border-dashed border-white/20 rounded-lg">
@@ -975,10 +1012,17 @@ const App: React.FC = () => {
                                   </div>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <button onClick={handleOpenNewFile} className="bg-white/10 text-white font-bold py-2 px-4 rounded-full hover:bg-white/20 transition whitespace-nowrap text-sm">Tải File Mới</button>
-                                    {isElectron && <button onClick={handleLaunchVideoTool} className="bg-purple-500 text-white font-bold py-2 px-4 rounded-full hover:bg-purple-600 transition whitespace-nowrap flex items-center gap-2 text-sm">
-                                      <ExternalLinkIcon className="w-4 h-4" />
-                                      Bắt đầu với ToolsFlow
-                                    </button>}
+                                    {isElectron && (
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={handleLaunchVideoTool} className="bg-purple-500 text-white font-bold py-2 px-4 rounded-full hover:bg-purple-600 transition whitespace-nowrap flex items-center gap-2 text-sm">
+                                                <ExternalLinkIcon className="w-4 h-4" />
+                                                {toolsFlowPath ? 'Bắt đầu với ToolsFlow' : 'Cấu hình ToolsFlow'}
+                                            </button>
+                                            {toolsFlowPath && (
+                                                <button onClick={handleConfigureToolsFlowPath} className="text-xs text-indigo-300 hover:text-white underline" title="Thay đổi đường dẫn ToolsFlow.exe">Thay đổi</button>
+                                            )}
+                                        </div>
+                                    )}
                                   </div>
                                </div>
 

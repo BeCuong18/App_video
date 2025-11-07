@@ -1,3 +1,4 @@
+
 // main.js
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
@@ -117,14 +118,38 @@ app.whenReady().then(() => {
   });
 
   // --- New IPC Handlers ---
-  ipcMain.on('launch-video-tool', () => {
-    const command = 'ToolsFlow.exe';
+  ipcMain.on('launch-video-tool', (event, filePath) => {
+    if (!filePath) {
+        dialog.showErrorBox('Lỗi', 'Đường dẫn đến ToolsFlow chưa được cấu hình.');
+        return;
+    }
+    // IMPORTANT: Wrap the file path in quotes to handle paths with spaces
+    const command = `"${filePath}"`;
     exec(command, (error) => {
         if (error) {
             console.error(`exec error: ${error}`);
-            dialog.showErrorBox('Lỗi', `Không thể khởi động ${command}. Vui lòng đảm bảo phần mềm đã được cài đặt và có trong PATH hệ thống.\n\nChi tiết: ${error.message}`);
+            dialog.showErrorBox('Lỗi', `Không thể khởi động ứng dụng tại đường dẫn:\n${filePath}\n\nVui lòng kiểm tra lại đường dẫn và thử lại.\n\nChi tiết: ${error.message}`);
         }
     });
+  });
+
+  ipcMain.handle('select-toolsflow-path', async (event) => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) return null;
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Chọn file thực thi ToolsFlow',
+        properties: ['openFile'],
+        filters: [
+            { name: 'Executable', extensions: ['exe'] },
+            { name: 'All Files', extensions: ['*'] }
+        ]
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+        return null;
+    }
+    return result.filePaths[0];
   });
 
   ipcMain.on('open-file-location', (event, filePath) => {
