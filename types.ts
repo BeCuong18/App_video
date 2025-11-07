@@ -1,3 +1,5 @@
+
+export type MvGenre = 'narrative' | 'performance' | 'conceptual' | 'lyrical' | 'animation' | 'one-take';
 export type VideoType = 'story' | 'live';
 export type ActiveTab = 'generator' | 'tracker';
 export type JobStatus = 'Pending' | 'Processing' | 'Generating' | 'Completed' | 'Failed';
@@ -27,7 +29,7 @@ export interface FormData {
   songSeconds: string;
   projectName: string;
   model: string;
-  aspectRatio: '16:9' | '9:16';
+  mvGenre: MvGenre;
 }
 
 export interface VideoJob {

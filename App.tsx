@@ -9,7 +9,7 @@ import React, {
 import { GoogleGenAI, Type } from '@google/genai';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey } from './types';
+import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
 import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, LinkIcon } from './components/Icons';
@@ -268,7 +268,7 @@ const App: React.FC = () => {
     songSeconds: '30',
     projectName: '',
     model: 'gemini-flash-lite-latest',
-    aspectRatio: '16:9',
+    mvGenre: 'narrative',
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
@@ -285,6 +285,15 @@ const App: React.FC = () => {
   const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
 
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
+
+  const mvGenreOptions: { value: MvGenre, label: string }[] = [
+    { value: 'narrative', label: 'Kể chuyện (Narrative)' },
+    { value: 'performance', label: 'Trình diễn (Performance)' },
+    { value: 'conceptual', label: 'Trừu tượng (Conceptual)' },
+    { value: 'lyrical', label: 'Minh hoạ lời bài hát (Lyrical Montage)' },
+    { value: 'animation', label: 'Hoạt hình (Animation)' },
+    { value: 'one-take', label: 'Một cú máy (One-take)' },
+  ];
 
   const getEncryptionKey = useCallback(() => CryptoJS.SHA256(machineId + SECRET_KEY).toString(), [machineId]);
 
@@ -472,8 +481,6 @@ const App: React.FC = () => {
     },[],
   );
 
-  const handleAspectRatioChange = (value: '16:9' | '9:16') => setFormData((prev) => ({ ...prev, aspectRatio: value }));
-
   const handleImageUpload = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) {
@@ -535,7 +542,13 @@ const App: React.FC = () => {
       if (formData.liveArtist.trim()) userPrompt += ` The Artist & Performance Style is: "${formData.liveArtist.trim()}".`;
     }
 
-    userPrompt += ` The video should have exactly ${sceneCount} scenes, structured with a clear visual arc. The aspect ratio will be ${formData.aspectRatio}.`;
+    let genreDescription = '';
+    if (videoType === 'story') {
+        const selectedGenre = mvGenreOptions.find(o => o.value === formData.mvGenre)?.label || formData.mvGenre;
+        genreDescription = ` The music video genre is: "${selectedGenre}".`;
+    }
+    userPrompt += ` The video should have exactly ${sceneCount} scenes, structured with a clear visual arc.${genreDescription}`;
+
 
     const parts: any[] = [{ text: userPrompt }];
     if (videoType === 'live' && formData.liveArtistImage) {
@@ -877,20 +890,11 @@ const App: React.FC = () => {
             {activeTab === 'generator' && (
               <main>
                 <div className="space-y-6 mb-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-indigo-100 mb-2">1. Chọn loại Video</label>
-                      <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
-                        <RadioLabel name="videoType" value="story" checked={videoType === 'story'} onChange={setVideoType}>MV Kể Chuyện</RadioLabel>
-                        <RadioLabel name="videoType" value="live" checked={videoType === 'live'} onChange={setVideoType}>Live Acoustic</RadioLabel>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-indigo-100 mb-2">2. Chọn Khung hình Video</label>
-                      <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
-                        <RadioLabel name="aspectRatio" value="16:9" checked={formData.aspectRatio === '16:9'} onChange={handleAspectRatioChange}>16:9 (Landscape)</RadioLabel>
-                        <RadioLabel name="aspectRatio" value="9:16" checked={formData.aspectRatio === '9:16'} onChange={handleAspectRatioChange}>9:16 (Portrait)</RadioLabel>
-                      </div>
+                  <div>
+                    <label className="block text-sm font-medium text-indigo-100 mb-2">1. Chọn loại Video</label>
+                    <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
+                      <RadioLabel name="videoType" value="story" checked={videoType === 'story'} onChange={setVideoType}>MV Kể Chuyện</RadioLabel>
+                      <RadioLabel name="videoType" value="live" checked={videoType === 'live'} onChange={setVideoType}>Live Acoustic</RadioLabel>
                     </div>
                   </div>
 
@@ -898,6 +902,12 @@ const App: React.FC = () => {
                     <div>
                       <label htmlFor="idea" className="block text-sm font-medium text-indigo-100 mb-2">Nhập lời bài hát (Lyrics)</label>
                       <textarea id="idea" name="idea" value={formData.idea} onChange={handleInputChange} rows={4} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Dán toàn bộ lời bài hát vào đây để AI phân tích và tạo kịch bản..."></textarea>
+                    </div>
+                     <div>
+                        <label htmlFor="mvGenre" className="block text-sm font-medium text-indigo-100 mb-2">Chọn Thể Loại MV</label>
+                        <select id="mvGenre" name="mvGenre" value={formData.mvGenre} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition">
+                            {mvGenreOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        </select>
                     </div>
                   </div>
 
@@ -1046,4 +1056,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
