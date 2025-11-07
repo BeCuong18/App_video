@@ -1,4 +1,5 @@
 
+
 import React, {
   useState,
   useCallback,
@@ -14,7 +15,7 @@ import { Buffer } from 'buffer';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, FolderIcon, ExternalLinkIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -169,11 +170,6 @@ const App: React.FC = () => {
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
   const getEncryptionKey = useCallback(() => CryptoJS.SHA256(machineId + SECRET_KEY).toString(), [machineId]);
-
-  const encrypt = useCallback((text: string) => {
-    if (!machineId) return '';
-    return CryptoJS.AES.encrypt(text, getEncryptionKey()).toString();
-  }, [machineId, getEncryptionKey]);
 
   const decrypt = useCallback((ciphertext: string) => {
     if (!machineId) return '';
