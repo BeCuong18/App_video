@@ -295,6 +295,7 @@ const App: React.FC = () => {
     error: ''
   });
   const [showFfmpegInstallPrompt, setShowFfmpegInstallPrompt] = useState(false);
+  const [isCombiningVideo, setIsCombiningVideo] = useState(false);
 
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
@@ -843,16 +844,9 @@ const App: React.FC = () => {
         }
     };
   
-  const handleCombineVideoClick = async () => {
+  const handleExecuteCombine = async (mode: 'normal' | 'timed') => {
     const currentFile = trackedFiles[activeTrackerFileIndex];
-    if (!currentFile || !ipcRenderer) return;
-
-    if (ffmpegStatus.checking || ffmpegStatus.installing) return;
-
-    if (!ffmpegStatus.found) {
-        setShowFfmpegInstallPrompt(true);
-        return;
-    }
+    if (!currentFile || !ipcRenderer || !ffmpegStatus.found) return;
 
     const completedJobs = currentFile.jobs.filter(j => j.status === 'Completed' && j.videoPath);
     if (completedJobs.length < 1) {
@@ -860,27 +854,36 @@ const App: React.FC = () => {
         return;
     }
 
-    const targetDuration = currentFile.targetDurationSeconds;
-    if (!targetDuration || targetDuration <= 0) {
-        setFeedback({ type: 'error', message: 'Không tìm thấy thời lượng mục tiêu. Vui lòng tạo kịch bản từ đầu để dùng tính năng này.' });
-        return;
+    if (mode === 'timed') {
+        const targetDuration = currentFile.targetDurationSeconds;
+        if (!targetDuration || targetDuration <= 0) {
+            setFeedback({ type: 'error', message: 'Không tìm thấy thời lượng mục tiêu. Vui lòng tạo kịch bản từ đầu để dùng tính năng này.' });
+            return;
+        }
     }
 
-    const outputFileName = `combined_${currentFile.name.replace(/\.xlsx?$/, '.mp4')}`;
-    const isWindows = navigator.userAgent.includes("Windows");
+    setIsCombiningVideo(true);
+    setFeedback({ type: 'info', message: 'Bắt đầu quá trình ghép video... Vui lòng chờ.' });
+    
+    try {
+        const result = await ipcRenderer.invoke('execute-ffmpeg-combine', {
+            ffmpegPath: ffmpegStatus.path,
+            jobs: completedJobs,
+            targetDuration: currentFile.targetDurationSeconds,
+            mode: mode,
+        });
 
-    const result = await ipcRenderer.invoke('generate-and-save-combine-script', {
-        ffmpegPath: ffmpegStatus.path,
-        jobs: completedJobs,
-        targetDuration: targetDuration,
-        outputFileName: outputFileName,
-        isWindows: isWindows,
-    });
-
-    if (result.success) {
-        setFeedback({ type: 'success', message: `Script đã được lưu tại: ${result.filePath}. Chạy file này để ghép video.` });
-    } else if (result.error && result.error !== 'Save dialog canceled') {
-        setFeedback({ type: 'error', message: `Lỗi lưu script: ${result.error}` });
+        if (result.success) {
+            setFeedback({ type: 'success', message: `Ghép video thành công! File đã được lưu tại: ${result.filePath}` });
+        } else if (result.error && result.error !== 'Save dialog canceled') {
+            setFeedback({ type: 'error', message: `Lỗi ghép video: ${result.error}` });
+        } else {
+            setFeedback(null); // Canceled by user
+        }
+    } catch (err: any) {
+        setFeedback({ type: 'error', message: `Lỗi không xác định khi ghép video: ${err.message}` });
+    } finally {
+        setIsCombiningVideo(false);
     }
   };
   
@@ -1030,19 +1033,6 @@ const App: React.FC = () => {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  const renderCombineVideoButton = () => {
-    if (ffmpegStatus.checking) {
-      return 'Đang kiểm tra FFmpeg...';
-    }
-    if (ffmpegStatus.installing) {
-      return 'Đang cài đặt FFmpeg...';
-    }
-    if (!ffmpegStatus.found) {
-      return 'Cài đặt FFmpeg';
-    }
-    return 'Ghép Video';
   };
   
   return (
@@ -1264,14 +1254,41 @@ const App: React.FC = () => {
                                             <CopyIcon className="w-4 h-4"/>
                                             <span>Copy Path Thư mục</span>
                                         </button>
-                                        <button 
-                                          onClick={handleCombineVideoClick}
-                                          disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath) || ffmpegStatus.checking || ffmpegStatus.installing}
-                                          className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                          title="Ghép các video đã hoàn thành và đồng bộ với thời lượng bài hát"
-                                        >
-                                          {renderCombineVideoButton()}
-                                        </button>
+                                        
+                                        {ffmpegStatus.checking || ffmpegStatus.installing ? (
+                                            <button 
+                                                disabled 
+                                                className="bg-gray-500 text-white font-bold py-2 px-4 rounded-full cursor-not-allowed"
+                                            >
+                                                {ffmpegStatus.checking ? 'Đang kiểm tra FFmpeg...' : 'Đang cài đặt FFmpeg...'}
+                                            </button>
+                                        ) : !ffmpegStatus.found ? (
+                                            <button 
+                                                onClick={() => setShowFfmpegInstallPrompt(true)}
+                                                className="bg-amber-500 text-white font-bold py-2 px-4 rounded-full hover:bg-amber-600 transition"
+                                            >
+                                                Cài đặt FFmpeg
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <button 
+                                                    onClick={() => handleExecuteCombine('normal')}
+                                                    disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath) || isCombiningVideo}
+                                                    className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                                    title="Ghép các video đã hoàn thành theo thứ tự."
+                                                >
+                                                    {isCombiningVideo ? 'Đang xử lý...' : 'Ghép Thường'}
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleExecuteCombine('timed')}
+                                                    disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath) || !currentFile.targetDurationSeconds || isCombiningVideo}
+                                                    className="bg-cyan-500 text-white font-bold py-2 px-4 rounded-full hover:bg-cyan-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                                    title="Ghép các video đã hoàn thành và đồng bộ với thời lượng bài hát"
+                                                >
+                                                    {isCombiningVideo ? 'Đang xử lý...' : 'Ghép Theo Thời Gian'}
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
                                   </div>
                                   

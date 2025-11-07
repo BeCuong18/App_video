@@ -387,45 +387,52 @@ app.whenReady().then(() => {
         });
     });
 
-    ipcMain.handle('generate-and-save-combine-script', async (event, { ffmpegPath, jobs, targetDuration, outputFileName, isWindows }) => {
+    ipcMain.handle('execute-ffmpeg-combine', async (event, { ffmpegPath, jobs, targetDuration, mode }) => {
         const mainWindow = BrowserWindow.getFocusedWindow();
         if (!mainWindow) return { success: false, error: 'Window not found.' };
 
-        const estimatedSourceDuration = jobs.length * 7;
-        const speedFactor = estimatedSourceDuration / targetDuration;
-        const ptsMultiplier = (1 / speedFactor).toFixed(4);
-        
-        const safeFfmpegPath = `"${ffmpegPath}"`;
-
-        const inputFiles = jobs.map(job => `-i "${job.videoPath}"`).join(' ');
-        const filterParts = jobs.map((_, index) => `[${index}:v]setpts=${ptsMultiplier}*PTS[v${index}]`);
-        const concatInputs = jobs.map((_, index) => `[v${index}]`).join('');
-        const filterComplex = `${filterParts.join(';')};${concatInputs}concat=n=${jobs.length}:v=1:a=0[v]`;
-
-        const command = `${safeFfmpegPath} ${inputFiles} -filter_complex "${filterComplex}" -map "[v]" "${outputFileName}"`;
-
-        const scriptContent = isWindows 
-            ? `@echo off\nchcp 65001 > nul\nrem Script to combine and sync videos.\n\n${command}\n\necho "Video combination process finished."\npause`
-            : `#!/bin/bash\n# Script to combine and sync videos.\n\n${command}\n\necho "Video combination process finished."`;
-
-        const scriptExtension = isWindows ? 'bat' : 'sh';
-        const scriptFileName = `combine_script.${scriptExtension}`;
-
-        const result = await dialog.showSaveDialog(mainWindow, {
-            title: 'Lưu Script Ghép Video',
-            defaultPath: scriptFileName,
-            filters: [{ name: 'Script File', extensions: [scriptExtension] }]
+        const defaultFileName = `combined_${Date.now()}.mp4`;
+        const saveDialogResult = await dialog.showSaveDialog(mainWindow, {
+            title: 'Lưu Video Đã Ghép',
+            defaultPath: defaultFileName,
+            filters: [{ name: 'MP4 Video', extensions: ['mp4'] }]
         });
 
-        if (result.canceled || !result.filePath) {
+        if (saveDialogResult.canceled || !saveDialogResult.filePath) {
             return { success: false, error: 'Save dialog canceled' };
         }
-        try {
-            fs.writeFileSync(result.filePath, scriptContent);
-            return { success: true, filePath: result.filePath };
-        } catch (err) {
-            return { success: false, error: err.message };
+        const outputFilePath = saveDialogResult.filePath;
+        
+        const safeFfmpegPath = `"${ffmpegPath}"`;
+        const inputFiles = jobs.map(job => `-i "${job.videoPath}"`).join(' ');
+        
+        let command;
+
+        if (mode === 'timed') {
+            const estimatedSourceDuration = jobs.length * 7; // Assuming each clip is ~7s
+            const speedFactor = estimatedSourceDuration / targetDuration;
+            const ptsMultiplier = (1 / speedFactor).toFixed(4);
+            
+            const filterParts = jobs.map((_, index) => `[${index}:v]setpts=${ptsMultiplier}*PTS[v${index}]`);
+            const concatVideoInputs = jobs.map((_, index) => `[v${index}]`).join('');
+            const filterComplex = `${filterParts.join(';')};${concatVideoInputs}concat=n=${jobs.length}:v=1:a=0[v]`;
+            command = `${safeFfmpegPath} ${inputFiles} -filter_complex "${filterComplex}" -map "[v]" -y "${outputFilePath}"`;
+        } else { // 'normal' mode
+            const concatInputs = jobs.map((_, index) => `[${index}:v]`).join('');
+            const filterComplex = `${concatInputs}concat=n=${jobs.length}:v=1:a=0[v]`;
+            command = `${safeFfmpegPath} ${inputFiles} -filter_complex "${filterComplex}" -map "[v]" -y "${outputFilePath}"`;
         }
+
+        return new Promise((resolve) => {
+            exec(command, (error, stdout, stderr) => {
+                if (error) {
+                    console.error(`ffmpeg exec error: ${error}`);
+                    resolve({ success: false, error: `Lỗi FFmpeg: ${stderr || error.message}` });
+                    return;
+                }
+                resolve({ success: true, filePath: outputFilePath });
+            });
+        });
     });
 
 });
