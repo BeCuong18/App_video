@@ -1,6 +1,7 @@
 
 
 
+
 import React, {
   useState,
   useCallback,
@@ -16,7 +17,7 @@ import { Buffer } from 'buffer';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, FolderIcon, ExternalLinkIcon, KeyIcon, TrashIcon, MoreVerticalIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, FolderIcon, ExternalLinkIcon, KeyIcon, TrashIcon, PlayIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -289,8 +290,6 @@ const App: React.FC = () => {
   const [copiedPath, setCopiedPath] = useState(false);
   const [copiedFolderPath, setCopiedFolderPath] = useState(false);
   const [toolsFlowPath, setToolsFlowPath] = useState<string | null>(null);
-  const [optionsMenuJobId, setOptionsMenuJobId] = useState<string | null>(null);
-  const optionsMenuRef = useRef<HTMLDivElement>(null);
 
 
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
@@ -500,7 +499,7 @@ const App: React.FC = () => {
         });
 
         if (foundPath) {
-          newVideoPaths[job.id] = foundPath.replace(/\\/g, '/');
+          newVideoPaths[job.id] = foundPath;
         }
       }
       setVideoFilePaths(newVideoPaths);
@@ -508,16 +507,6 @@ const App: React.FC = () => {
 
     checkVideos();
   }, [activeTrackerFileIndex, trackedFiles]);
-  
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (optionsMenuRef.current && !optionsMenuRef.current.contains(event.target as Node)) {
-        setOptionsMenuJobId(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
 
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -817,7 +806,6 @@ const App: React.FC = () => {
     if (!result.success) {
       setFeedback({ type: 'error', message: `Không thể mở video: ${result.error}` });
     }
-    setOptionsMenuJobId(null);
   };
 
   const handleDeleteVideo = async (jobId: string, path: string) => {
@@ -833,7 +821,6 @@ const App: React.FC = () => {
     } else {
       setFeedback({ type: 'error', message: `Lỗi khi xóa video: ${result.error}` });
     }
-    setOptionsMenuJobId(null);
   };
 
 
@@ -850,37 +837,52 @@ const App: React.FC = () => {
   };
 
   const renderResultCell = (job: VideoJob) => {
-    const videoSrc = videoFilePaths[job.id];
-    const containerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center relative";
-
-    if (videoSrc) {
+    const nativeVideoPath = videoFilePaths[job.id];
+    const previewContainerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center relative flex-shrink-0";
+  
+    const renderPreview = () => {
+      if (nativeVideoPath) {
+        // Format path for file:// URL, which requires forward slashes
+        const videoUrl = `file://${nativeVideoPath.replace(/\\/g, '/')}`;
         return (
-          <div className={containerClasses}>
-            <video src={`file://${videoSrc}`} controls className="w-full h-full object-contain bg-black/30 rounded-md" />
-            <button
-                onClick={(e) => { e.stopPropagation(); setOptionsMenuJobId(job.id); }}
-                className="absolute top-1 right-1 p-1 bg-black/50 rounded-full text-white hover:bg-black/80 transition"
-            >
-                <MoreVerticalIcon className="w-4 h-4" />
-            </button>
-            {optionsMenuJobId === job.id && (
-                <div ref={optionsMenuRef} className="absolute top-8 right-1 z-10 bg-gray-800 border border-gray-700 rounded-md shadow-lg py-1 w-40">
-                    <button onClick={() => handleOpenVideo(videoSrc)} className="block w-full text-left px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700">Mở Video</button>
-                    <button onClick={() => handleOpenFolder(videoSrc)} className="block w-full text-left px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700">Mở Thư mục</button>
-                    <button onClick={() => handleDeleteVideo(job.id, videoSrc)} className="block w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-gray-700">Xóa Video</button>
-                </div>
-            )}
+          <div className={previewContainerClasses}>
+            <video src={videoUrl} controls className="w-full h-full object-contain bg-black/30 rounded-md" />
           </div>
         );
-    }
-    
-    switch(job.status) {
-      case 'Completed': return <div className={containerClasses}><CheckIcon className="w-10 h-10 text-emerald-400" /></div>;
-      case 'Processing':
-      case 'Generating': return <div className={containerClasses}><LoaderIcon /></div>;
-      default: return <div className={containerClasses}><VideoIcon className="w-8 h-8 text-gray-400" /></div>;
-    }
-  }
+      }
+      switch (job.status) {
+        case 'Completed': return <div className={previewContainerClasses}><CheckIcon className="w-10 h-10 text-emerald-400" /></div>;
+        case 'Processing':
+        case 'Generating': return <div className={previewContainerClasses}><LoaderIcon /></div>;
+        default: return <div className={previewContainerClasses}><VideoIcon className="w-8 h-8 text-gray-400" /></div>;
+      }
+    };
+  
+    const renderActions = () => {
+      if (!nativeVideoPath) return null;
+      // Pass the original nativeVideoPath to handlers for IPC calls
+      return (
+        <div className="flex items-center gap-2">
+            <button onClick={() => handleOpenVideo(nativeVideoPath)} title="Mở Video" className="p-2 text-indigo-300 hover:bg-white/10 rounded-full transition">
+                <PlayIcon className="w-5 h-5" />
+            </button>
+            <button onClick={() => handleOpenFolder(nativeVideoPath)} title="Mở Thư mục" className="p-2 text-indigo-300 hover:bg-white/10 rounded-full transition">
+                <FolderIcon className="w-5 h-5" />
+            </button>
+            <button onClick={() => handleDeleteVideo(job.id, nativeVideoPath)} title="Xóa Video" className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition">
+                <TrashIcon className="w-5 h-5" />
+            </button>
+        </div>
+      );
+    };
+  
+    return (
+      <div className="flex items-center gap-4 py-2">
+        {renderPreview()}
+        {renderActions()}
+      </div>
+    );
+  };
 
   const TabButton: React.FC<{ tabName: ActiveTab; children: React.ReactNode; }> = ({ tabName, children }) => (
     <button
