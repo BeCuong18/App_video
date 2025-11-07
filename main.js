@@ -32,6 +32,17 @@ function writeConfig(config) {
   }
 }
 
+// Helper function to find files recursively
+async function findFilesRecursively(dir) {
+    if (!fs.existsSync(dir)) return [];
+    const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+    const files = await Promise.all(dirents.map((dirent) => {
+        const res = path.resolve(dir, dirent.name);
+        return dirent.isDirectory() ? findFilesRecursively(res) : res;
+    }));
+    return Array.prototype.concat(...files);
+}
+
 
 function createWindow() {
   // Create the browser window.
@@ -137,7 +148,6 @@ app.whenReady().then(() => {
     }
   });
 
-
   ipcMain.on('start-watching-file', (event, filePath) => {
     if (!filePath || fileWatchers.has(filePath)) {
         return;
@@ -151,7 +161,6 @@ app.whenReady().then(() => {
                     mainWindow?.webContents.send('file-content-updated', { path: filePath, content });
                 } catch (readErr) {
                     console.error(`Error reading watched file ${filePath}:`, readErr);
-                    // Inform renderer that the file might be gone
                 }
             }
         });
@@ -222,6 +231,79 @@ app.whenReady().then(() => {
         return { success: false, error: 'Đã xảy ra lỗi không mong muốn khi cố gắng mở ứng dụng.' };
     }
   });
+
+    // --- New IPC Handlers for Video Management ---
+
+    ipcMain.handle('find-videos-for-jobs', async (event, { jobs, basePath }) => {
+        if (!basePath || !fs.existsSync(basePath)) {
+            return { success: false, jobs: jobs, error: "Base path does not exist." };
+        }
+    
+        try {
+            const allFiles = await findFilesRecursively(basePath);
+            const videoFiles = allFiles.filter(file => /\.(mp4|mov|avi|mkv|webm)$/i.test(file));
+            
+            const updatedJobs = jobs.map(job => {
+                // Only search for completed jobs that don't already have a path
+                if (job.status === 'Completed' && !job.videoPath) {
+                    const videoNamePattern = `Video_${job.id}_${job.videoName}`;
+                    const foundVideo = videoFiles.find(file => {
+                        const fileNameWithoutExt = path.parse(file).name;
+                        return fileNameWithoutExt === videoNamePattern;
+                    });
+    
+                    if (foundVideo) {
+                        return { ...job, videoPath: foundVideo };
+                    }
+                }
+                return job;
+            });
+    
+            return { success: true, jobs: updatedJobs };
+        } catch (err) {
+            console.error("Error finding videos:", err);
+            return { success: false, jobs: jobs, error: err.message };
+        }
+    });
+    
+    ipcMain.on('open-video-path', (event, videoPath) => {
+        if (videoPath && fs.existsSync(videoPath)) {
+            shell.openPath(videoPath).catch(err => console.error(`Failed to open video: ${videoPath}`, err));
+        }
+    });
+    
+    ipcMain.on('show-video-in-folder', (event, videoPath) => {
+        if (videoPath && fs.existsSync(videoPath)) {
+            shell.showItemInFolder(videoPath);
+        }
+    });
+    
+    ipcMain.handle('delete-video-file', async (event, videoPath) => {
+        if (!videoPath || !fs.existsSync(videoPath)) {
+            return { success: false, error: 'File not found.' };
+        }
+        const mainWindow = BrowserWindow.getFocusedWindow();
+        const result = await dialog.showMessageBox(mainWindow, {
+            type: 'warning',
+            buttons: ['Hủy', 'Xóa'],
+            defaultId: 0,
+            title: 'Xác nhận xóa',
+            message: 'Bạn có chắc chắn muốn xóa video này không?',
+            detail: `Video sẽ được chuyển vào thùng rác.\n${videoPath}`
+        });
+    
+        if (result.response === 1) { // 'Xóa' button
+            try {
+                await shell.trashItem(videoPath);
+                return { success: true };
+            } catch (error) {
+                console.error('Failed to delete video:', error);
+                return { success: false, error: error.message };
+            }
+        } else {
+            return { success: false, error: 'User canceled deletion.' };
+        }
+    });
 
 });
 

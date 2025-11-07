@@ -11,7 +11,7 @@ import CryptoJS from 'crypto-js';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, LinkIcon, FolderIcon, ExternalLinkIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, LinkIcon, FolderIcon, ExternalLinkIcon, PlayIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -287,6 +287,7 @@ const App: React.FC = () => {
   const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
   const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
 
+  const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
   const mvGenreOptions: { value: MvGenre, label: string }[] = [
@@ -428,7 +429,6 @@ const App: React.FC = () => {
     }
   }, [isActivated, apiKeys, activeApiKey]);
 
-  // FIX: Replace Node.js Buffer with Uint8Array for browser compatibility.
   const parseExcelData = (data: Uint8Array): VideoJob[] => {
     const workbook = XLSX.read(data, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -479,7 +479,6 @@ const App: React.FC = () => {
     
     sessionStorage.setItem('watchedPaths', JSON.stringify(Array.from(watchedPaths)));
 
-    // FIX: Replace Node.js Buffer with Uint8Array for browser compatibility.
     const handleFileUpdate = (_event: any, { path, content }: { path: string, content: Uint8Array }) => {
         const newJobs = parseExcelData(content);
         setTrackedFiles(prevFiles => 
@@ -495,6 +494,41 @@ const App: React.FC = () => {
         ipcRenderer.removeListener('file-content-updated', handleFileUpdate);
     };
   }, [trackedFiles]);
+
+  const getFolderPath = (filePath: string | undefined): string => {
+    if (!filePath) return '';
+    const isWindows = navigator.userAgent.includes("Windows");
+    const separator = isWindows ? '\\' : '/';
+    return filePath.substring(0, filePath.lastIndexOf(separator));
+  };
+  
+  useEffect(() => {
+    const currentFile = trackedFiles.length > 0 ? trackedFiles[activeTrackerFileIndex] : null;
+    if (isElectron && ipcRenderer && currentFile?.path) {
+        const hasIncompleteJobs = currentFile.jobs.some(j => j.status === 'Completed' && !j.videoPath);
+        const discoveryKey = `${currentFile.path}-${currentFile.jobs.map(j => j.status).join(',')}`;
+        
+        if (hasIncompleteJobs && !fileDiscoveryRef.current.has(discoveryKey)) {
+            const folderPath = getFolderPath(currentFile.path);
+            ipcRenderer.invoke('find-videos-for-jobs', { jobs: currentFile.jobs, basePath: folderPath })
+                .then(result => {
+                    if (result.success) {
+                        setTrackedFiles(prevFiles => {
+                            const newFiles = [...prevFiles];
+                            if(newFiles[activeTrackerFileIndex]) {
+                                newFiles[activeTrackerFileIndex] = {
+                                    ...newFiles[activeTrackerFileIndex],
+                                    jobs: result.jobs,
+                                };
+                            }
+                            return newFiles;
+                        });
+                        fileDiscoveryRef.current.add(discoveryKey);
+                    }
+                });
+        }
+    }
+  }, [trackedFiles, activeTrackerFileIndex]);
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       const { name, value, type } = e.target;
@@ -632,7 +666,6 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Error generating prompts:', err);
-      // FIX: Ensure error message is a string to prevent type errors with .includes() and during rendering.
       const errorMessage = String(err?.message || err || 'An unknown error occurred.');
       let displayMessage = errorMessage;
 
@@ -730,7 +763,6 @@ const App: React.FC = () => {
                 name: result.name,
                 jobs: loadedJobs,
                 path: result.path,
-                // Target duration is unknown for externally loaded files, maybe prompt user? For now, leave it undefined.
             };
             setTrackedFiles(prev => [...prev, newTrackedFile]);
             setActiveTrackerFileIndex(trackedFiles.length);
@@ -782,11 +814,9 @@ const App: React.FC = () => {
         return;
     }
 
-    // Estimate source duration. Assume each clip is ~7s as per generation logic.
     const estimatedSourceDuration = completedJobs.length * 7;
     const speedFactor = estimatedSourceDuration / targetDuration;
     
-    // Invert speed factor for ffmpeg setpts filter (lower number = faster, higher = slower)
     const ptsMultiplier = (1 / speedFactor).toFixed(4);
 
     const isWindows = navigator.userAgent.includes("Windows");
@@ -815,7 +845,6 @@ const App: React.FC = () => {
             setFeedback({ type: 'error', message: `Lỗi lưu script: ${result.error}` });
         }
     } else {
-        // Fallback for web browser
         const blob = new Blob([scriptContent], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -827,13 +856,6 @@ const App: React.FC = () => {
         URL.revokeObjectURL(url);
         setFeedback({ type: 'success', message: 'Script đã được tải xuống. Chạy file này để ghép video (yêu cầu đã cài đặt ffmpeg).' });
     }
-  };
-
-  const getFolderPath = (filePath: string | undefined): string => {
-    if (!filePath) return '';
-    const isWindows = navigator.userAgent.includes("Windows");
-    const separator = isWindows ? '\\' : '/';
-    return filePath.substring(0, filePath.lastIndexOf(separator));
   };
   
   const handleCopyPath = async (path: string | undefined) => {
@@ -862,10 +884,40 @@ const App: React.FC = () => {
     if (!result.success && result.error !== 'User canceled selection.') {
         setFeedback({ type: 'error', message: `Lỗi: ${result.error}` });
     } else {
-        setFeedback(null); // Clear message on success or user cancel
+        setFeedback(null);
     }
   };
 
+  const handlePlayVideo = (videoPath: string | undefined) => {
+    if (!ipcRenderer || !videoPath) return;
+    ipcRenderer.send('open-video-path', videoPath);
+  };
+
+  const handleShowInFolder = (videoPath: string | undefined) => {
+      if (!ipcRenderer || !videoPath) return;
+      ipcRenderer.send('show-video-in-folder', videoPath);
+  };
+
+  const handleDeleteVideo = async (jobId: string, videoPath: string | undefined) => {
+      if (!ipcRenderer || !videoPath) return;
+      const result = await ipcRenderer.invoke('delete-video-file', videoPath);
+      if (result.success) {
+          setTrackedFiles(prevFiles => {
+              const newFiles = [...prevFiles];
+              if (newFiles[activeTrackerFileIndex]) {
+                  const fileToUpdate = { ...newFiles[activeTrackerFileIndex] };
+                  fileToUpdate.jobs = fileToUpdate.jobs.map(job =>
+                      job.id === jobId ? { ...job, videoPath: undefined } : job
+                  );
+                  newFiles[activeTrackerFileIndex] = fileToUpdate;
+              }
+              return newFiles;
+          });
+          setFeedback({ type: 'success', message: 'Đã xóa video thành công.' });
+      } else if (result.error && result.error !== 'User canceled deletion.') {
+          setFeedback({ type: 'error', message: `Lỗi khi xóa video: ${result.error}` });
+      }
+  };
 
   const getStatusBadge = (status: JobStatus) => {
     const baseClasses = "status-badge";
@@ -885,19 +937,26 @@ const App: React.FC = () => {
       case 'Completed':
         if (job.videoPath) {
           return (
-            <div className={`${containerClasses} flex-col`}>
-              <CheckIcon className="w-8 h-8 text-emerald-400 mb-1" />
-              <p className="text-xs text-gray-300 break-all" title={job.videoPath}>...{job.videoPath.slice(-20)}</p>
-              <button onClick={() => handleLinkVideo(job.id, fileIndex)} className="text-xs text-indigo-300 hover:underline mt-1">Thay đổi</button>
+            <div className="flex items-center gap-2">
+                <div className="w-40 h-24 bg-black rounded-md overflow-hidden relative group">
+                    <video src={job.videoPath} className="w-full h-full object-cover" muted loop playsInline onMouseOver={e => e.currentTarget.play().catch(console.error)} onMouseOut={e => e.currentTarget.pause()}></video>
+                    <button onClick={() => handlePlayVideo(job.videoPath)} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                         <PlayIcon className="w-8 h-8 text-white"/>
+                    </button>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                    <button onClick={() => handlePlayVideo(job.videoPath)} title="Mở video" className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition"><PlayIcon className="w-4 h-4 text-white" /></button>
+                    <button onClick={() => handleShowInFolder(job.videoPath)} title="Mở thư mục chứa video" className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition"><FolderIcon className="w-4 h-4 text-white" /></button>
+                    <button onClick={() => handleDeleteVideo(job.id, job.videoPath)} title="Xóa video" className="p-2 rounded-full bg-red-500/20 hover:bg-red-500/40 transition"><TrashIcon className="w-4 h-4 text-red-300" /></button>
+                </div>
             </div>
           );
         }
         return (
-          <div className={containerClasses}>
-            <button onClick={() => handleLinkVideo(job.id, fileIndex)} className="flex flex-col items-center justify-center text-indigo-200 hover:text-white transition">
-              <LinkIcon className="w-6 h-6 mb-1" />
-              <span className="text-sm font-semibold">Link Video</span>
-            </button>
+          <div className={`${containerClasses} flex-col text-indigo-200`}>
+             <VideoIcon className="w-8 h-8 text-gray-400 mb-1" />
+             <p className="text-xs font-semibold mb-1">Không tìm thấy video</p>
+             <button onClick={() => handleLinkVideo(job.id, fileIndex)} className="text-xs text-indigo-300 hover:underline">Link thủ công</button>
           </div>
         );
       case 'Processing':
