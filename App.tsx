@@ -11,7 +11,7 @@ import CryptoJS from 'crypto-js';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, LinkIcon, FolderIcon, ExternalLinkIcon, PlayIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -511,7 +511,7 @@ const App: React.FC = () => {
         if (hasIncompleteJobs && !fileDiscoveryRef.current.has(discoveryKey)) {
             const folderPath = getFolderPath(currentFile.path);
             ipcRenderer.invoke('find-videos-for-jobs', { jobs: currentFile.jobs, basePath: folderPath })
-                .then(result => {
+                .then((result: { success: boolean; jobs: VideoJob[]; error?: string; }) => {
                     if (result.success) {
                         setTrackedFiles(prevFiles => {
                             const newFiles = [...prevFiles];
