@@ -1,5 +1,6 @@
 
 
+
 import React, {
   useState,
   useCallback,
@@ -15,7 +16,7 @@ import { Buffer } from 'buffer';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, FolderIcon, ExternalLinkIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, FolderIcon, ExternalLinkIcon, KeyIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -132,9 +133,78 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
   );
 };
 
-// REFACTOR: The ApiKeyManagerScreen component and related logic have been removed 
-// to align with the @google/genai SDK best practices. The API key should be
-// managed via the `process.env.API_KEY` environment variable, not through the UI.
+// --- API Key Manager ---
+interface ApiKeyManagerProps {
+  onKeySave: (key: string) => void;
+  initialKey?: string;
+}
+
+const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ onKeySave, initialKey }) => {
+  const [key, setKey] = useState(initialKey || '');
+  const [error, setError] = useState('');
+
+  const handleSave = () => {
+    if (!key.trim()) {
+      setError('Vui lòng nhập một API key.');
+      return;
+    }
+    setError('');
+    onKeySave(key.trim());
+  };
+
+  return (
+    <div className="text-white min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md mx-auto">
+        <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl text-center">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
+            Thiết Lập API Key
+          </h1>
+          <p className="text-indigo-200 mb-6">
+            Vui lòng nhập Gemini API Key của bạn để tiếp tục.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="apiKey" className="block text-sm font-medium text-indigo-100 mb-2">
+                Gemini API Key
+              </label>
+              <textarea
+                id="apiKey"
+                value={key}
+                onChange={(e) => setKey(e.target.value)}
+                rows={3}
+                className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                placeholder="Dán API Key của bạn vào đây..."
+                required
+              />
+            </div>
+
+            <p className="text-xs text-indigo-300">
+              Bạn có thể lấy API Key tại{' '}
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline hover:text-white">
+                Google AI Studio
+              </a>.
+            </p>
+            
+            <button
+              onClick={handleSave}
+              className="w-full bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
+            >
+              Lưu và Tiếp Tục
+            </button>
+            
+            {error && (
+              <div className="text-red-300 font-medium bg-red-900/50 p-3 rounded-lg mt-4">
+                {error}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('generator');
@@ -158,8 +228,8 @@ const App: React.FC = () => {
   const [isActivated, setIsActivated] = useState<boolean | null>(null);
   const [machineId, setMachineId] = useState<string>('');
   
-  // REFACTOR: Removed state related to UI-based API key management.
-  // The API key will be sourced from `process.env.API_KEY`.
+  const [apiKey, setApiKey] = useState<string>('');
+  const [showKeyManager, setShowKeyManager] = useState<boolean>(false);
 
   const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
   const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
@@ -168,22 +238,6 @@ const App: React.FC = () => {
   const [copiedFolderPath, setCopiedFolderPath] = useState(false);
 
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
-
-  const getEncryptionKey = useCallback(() => CryptoJS.SHA256(machineId + SECRET_KEY).toString(), [machineId]);
-
-  const decrypt = useCallback((ciphertext: string) => {
-    if (!machineId) return '';
-    try {
-      const bytes = CryptoJS.AES.decrypt(ciphertext, getEncryptionKey());
-      return bytes.toString(CryptoJS.enc.Utf8);
-    } catch {
-      return '';
-    }
-  }, [machineId, getEncryptionKey]);
-
-  useEffect(() => {
-    // REFACTOR: Removed API key loading logic.
-  }, [machineId, decrypt]);
 
   const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
     if (!machineId) return false;
@@ -209,7 +263,14 @@ const App: React.FC = () => {
       return false;
   }, [validateLicenseKey]);
   
-  // REFACTOR: Removed API key management functions (`handleKeyAdd`, `handleKeyDelete`, `handleKeySelect`).
+  const handleKeySave = (key: string) => {
+    const trimmedKey = key.trim();
+    if (trimmedKey) {
+        setApiKey(trimmedKey);
+        localStorage.setItem('gemini_api_key', trimmedKey);
+        setShowKeyManager(false);
+    }
+  };
 
   useEffect(() => {
     setTimeout(() => {
@@ -232,10 +293,14 @@ const App: React.FC = () => {
             }
         }
         setIsActivated(activationStatus);
+
+        const storedApiKey = localStorage.getItem('gemini_api_key');
+        if (storedApiKey) {
+            setApiKey(storedApiKey);
+        }
+
     }, 100);
   }, []);
-
-  // REFACTOR: Removed useEffect for activating an API key from session storage.
 
   const parseExcelData = (data: Buffer): VideoJob[] => {
     const workbook = XLSX.read(data, { type: 'buffer' });
@@ -368,8 +433,11 @@ const App: React.FC = () => {
   }, []);
 
   const generatePrompts = async () => {
-    // REFACTOR: Removed check for activeApiKey. The SDK will use the key
-    // from the environment variable `process.env.API_KEY`.
+    if (!apiKey) {
+      setFeedback({ type: 'error', message: 'Vui lòng thiết lập API Key trước khi tạo prompt.' });
+      setShowKeyManager(true);
+      return;
+    }
     setIsLoading(true);
     setFeedback(null);
     setGeneratedScenes([]);
@@ -414,9 +482,7 @@ const App: React.FC = () => {
     }
 
     try {
-      // REFACTOR: Initialize GoogleGenAI with the API key from environment variables
-      // as per @google/genai SDK guidelines.
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: apiKey });
       const response = await ai.models.generateContent({
         model: formData.model,
         contents: { parts: parts },
@@ -458,9 +524,9 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error('Error generating prompts:', err);
       let displayMessage = err.message || 'An unknown error occurred.';
-      // REFACTOR: Updated error message for invalid API key to align with environment variable usage.
       if (err.message?.includes('API key not valid')) {
-        displayMessage = 'Lỗi xác thực. API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra biến môi trường API_KEY của bạn.';
+        displayMessage = 'Lỗi xác thực. API key không hợp lệ hoặc đã hết hạn. Vui lòng kiểm tra lại.';
+        setShowKeyManager(true);
       } else if (err.message?.includes('quota')) {
         displayMessage = 'Bạn đã vượt quá hạn ngạch sử dụng cho Khóa API này.';
       } else if (err.message?.includes('Requested entity was not found')) {
@@ -650,8 +716,9 @@ const App: React.FC = () => {
   if (!isActivated && machineId) {
     return <Activation machineId={machineId} onActivate={handleActivate} />;
   }
-  // REFACTOR: Removed conditional rendering of ApiKeyManagerScreen.
-  // The app will now render directly if activated.
+  if (!apiKey || showKeyManager) {
+    return <ApiKeyManagerScreen onKeySave={handleKeySave} initialKey={apiKey} />;
+  }
   
   return (
     <>
@@ -660,7 +727,16 @@ const App: React.FC = () => {
           <header className="text-center mb-6 relative">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">🎬 Prompt Generator Pro</h1>
             <p className="text-lg text-indigo-200 mt-2">Biến ý tưởng thành kịch bản & theo dõi sản xuất video.</p>
-            {/* REFACTOR: Removed the API key display from the header. */}
+            <div className="absolute top-0 right-0">
+                <button
+                    onClick={() => setShowKeyManager(true)}
+                    className="active-key-display"
+                    title="Change API Key"
+                >
+                    <KeyIcon className="w-4 h-4 text-emerald-400" />
+                    <span>API Key is Set</span>
+                </button>
+            </div>
           </header>
 
           <div className="flex space-x-2">
