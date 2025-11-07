@@ -732,12 +732,14 @@ const App: React.FC = () => {
   
       const dataForExcel = dataForTracker.map(job => ({ ...job, status: '' }));
 
-      const worksheet = XLSX.utils.json_to_sheet(dataForExcel, {
+      const headers = [['JOB_ID', 'PROMPT', 'IMAGE_PATH', 'IMAGE_PATH_2', 'IMAGE_PATH_3', 'STATUS', 'VIDEO_NAME', 'TYPE_VIDEO']];
+      const worksheet = XLSX.utils.aoa_to_sheet(headers);
+      
+      XLSX.utils.sheet_add_json(worksheet, dataForExcel, {
         header: ['id', 'prompt', 'imagePath', 'imagePath2', 'imagePath3', 'status', 'videoName', 'typeVideo'],
         skipHeader: true,
+        origin: 'A2', 
       });
-      
-      XLSX.utils.sheet_add_aoa(worksheet, [['JOB_ID', 'PROMPT', 'IMAGE_PATH', 'IMAGE_PATH_2', 'IMAGE_PATH_3', 'STATUS', 'VIDEO_NAME', 'TYPE_VIDEO']], { origin: 'A1' });
 
       worksheet['!cols'] = [
         { wch: 15 }, { wch: 150 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 30 }, { wch: 15 },
