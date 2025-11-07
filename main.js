@@ -3,6 +3,8 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
+const { exec } = require('child_process');
+const https = require('https');
 
 // Configure logging for autoUpdater
 autoUpdater.logger = require('electron-log');
@@ -127,27 +129,6 @@ app.whenReady().then(() => {
     return { success: true, path: filePath };
   });
 
-  ipcMain.handle('save-script-file-dialog', async (event, { defaultPath, fileContent }) => {
-    const mainWindow = BrowserWindow.getFocusedWindow();
-    if (!mainWindow) return { success: false, error: 'Window not found.' };
-    const result = await dialog.showSaveDialog(mainWindow, {
-        title: 'Lưu Script Ghép Video',
-        defaultPath: defaultPath,
-        filters: [
-            { name: 'Script File', extensions: ['bat', 'sh'] }
-        ]
-    });
-     if (result.canceled || !result.filePath) {
-        return { success: false, error: 'Save dialog canceled' };
-    }
-    try {
-        fs.writeFileSync(result.filePath, fileContent);
-        return { success: true, filePath: result.filePath };
-    } catch (err) {
-        return { success: false, error: err.message };
-    }
-  });
-
   ipcMain.on('start-watching-file', (event, filePath) => {
     if (!filePath || fileWatchers.has(filePath)) {
         return;
@@ -232,8 +213,7 @@ app.whenReady().then(() => {
     }
   });
 
-    // --- New IPC Handlers for Video Management ---
-
+    // --- Video Management ---
     ipcMain.handle('find-videos-for-jobs', async (event, { jobs, basePath }) => {
         if (!basePath || !fs.existsSync(basePath)) {
             return { success: false, jobs: jobs, error: "Base path does not exist." };
@@ -244,7 +224,6 @@ app.whenReady().then(() => {
             const videoFiles = allFiles.filter(file => /\.(mp4|mov|avi|mkv|webm)$/i.test(file));
             
             const updatedJobs = jobs.map(job => {
-                // Only search for completed jobs that don't already have a path
                 if (job.status === 'Completed' && !job.videoPath) {
                     const videoNamePattern = `Video_${job.id}_${job.videoName}`;
                     const foundVideo = videoFiles.find(file => {
@@ -302,6 +281,150 @@ app.whenReady().then(() => {
             }
         } else {
             return { success: false, error: 'User canceled deletion.' };
+        }
+    });
+
+    // --- FFmpeg Management ---
+    const ffmpegDir = path.join(app.getPath('userData'), 'ffmpeg_bin');
+    const ffmpegPath = path.join(ffmpegDir, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+
+    ipcMain.handle('check-ffmpeg', async () => {
+        if (fs.existsSync(ffmpegPath)) {
+            return { found: true, path: ffmpegPath };
+        }
+        return new Promise((resolve) => {
+            exec('ffmpeg -version', (error) => {
+                if (!error) {
+                    resolve({ found: true, path: 'ffmpeg' });
+                } else {
+                    resolve({ found: false });
+                }
+            });
+        });
+    });
+
+    ipcMain.handle('install-ffmpeg', (event) => {
+        return new Promise(async (resolve, reject) => {
+            const mainWindow = BrowserWindow.fromWebContents(event.sender);
+            const platform = process.platform;
+            let downloadUrl;
+            
+            if (platform === 'win32') {
+                downloadUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
+            } else if (platform === 'darwin') {
+                downloadUrl = `https://evermeet.cx/ffmpeg/ffmpeg-7.0.zip`;
+            } else {
+                return resolve({ success: false, error: 'Hệ điều hành không được hỗ trợ để cài đặt tự động.' });
+            }
+
+            if (!fs.existsSync(ffmpegDir)) {
+                fs.mkdirSync(ffmpegDir, { recursive: true });
+            }
+            const zipPath = path.join(ffmpegDir, 'ffmpeg.zip');
+
+            const file = fs.createWriteStream(zipPath);
+            https.get(downloadUrl, (response) => {
+                if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+                    // Handle redirect
+                    https.get(response.headers.location, (redirectResponse) => {
+                        redirectResponse.pipe(file);
+                        file.on('finish', () => {
+                            file.close();
+                            extractAndInstall();
+                        });
+                    }).on('error', (err) => {
+                        fs.unlink(zipPath, () => {});
+                        resolve({ success: false, error: `Lỗi tải file (redirect): ${err.message}` });
+                    });
+                    return;
+                }
+                
+                response.pipe(file);
+                file.on('finish', () => {
+                    file.close();
+                    extractAndInstall();
+                });
+            }).on('error', (err) => {
+                fs.unlink(zipPath, () => {});
+                resolve({ success: false, error: `Lỗi tải file: ${err.message}` });
+            });
+
+            const extractAndInstall = () => {
+                const extractDir = path.join(ffmpegDir, 'extracted');
+                if (fs.existsSync(extractDir)) fs.rmSync(extractDir, { recursive: true, force: true });
+                fs.mkdirSync(extractDir);
+
+                const command = platform === 'win32'
+                    ? `powershell -command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force"`
+                    : `unzip -o '${zipPath}' -d '${extractDir}'`;
+
+                exec(command, async (error) => {
+                    if (error) {
+                        return resolve({ success: false, error: `Lỗi giải nén: ${error.message}` });
+                    }
+                    
+                    try {
+                        const allFiles = await findFilesRecursively(extractDir);
+                        const binary = allFiles.find(f => path.basename(f) === (platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'));
+
+                        if (!binary) {
+                           return resolve({ success: false, error: 'Không tìm thấy file thực thi ffmpeg sau khi giải nén.' });
+                        }
+
+                        fs.copyFileSync(binary, ffmpegPath);
+                        fs.chmodSync(ffmpegPath, 0o755); // Make executable
+
+                        // Cleanup
+                        fs.unlinkSync(zipPath);
+                        fs.rmSync(extractDir, { recursive: true, force: true });
+
+                        resolve({ success: true, path: ffmpegPath });
+                    } catch (e) {
+                        resolve({ success: false, error: `Lỗi cài đặt: ${e.message}` });
+                    }
+                });
+            };
+        });
+    });
+
+    ipcMain.handle('generate-and-save-combine-script', async (event, { ffmpegPath, jobs, targetDuration, outputFileName, isWindows }) => {
+        const mainWindow = BrowserWindow.getFocusedWindow();
+        if (!mainWindow) return { success: false, error: 'Window not found.' };
+
+        const estimatedSourceDuration = jobs.length * 7;
+        const speedFactor = estimatedSourceDuration / targetDuration;
+        const ptsMultiplier = (1 / speedFactor).toFixed(4);
+        
+        const safeFfmpegPath = `"${ffmpegPath}"`;
+
+        const inputFiles = jobs.map(job => `-i "${job.videoPath}"`).join(' ');
+        const filterParts = jobs.map((_, index) => `[${index}:v]setpts=${ptsMultiplier}*PTS[v${index}]`);
+        const concatInputs = jobs.map((_, index) => `[v${index}]`).join('');
+        const filterComplex = `${filterParts.join(';')};${concatInputs}concat=n=${jobs.length}:v=1:a=0[v]`;
+
+        const command = `${safeFfmpegPath} ${inputFiles} -filter_complex "${filterComplex}" -map "[v]" "${outputFileName}"`;
+
+        const scriptContent = isWindows 
+            ? `@echo off\nchcp 65001 > nul\nrem Script to combine and sync videos.\n\n${command}\n\necho "Video combination process finished."\npause`
+            : `#!/bin/bash\n# Script to combine and sync videos.\n\n${command}\n\necho "Video combination process finished."`;
+
+        const scriptExtension = isWindows ? 'bat' : 'sh';
+        const scriptFileName = `combine_script.${scriptExtension}`;
+
+        const result = await dialog.showSaveDialog(mainWindow, {
+            title: 'Lưu Script Ghép Video',
+            defaultPath: scriptFileName,
+            filters: [{ name: 'Script File', extensions: [scriptExtension] }]
+        });
+
+        if (result.canceled || !result.filePath) {
+            return { success: false, error: 'Save dialog canceled' };
+        }
+        try {
+            fs.writeFileSync(result.filePath, scriptContent);
+            return { success: true, filePath: result.filePath };
+        } catch (err) {
+            return { success: false, error: err.message };
         }
     });
 

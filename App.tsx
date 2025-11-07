@@ -287,6 +287,15 @@ const App: React.FC = () => {
   const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
   const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
 
+  const [ffmpegStatus, setFfmpegStatus] = useState({
+    checking: true,
+    found: false,
+    installing: false,
+    path: '',
+    error: ''
+  });
+  const [showFfmpegInstallPrompt, setShowFfmpegInstallPrompt] = useState(false);
+
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
@@ -429,35 +438,43 @@ const App: React.FC = () => {
     }
   }, [isActivated, apiKeys, activeApiKey]);
 
-  const parseExcelData = (data: Uint8Array): VideoJob[] => {
-    const workbook = XLSX.read(data, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
-    const json: any[] = XLSX.utils.sheet_to_json(worksheet);
-    
-    const validStatuses: JobStatus[] = ['Pending', 'Processing', 'Generating', 'Completed', 'Failed'];
+    const parseExcelData = (data: Uint8Array): VideoJob[] => {
+        const workbook = XLSX.read(data, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        const dataAsArrays: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false });
 
-    return json.map((row, index) => {
-      let statusStr = (row.STATUS || '').toString().trim();
-      let status: JobStatus = 'Pending';
-      if (statusStr && validStatuses.includes(statusStr as JobStatus)) {
-          status = statusStr as JobStatus;
-      } else if (statusStr) {
-          status = 'Pending';
-      }
-      return {
-        id: row.JOB_ID || `job_${index + 1}`,
-        prompt: row.PROMPT || '',
-        imagePath: row.IMAGE_PATH || '',
-        imagePath2: row.IMAGE_PATH_2 || '',
-        imagePath3: row.IMAGE_PATH_3 || '',
-        status: status,
-        videoName: row.VIDEO_NAME || '',
-        typeVideo: row.TYPE_VIDEO || '',
-        videoPath: row.VIDEO_PATH || undefined,
-      };
-    });
-  };
+        if (dataAsArrays.length < 2) return [];
+
+        const headers: string[] = dataAsArrays[0].map(h => String(h).trim());
+        const headerMap: { [key: string]: number } = {};
+        headers.forEach((h, i) => { headerMap[h] = i; });
+        
+        const dataRows = dataAsArrays.slice(1);
+        const validStatuses: JobStatus[] = ['Pending', 'Processing', 'Generating', 'Completed', 'Failed'];
+
+        return dataRows.map((rowArray, index) => {
+            const get = (headerName: string) => rowArray[headerMap[headerName]] || '';
+            let statusStr = String(get('STATUS')).trim();
+            let status: JobStatus = 'Pending';
+            if (statusStr && validStatuses.includes(statusStr as JobStatus)) {
+                status = statusStr as JobStatus;
+            }
+
+            return {
+                id: get('JOB_ID') || `job_${index + 1}`,
+                prompt: get('PROMPT') || '',
+                imagePath: get('IMAGE_PATH') || '',
+                imagePath2: get('IMAGE_PATH_2') || '',
+                imagePath3: get('IMAGE_PATH_3') || '',
+                status: status,
+                videoName: get('VIDEO_NAME') || '',
+                typeVideo: get('TYPE_VIDEO') || '',
+                videoPath: get('VIDEO_PATH') || undefined,
+            };
+        }).filter(job => job.id && String(job.id).trim());
+    };
 
   useEffect(() => {
     if (!ipcRenderer) return;
@@ -529,6 +546,15 @@ const App: React.FC = () => {
         }
     }
   }, [trackedFiles, activeTrackerFileIndex]);
+
+  useEffect(() => {
+    if (activeTab === 'tracker' && ipcRenderer) {
+      setFfmpegStatus(prev => ({ ...prev, checking: true }));
+      ipcRenderer.invoke('check-ffmpeg').then((result: { found: boolean, path?: string }) => {
+        setFfmpegStatus({ ...ffmpegStatus, checking: false, found: result.found, path: result.path || '' });
+      });
+    }
+  }, [activeTab]);
 
   const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       const { name, value, type } = e.target;
@@ -798,9 +824,33 @@ const App: React.FC = () => {
     }
   };
   
-  const handleGenerateCombineScript = async () => {
+    const handleStartFfmpegInstall = async () => {
+        if (!ipcRenderer) return;
+        setShowFfmpegInstallPrompt(false);
+        setFfmpegStatus(prev => ({ ...prev, installing: true, error: '' }));
+        setFeedback({ type: 'info', message: 'Đang tải và cài đặt FFmpeg, vui lòng chờ...' });
+
+        const result = await ipcRenderer.invoke('install-ffmpeg');
+
+        if (result.success) {
+            setFfmpegStatus({ checking: false, found: true, installing: false, path: result.path, error: '' });
+            setFeedback({ type: 'success', message: 'Cài đặt FFmpeg thành công!' });
+        } else {
+            setFfmpegStatus(prev => ({ ...prev, installing: false, found: false, error: result.error }));
+            setFeedback({ type: 'error', message: `Lỗi cài đặt FFmpeg: ${result.error}. Vui lòng cài đặt thủ công và khởi động lại ứng dụng.` });
+        }
+    };
+  
+  const handleCombineVideoClick = async () => {
     const currentFile = trackedFiles[activeTrackerFileIndex];
-    if (!currentFile) return;
+    if (!currentFile || !ipcRenderer) return;
+
+    if (ffmpegStatus.checking || ffmpegStatus.installing) return;
+
+    if (!ffmpegStatus.found) {
+        setShowFfmpegInstallPrompt(true);
+        return;
+    }
 
     const completedJobs = currentFile.jobs.filter(j => j.status === 'Completed' && j.videoPath);
     if (completedJobs.length < 1) {
@@ -810,51 +860,25 @@ const App: React.FC = () => {
 
     const targetDuration = currentFile.targetDurationSeconds;
     if (!targetDuration || targetDuration <= 0) {
-        setFeedback({ type: 'error', message: 'Không tìm thấy thời lượng mục tiêu cho file kịch bản này. Vui lòng tạo kịch bản từ đầu để sử dụng tính năng này.' });
+        setFeedback({ type: 'error', message: 'Không tìm thấy thời lượng mục tiêu. Vui lòng tạo kịch bản từ đầu để dùng tính năng này.' });
         return;
     }
 
-    const estimatedSourceDuration = completedJobs.length * 7;
-    const speedFactor = estimatedSourceDuration / targetDuration;
-    
-    const ptsMultiplier = (1 / speedFactor).toFixed(4);
-
+    const outputFileName = `combined_${currentFile.name.replace(/\.xlsx?$/, '.mp4')}`;
     const isWindows = navigator.userAgent.includes("Windows");
 
-    const inputFiles = completedJobs.map(job => `-i "${job.videoPath}"`).join(' ');
+    const result = await ipcRenderer.invoke('generate-and-save-combine-script', {
+        ffmpegPath: ffmpegStatus.path,
+        jobs: completedJobs,
+        targetDuration: targetDuration,
+        outputFileName: outputFileName,
+        isWindows: isWindows,
+    });
 
-    const filterParts = completedJobs.map((_, index) => `[${index}:v]setpts=${ptsMultiplier}*PTS[v${index}]`);
-    const concatInputs = completedJobs.map((_, index) => `[v${index}]`).join('');
-    const filterComplex = `${filterParts.join(';')};${concatInputs}concat=n=${completedJobs.length}:v=1:a=0[v]`;
-
-    const outputFileName = `combined_${currentFile.name.replace(/\.xlsx?$/, '.mp4')}`;
-    const command = `ffmpeg ${inputFiles} -filter_complex "${filterComplex}" -map "[v]" "${outputFileName}"`;
-
-    const scriptContent = isWindows 
-        ? `@echo off\nchcp 65001 > nul\nrem Script to combine and sync videos.\nrem Make sure you have ffmpeg installed and in your PATH.\n\n${command}\n\necho "Video combination process finished."\npause`
-        : `#!/bin/bash\n# Script to combine and sync videos.\n# Make sure you have ffmpeg installed and in your PATH.\n\n${command}\n\necho "Video combination process finished."`;
-
-    const scriptExtension = isWindows ? 'bat' : 'sh';
-    const scriptFileName = `combine_script.${scriptExtension}`;
-
-    if (isElectron && ipcRenderer) {
-        const result = await ipcRenderer.invoke('save-script-file-dialog', { defaultPath: scriptFileName, fileContent: scriptContent });
-        if (result.success) {
-            setFeedback({ type: 'success', message: `Script đã được lưu tại: ${result.filePath}. Chạy file này để ghép video (yêu cầu đã cài đặt ffmpeg).` });
-        } else if (result.error && result.error !== 'Save dialog canceled') {
-            setFeedback({ type: 'error', message: `Lỗi lưu script: ${result.error}` });
-        }
-    } else {
-        const blob = new Blob([scriptContent], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = scriptFileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        setFeedback({ type: 'success', message: 'Script đã được tải xuống. Chạy file này để ghép video (yêu cầu đã cài đặt ffmpeg).' });
+    if (result.success) {
+        setFeedback({ type: 'success', message: `Script đã được lưu tại: ${result.filePath}. Chạy file này để ghép video.` });
+    } else if (result.error && result.error !== 'Save dialog canceled') {
+        setFeedback({ type: 'error', message: `Lỗi lưu script: ${result.error}` });
     }
   };
   
@@ -1005,9 +1029,34 @@ const App: React.FC = () => {
     const seconds = totalSeconds % 60;
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
+
+  const renderCombineVideoButton = () => {
+    if (ffmpegStatus.checking) {
+      return 'Đang kiểm tra FFmpeg...';
+    }
+    if (ffmpegStatus.installing) {
+      return 'Đang cài đặt FFmpeg...';
+    }
+    if (!ffmpegStatus.found) {
+      return 'Cài đặt FFmpeg';
+    }
+    return 'Ghép Video';
+  };
   
   return (
     <div className="relative w-full h-full">
+      {showFfmpegInstallPrompt && (
+        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
+            <div className="glass-card rounded-xl p-8 max-w-lg text-center">
+                <h3 className="text-xl font-bold mb-3">Yêu cầu cài đặt FFmpeg</h3>
+                <p className="text-indigo-200 mb-6">Tính năng này cần có FFmpeg để hoạt động. Ứng dụng có thể tự động tải và cài đặt giúp bạn. Quá trình này có thể mất vài phút. Bạn có đồng ý không?</p>
+                <div className="flex justify-center gap-4">
+                    <button onClick={() => setShowFfmpegInstallPrompt(false)} className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition">Hủy</button>
+                    <button onClick={handleStartFfmpegInstall} className="bg-teal-500 text-white font-bold py-2 px-6 rounded-full hover:bg-teal-600 transition">Đồng ý & Cài đặt</button>
+                </div>
+            </div>
+        </div>
+      )}
       <div className="text-white min-h-screen p-4">
         <div className="w-full max-w-7xl mx-auto">
           <header className="text-center mb-6 relative">
@@ -1214,12 +1263,12 @@ const App: React.FC = () => {
                                             <span>Copy Path Thư mục</span>
                                         </button>
                                         <button 
-                                          onClick={handleGenerateCombineScript}
-                                          disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath)}
+                                          onClick={handleCombineVideoClick}
+                                          disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath) || ffmpegStatus.checking || ffmpegStatus.installing}
                                           className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
                                           title="Ghép các video đã hoàn thành và đồng bộ với thời lượng bài hát"
                                         >
-                                          Ghép Video
+                                          {renderCombineVideoButton()}
                                         </button>
                                     </div>
                                   </div>
