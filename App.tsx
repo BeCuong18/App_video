@@ -12,7 +12,7 @@ import CryptoJS from 'crypto-js';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, LinkIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, CheckIcon, KeyIcon, TrashIcon, LinkIcon, FolderIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -278,6 +278,7 @@ const App: React.FC = () => {
   
   const [isActivated, setIsActivated] = useState<boolean | null>(null);
   const [machineId, setMachineId] = useState<string>('');
+  const [appVersion, setAppVersion] = useState<string>('');
   
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [activeApiKey, setActiveApiKey] = useState<ApiKey | null>(null);
@@ -305,9 +306,12 @@ const App: React.FC = () => {
     { value: 'Japanese', label: 'Nhật Bản (Japanese)' },
     { value: 'Chinese', label: 'Trung Quốc (Chinese)' },
     { value: 'French', label: 'Pháp (French)' },
+    { value: 'Brazilian', label: 'Brazil' },
+    { value: 'Spanish', label: 'Tây Ban Nha (Spanish)' },
     { value: 'Generic/International', label: 'Quốc tế / Không xác định' },
   ];
 
+  // FIX: Changed CryptoJS.SHA2256 to CryptoJS.SHA256
   const getEncryptionKey = useCallback(() => CryptoJS.SHA256(machineId + SECRET_KEY).toString(), [machineId]);
 
   const encrypt = useCallback((text: string) => {
@@ -388,6 +392,10 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    if (isElectron && ipcRenderer) {
+      ipcRenderer.invoke('get-app-version').then(setAppVersion);
+    }
+    
     setTimeout(() => {
         let storedMachineId = localStorage.getItem('machine_id');
         if (!storedMachineId) {
@@ -814,7 +822,30 @@ const App: React.FC = () => {
         URL.revokeObjectURL(url);
         setFeedback({ type: 'success', message: 'Script đã được tải xuống. Chạy file này để ghép video (yêu cầu đã cài đặt ffmpeg).' });
     }
-};
+  };
+
+  const getFolderPath = (filePath: string | undefined): string => {
+    if (!filePath) return '';
+    const isWindows = navigator.userAgent.includes("Windows");
+    const separator = isWindows ? '\\' : '/';
+    return filePath.substring(0, filePath.lastIndexOf(separator));
+  };
+  
+  const handleCopyPath = async (path: string | undefined) => {
+    if (!path) return;
+    try {
+        await navigator.clipboard.writeText(path);
+        setFeedback({ type: 'info', message: 'Đã sao chép đường dẫn!' });
+    } catch (err) {
+        setFeedback({ type: 'error', message: 'Không thể sao chép đường dẫn.' });
+    }
+    setTimeout(() => setFeedback(null), 2000);
+  };
+  
+  const handleOpenFolder = (filePath: string | undefined) => {
+    if (!ipcRenderer || !filePath) return;
+    ipcRenderer.send('open-folder', getFolderPath(filePath));
+  };
 
 
   const getStatusBadge = (status: JobStatus) => {
@@ -883,8 +914,22 @@ const App: React.FC = () => {
     return <ApiKeyManagerScreen apiKeys={apiKeys} onKeyAdd={handleKeyAdd} onKeyDelete={handleKeyDelete} onKeySelect={handleKeySelect} />;
   }
   
+  const currentFile = trackedFiles.length > 0 ? trackedFiles[activeTrackerFileIndex] : null;
+  const stats = currentFile ? {
+    completed: currentFile.jobs.filter(j => j.status === 'Completed').length,
+    inProgress: currentFile.jobs.filter(j => j.status === 'Processing' || j.status === 'Generating').length,
+    total: currentFile.jobs.length,
+  } : null;
+
+  const formatDuration = (totalSeconds?: number) => {
+    if (totalSeconds === undefined || totalSeconds === null) return '--:--';
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+  
   return (
-    <>
+    <div className="relative w-full h-full">
       <div className="text-white min-h-screen p-4">
         <div className="w-full max-w-7xl mx-auto">
           <header className="text-center mb-6 relative">
@@ -1019,7 +1064,7 @@ const App: React.FC = () => {
                             <p className="text-indigo-200 text-center">Trạng thái được cập nhật tự động khi file Excel thay đổi.</p>
                         </div>
 
-                        {feedback && ( <div className={`text-center font-medium p-3 rounded-lg ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : 'text-emerald-300 bg-emerald-900/50' }`}>{feedback.message}</div> )}
+                        {feedback && ( <div className={`text-center font-medium p-3 rounded-lg ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>{feedback.message}</div> )}
                         
                         {trackedFiles.length === 0 ? (
                              <div className="text-center py-10 border-2 border-dashed border-white/20 rounded-lg">
@@ -1041,20 +1086,41 @@ const App: React.FC = () => {
                                           </button>
                                       ))}
                                   </div>
-                                  <div className="flex items-center space-x-2 ml-4">
-                                    <button onClick={handleOpenNewFile} className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap">Tải File Mới</button>
-                                    <button 
-                                      onClick={handleGenerateCombineScript}
-                                      disabled={!trackedFiles[activeTrackerFileIndex]?.jobs.some(j => j.status === 'Completed' && j.videoPath)}
-                                      className="bg-teal-500 text-white font-bold py-2 px-6 rounded-full hover:bg-teal-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                      title="Ghép các video đã hoàn thành và đồng bộ với thời lượng bài hát"
-                                    >
-                                      Ghép Video
-                                    </button>
-                                  </div>
+                                  <button onClick={handleOpenNewFile} className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap ml-4">Tải File Mới</button>
                                </div>
 
-                                {trackedFiles[activeTrackerFileIndex] && (
+                                {currentFile && stats && (
+                                  <>
+                                  <div className="bg-black/20 p-4 rounded-lg mb-4 flex flex-wrap items-center justify-between gap-4">
+                                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                                      <div className="text-center">
+                                          <div className="text-2xl font-bold text-emerald-400">{stats.completed}/{stats.total}</div>
+                                          <div className="text-xs text-gray-400 uppercase tracking-wider">Hoàn thành</div>
+                                      </div>
+                                      <div className="text-center">
+                                          <div className="text-2xl font-bold text-amber-400">{stats.inProgress}</div>
+                                          <div className="text-xs text-gray-400 uppercase tracking-wider">Đang xử lý</div>
+                                      </div>
+                                       <div className="text-center">
+                                          <div className="text-2xl font-bold text-indigo-300">{formatDuration(currentFile.targetDurationSeconds)}</div>
+                                          <div className="text-xs text-gray-400 uppercase tracking-wider">Thời lượng</div>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => handleOpenFolder(currentFile.path)} className="p-2 bg-white/10 rounded-full hover:bg-white/20" title="Mở thư mục chứa file"><FolderIcon className="w-5 h-5"/></button>
+                                        <button onClick={() => handleCopyPath(currentFile.path)} className="p-2 bg-white/10 rounded-full hover:bg-white/20" title="Sao chép đường dẫn file"><CopyIcon className="w-5 h-5"/></button>
+                                        <button onClick={() => handleCopyPath(getFolderPath(currentFile.path))} className="p-2 bg-white/10 rounded-full hover:bg-white/20" title="Sao chép đường dẫn thư mục"><CopyIcon className="w-5 h-5"/></button>
+                                        <button 
+                                          onClick={handleGenerateCombineScript}
+                                          disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath)}
+                                          className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                          title="Ghép các video đã hoàn thành và đồng bộ với thời lượng bài hát"
+                                        >
+                                          Ghép Video
+                                        </button>
+                                    </div>
+                                  </div>
+                                  
                                   <div className="overflow-x-auto bg-black/20 rounded-lg">
                                       <table className="w-full text-white job-table">
                                           <thead>
@@ -1066,7 +1132,7 @@ const App: React.FC = () => {
                                               </tr>
                                           </thead>
                                           <tbody>
-                                              {trackedFiles[activeTrackerFileIndex].jobs.map(job => (
+                                              {currentFile.jobs.map(job => (
                                                   <tr key={job.id}>
                                                       <td className="font-mono text-sm">{job.id}</td>
                                                       <td><span className={getStatusBadge(job.status)}>{job.status}</span></td>
@@ -1077,6 +1143,7 @@ const App: React.FC = () => {
                                           </tbody>
                                       </table>
                                   </div>
+                                  </>
                                 )}
                             </div>
                         )}
@@ -1086,7 +1153,12 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
-    </>
+      {appVersion && isActivated && (
+        <div className="absolute bottom-2 right-4 text-xs text-indigo-300/50 font-mono z-50">
+          v{appVersion}
+        </div>
+      )}
+    </div>
   );
 };
 

@@ -1,5 +1,5 @@
 // main.js
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
@@ -33,6 +33,10 @@ app.whenReady().then(() => {
   createWindow();
 
   autoUpdater.checkForUpdatesAndNotify();
+
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion();
+  });
 
   ipcMain.handle('save-file-dialog', async (event, { defaultPath, fileContent }) => {
     const mainWindow = BrowserWindow.getFocusedWindow();
@@ -146,6 +150,12 @@ app.whenReady().then(() => {
         fileWatchers.get(filePath).close();
         fileWatchers.delete(filePath);
         console.log(`Stopped watching ${filePath}`);
+    }
+  });
+
+  ipcMain.on('open-folder', (event, folderPath) => {
+    if (folderPath) {
+        shell.openPath(folderPath).catch(err => console.error("Failed to open path", err));
     }
   });
 
