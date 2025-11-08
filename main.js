@@ -365,14 +365,25 @@ app.whenReady().then(() => {
                     
                     try {
                         const allFiles = await findFilesRecursively(extractDir);
-                        const binary = allFiles.find(f => path.basename(f) === (platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'));
-
-                        if (!binary) {
+                        
+                        // Find and copy ffmpeg
+                        const ffmpegBinaryName = platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+                        const ffmpegBinary = allFiles.find(f => path.basename(f) === ffmpegBinaryName);
+                        if (!ffmpegBinary) {
                            return resolve({ success: false, error: 'Không tìm thấy file thực thi ffmpeg sau khi giải nén.' });
                         }
-
-                        fs.copyFileSync(binary, ffmpegPath);
+                        fs.copyFileSync(ffmpegBinary, ffmpegPath);
                         fs.chmodSync(ffmpegPath, 0o755); // Make executable
+
+                        // Find and copy ffprobe
+                        const ffprobeBinaryName = platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
+                        const ffprobeBinary = allFiles.find(f => path.basename(f) === ffprobeBinaryName);
+                        const ffprobeDestPath = path.join(ffmpegDir, ffprobeBinaryName);
+                        if (!ffprobeBinary) {
+                           return resolve({ success: false, error: 'Không tìm thấy file thực thi ffprobe sau khi giải nén.' });
+                        }
+                        fs.copyFileSync(ffprobeBinary, ffprobeDestPath);
+                        fs.chmodSync(ffprobeDestPath, 0o755);
 
                         // Cleanup
                         fs.unlinkSync(zipPath);
