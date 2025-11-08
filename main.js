@@ -286,21 +286,19 @@ app.whenReady().then(() => {
 
     // --- FFmpeg Management ---
     const ffmpegDir = path.join(app.getPath('userData'), 'ffmpeg_bin');
-    const ffmpegPath = path.join(ffmpegDir, process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
-
+    const ffmpegExe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
+    const ffprobeExe = process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
+    const ffmpegPath = path.join(ffmpegDir, ffmpegExe);
+    const ffprobePath = path.join(ffmpegDir, ffprobeExe);
+    
     ipcMain.handle('check-ffmpeg', async () => {
-        if (fs.existsSync(ffmpegPath)) {
+        // Strict check: both ffmpeg and ffprobe must exist in our managed directory.
+        if (fs.existsSync(ffmpegPath) && fs.existsSync(ffprobePath)) {
             return { found: true, path: ffmpegPath };
         }
-        return new Promise((resolve) => {
-            exec('ffmpeg -version', (error) => {
-                if (!error) {
-                    resolve({ found: true, path: 'ffmpeg' });
-                } else {
-                    resolve({ found: false });
-                }
-            });
-        });
+        // We no longer check for a system-wide ffmpeg to ensure consistency and reliability,
+        // as the app now manages its own installation.
+        return { found: false };
     });
 
     ipcMain.handle('install-ffmpeg', (event) => {
