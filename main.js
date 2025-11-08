@@ -3,7 +3,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const https = require('https');
 
 // Configure logging for autoUpdater
@@ -354,11 +354,7 @@ app.whenReady().then(() => {
                 if (fs.existsSync(extractDir)) fs.rmSync(extractDir, { recursive: true, force: true });
                 fs.mkdirSync(extractDir);
 
-                const command = platform === 'win32'
-                    ? `powershell -command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force"`
-                    : `unzip -o '${zipPath}' -d '${extractDir}'`;
-
-                exec(command, async (error) => {
+                const callback = async (error) => {
                     if (error) {
                         return resolve({ success: false, error: `Lỗi giải nén: ${error.message}` });
                     }
@@ -366,16 +362,14 @@ app.whenReady().then(() => {
                     try {
                         const allFiles = await findFilesRecursively(extractDir);
                         
-                        // Find and copy ffmpeg
                         const ffmpegBinaryName = platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
                         const ffmpegBinary = allFiles.find(f => path.basename(f) === ffmpegBinaryName);
                         if (!ffmpegBinary) {
                            return resolve({ success: false, error: 'Không tìm thấy file thực thi ffmpeg sau khi giải nén.' });
                         }
                         fs.copyFileSync(ffmpegBinary, ffmpegPath);
-                        fs.chmodSync(ffmpegPath, 0o755); // Make executable
+                        fs.chmodSync(ffmpegPath, 0o755);
 
-                        // Find and copy ffprobe
                         const ffprobeBinaryName = platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
                         const ffprobeBinary = allFiles.find(f => path.basename(f) === ffprobeBinaryName);
                         const ffprobeDestPath = path.join(ffmpegDir, ffprobeBinaryName);
@@ -385,7 +379,6 @@ app.whenReady().then(() => {
                         fs.copyFileSync(ffprobeBinary, ffprobeDestPath);
                         fs.chmodSync(ffprobeDestPath, 0o755);
 
-                        // Cleanup
                         fs.unlinkSync(zipPath);
                         fs.rmSync(extractDir, { recursive: true, force: true });
 
@@ -393,7 +386,13 @@ app.whenReady().then(() => {
                     } catch (e) {
                         resolve({ success: false, error: `Lỗi cài đặt: ${e.message}` });
                     }
-                });
+                };
+
+                if (platform === 'win32') {
+                    execFile('powershell', ['-command', 'Expand-Archive', '-Path', zipPath, '-DestinationPath', extractDir, '-Force'], callback);
+                } else { // darwin
+                    execFile('unzip', ['-o', zipPath, '-d', extractDir], callback);
+                }
             };
         });
     });
@@ -414,22 +413,20 @@ app.whenReady().then(() => {
         }
         const outputFilePath = saveDialogResult.filePath;
         
-        const safeFfmpegPath = `"${ffmpegPath}"`;
-        const inputFiles = jobs.map(job => `-i "${job.videoPath}"`).join(' ');
+        const inputArgs = jobs.flatMap(job => ['-i', job.videoPath]);
         
-        let command;
+        let commandArgs;
 
         if (mode === 'timed') {
             try {
                 const ffprobePath = path.join(path.dirname(ffmpegPath), process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
-                const safeFfprobePath = `"${ffprobePath}"`;
-
+                
                 const getDurationPromises = jobs.map(job => 
                     new Promise((resolve, reject) => {
-                        const probeCommand = `${safeFfprobePath} -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${job.videoPath}"`;
-                        exec(probeCommand, (err, stdout, stderr) => {
+                        const args = ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', job.videoPath];
+                        execFile(ffprobePath, args, (err, stdout, stderr) => {
                             if (err) {
-                                reject(new Error(`ffprobe error for ${job.videoName}: ${stderr || err.message}`));
+                                reject(new Error(`ffprobe error for ${job.videoName}: ${err.message}`));
                                 return;
                             }
                             resolve(parseFloat(stdout));
@@ -453,7 +450,7 @@ app.whenReady().then(() => {
                 const filterParts = jobs.map((_, index) => `[${index}:v]setpts=${ptsMultiplier}*PTS[v${index}]`);
                 const concatVideoInputs = jobs.map((_, index) => `[v${index}]`).join('');
                 const filterComplex = `${filterParts.join(';')};${concatVideoInputs}concat=n=${jobs.length}:v=1:a=0[v]`;
-                command = `${safeFfmpegPath} ${inputFiles} -filter_complex "${filterComplex}" -map "[v]" -y "${outputFilePath}"`;
+                commandArgs = [...inputArgs, '-filter_complex', filterComplex, '-map', '[v]', '-y', outputFilePath];
 
             } catch (err) {
                  return { success: false, error: `Lỗi khi lấy thời lượng video: ${err.message}` };
@@ -461,14 +458,14 @@ app.whenReady().then(() => {
         } else { // 'normal' mode
             const concatInputs = jobs.map((_, index) => `[${index}:v]`).join('');
             const filterComplex = `${concatInputs}concat=n=${jobs.length}:v=1:a=0[v]`;
-            command = `${safeFfmpegPath} ${inputFiles} -filter_complex "${filterComplex}" -map "[v]" -y "${outputFilePath}"`;
+            commandArgs = [...inputArgs, '-filter_complex', filterComplex, '-map', '[v]', '-y', outputFilePath];
         }
 
         return new Promise((resolve) => {
-            exec(command, (error, stdout, stderr) => {
+            execFile(ffmpegPath, commandArgs, (error, stdout, stderr) => {
                 if (error) {
-                    console.error(`ffmpeg exec error: ${error}`);
-                    resolve({ success: false, error: `Lỗi FFmpeg: ${stderr || error.message}` });
+                    console.error(`ffmpeg execFile error: ${error}`);
+                    resolve({ success: false, error: `Lỗi FFmpeg: ${error.message}` });
                     return;
                 }
                 resolve({ success: true, filePath: outputFilePath });
