@@ -409,14 +409,44 @@ app.whenReady().then(() => {
         let command;
 
         if (mode === 'timed') {
-            const estimatedSourceDuration = jobs.length * 7; // Assuming each clip is ~7s
-            const speedFactor = estimatedSourceDuration / targetDuration;
-            const ptsMultiplier = (1 / speedFactor).toFixed(4);
-            
-            const filterParts = jobs.map((_, index) => `[${index}:v]setpts=${ptsMultiplier}*PTS[v${index}]`);
-            const concatVideoInputs = jobs.map((_, index) => `[v${index}]`).join('');
-            const filterComplex = `${filterParts.join(';')};${concatVideoInputs}concat=n=${jobs.length}:v=1:a=0[v]`;
-            command = `${safeFfmpegPath} ${inputFiles} -filter_complex "${filterComplex}" -map "[v]" -y "${outputFilePath}"`;
+            try {
+                const ffprobePath = path.join(path.dirname(ffmpegPath), process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
+                const safeFfprobePath = `"${ffprobePath}"`;
+
+                const getDurationPromises = jobs.map(job => 
+                    new Promise((resolve, reject) => {
+                        const probeCommand = `${safeFfprobePath} -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${job.videoPath}"`;
+                        exec(probeCommand, (err, stdout, stderr) => {
+                            if (err) {
+                                reject(new Error(`ffprobe error for ${job.videoName}: ${stderr || err.message}`));
+                                return;
+                            }
+                            resolve(parseFloat(stdout));
+                        });
+                    })
+                );
+                
+                const durations = await Promise.all(getDurationPromises);
+                const actualTotalDuration = durations.reduce((sum, duration) => sum + duration, 0);
+
+                if (actualTotalDuration <= 0) {
+                    return { success: false, error: 'Không thể xác định tổng thời lượng của các video nguồn.' };
+                }
+                
+                const speedFactor = actualTotalDuration / targetDuration;
+                if (speedFactor <= 0) {
+                     return { success: false, error: 'Hệ số tốc độ không hợp lệ. Vui lòng kiểm tra lại thời lượng.' };
+                }
+                const ptsMultiplier = (1 / speedFactor).toFixed(6);
+                
+                const filterParts = jobs.map((_, index) => `[${index}:v]setpts=${ptsMultiplier}*PTS[v${index}]`);
+                const concatVideoInputs = jobs.map((_, index) => `[v${index}]`).join('');
+                const filterComplex = `${filterParts.join(';')};${concatVideoInputs}concat=n=${jobs.length}:v=1:a=0[v]`;
+                command = `${safeFfmpegPath} ${inputFiles} -filter_complex "${filterComplex}" -map "[v]" -y "${outputFilePath}"`;
+
+            } catch (err) {
+                 return { success: false, error: `Lỗi khi lấy thời lượng video: ${err.message}` };
+            }
         } else { // 'normal' mode
             const concatInputs = jobs.map((_, index) => `[${index}:v]`).join('');
             const filterComplex = `${concatInputs}concat=n=${jobs.length}:v=1:a=0[v]`;

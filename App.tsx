@@ -296,6 +296,7 @@ const App: React.FC = () => {
   });
   const [showFfmpegInstallPrompt, setShowFfmpegInstallPrompt] = useState(false);
   const [isCombiningVideo, setIsCombiningVideo] = useState(false);
+  const [lastCombinedVideoPath, setLastCombinedVideoPath] = useState<string | null>(null);
 
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
@@ -521,6 +522,9 @@ const App: React.FC = () => {
   };
   
   useEffect(() => {
+    // Reset combined video path when switching files
+    setLastCombinedVideoPath(null);
+
     const currentFile = trackedFiles.length > 0 ? trackedFiles[activeTrackerFileIndex] : null;
     if (isElectron && ipcRenderer && currentFile?.path) {
         const hasIncompleteJobs = currentFile.jobs.some(j => j.status === 'Completed' && !j.videoPath);
@@ -863,6 +867,7 @@ const App: React.FC = () => {
     }
 
     setIsCombiningVideo(true);
+    setLastCombinedVideoPath(null);
     setFeedback({ type: 'info', message: 'Bắt đầu quá trình ghép video... Vui lòng chờ.' });
     
     try {
@@ -874,7 +879,8 @@ const App: React.FC = () => {
         });
 
         if (result.success) {
-            setFeedback({ type: 'success', message: `Ghép video thành công! File đã được lưu tại: ${result.filePath}` });
+            setFeedback({ type: 'success', message: `Ghép video thành công!` });
+            setLastCombinedVideoPath(result.filePath);
         } else if (result.error && result.error !== 'Save dialog canceled') {
             setFeedback({ type: 'error', message: `Lỗi ghép video: ${result.error}` });
         } else {
@@ -1175,8 +1181,15 @@ const App: React.FC = () => {
                   </button>
                 </div>
                 
-                {feedback && ( <div className={`text-center mt-6 font-medium p-3 rounded-lg ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>{feedback.message}</div> )}
-                {generatedScenes.length > 0 && (
+                {feedback && ( <div className={`text-center mt-6 font-medium p-3 rounded-lg flex items-center justify-center gap-4 ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>
+                    <span>{feedback.message}</span>
+                    {feedback.type === 'success' && lastCombinedVideoPath && (
+                        <button onClick={() => handlePlayVideo(lastCombinedVideoPath)} className="bg-white/10 text-white font-bold py-1 px-4 rounded-full hover:bg-white/20 transition text-sm flex items-center gap-2">
+                            <PlayIcon className="w-4 h-4" /> Mở Video
+                        </button>
+                    )}
+                </div> )}
+                {generatedScenes.length > 0 && !feedback && (
                   <div className="text-center mt-8 pt-6 border-t border-white/20 space-y-4">
                     <h3 className="text-xl font-bold">Hoàn thành! Kịch bản của bạn đã sẵn sàng.</h3>
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
@@ -1195,7 +1208,14 @@ const App: React.FC = () => {
                             <p className="text-indigo-200 text-center">Trạng thái được cập nhật tự động khi file Excel thay đổi.</p>
                         </div>
 
-                        {feedback && ( <div className={`text-center font-medium p-3 rounded-lg ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>{feedback.message}</div> )}
+                        {feedback && ( <div className={`text-center font-medium p-3 rounded-lg flex items-center justify-center gap-4 ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>
+                            <span>{feedback.message}</span>
+                            {feedback.type === 'success' && lastCombinedVideoPath && (
+                                <button onClick={() => handlePlayVideo(lastCombinedVideoPath)} className="bg-white/10 text-white font-bold py-1 px-4 rounded-full hover:bg-white/20 transition text-sm flex items-center gap-2">
+                                    <PlayIcon className="w-4 h-4" /> Mở Video Đã Ghép
+                                </button>
+                            )}
+                        </div> )}
                         
                         {trackedFiles.length === 0 ? (
                              <div className="text-center py-10 border-2 border-dashed border-white/20 rounded-lg">
