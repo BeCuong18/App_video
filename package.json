@@ -46,6 +46,12 @@
       "dist/**/*",
       "main.js"
     ],
+    "extraResources": [
+      {
+        "from": "resources/ffmpeg",
+        "to": "ffmpeg"
+      }
+    ],
     "directories": {
       "output": "release"
     },

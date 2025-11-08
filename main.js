@@ -3,8 +3,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
-const { exec, execFile } = require('child_process');
-const https = require('https');
+const { execFile } = require('child_process');
 
 // Configure logging for autoUpdater
 autoUpdater.logger = require('electron-log');
@@ -43,6 +42,22 @@ async function findFilesRecursively(dir) {
         return dirent.isDirectory() ? findFilesRecursively(res) : res;
     }));
     return Array.prototype.concat(...files);
+}
+
+// Helper function to resolve path to bundled FFmpeg binaries
+const isPackaged = app.isPackaged;
+function getFfmpegPath(binary) { // binary can be 'ffmpeg' or 'ffprobe'
+    const binaryName = process.platform === 'win32' ? `${binary}.exe` : binary;
+    
+    // In production, binaries are in the 'ffmpeg' directory within the app's resources,
+    // configured via extraResources in package.json.
+    // In development, we assume they are in a 'resources/ffmpeg' directory at the project root.
+    const basePath = isPackaged
+        ? path.join(process.resourcesPath, 'ffmpeg')
+        : path.join(__dirname, 'resources', 'ffmpeg');
+
+    const platformFolder = process.platform === 'win32' ? 'win' : 'mac';
+    return path.join(basePath, platformFolder, binaryName);
 }
 
 
@@ -309,117 +324,17 @@ app.whenReady().then(() => {
     });
 
     // --- FFmpeg Management ---
-    const ffmpegDir = path.join(app.getPath('userData'), 'ffmpeg_bin');
-    const ffmpegExe = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
-    const ffprobeExe = process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
-    const ffmpegPath = path.join(ffmpegDir, ffmpegExe);
-    const ffprobePath = path.join(ffmpegDir, ffprobeExe);
-    
     ipcMain.handle('check-ffmpeg', async () => {
-        // Strict check: both ffmpeg and ffprobe must exist in our managed directory.
+        // Strict check: both ffmpeg and ffprobe must exist in the bundled location.
+        const ffmpegPath = getFfmpegPath('ffmpeg');
+        const ffprobePath = getFfmpegPath('ffprobe');
         if (fs.existsSync(ffmpegPath) && fs.existsSync(ffprobePath)) {
-            return { found: true, path: ffmpegPath };
+            return { found: true };
         }
-        // We no longer check for a system-wide ffmpeg to ensure consistency and reliability,
-        // as the app now manages its own installation.
         return { found: false };
     });
 
-    ipcMain.handle('install-ffmpeg', (event) => {
-        return new Promise(async (resolve, reject) => {
-            const mainWindow = BrowserWindow.fromWebContents(event.sender);
-            const platform = process.platform;
-            let downloadUrl;
-            
-            if (platform === 'win32') {
-                downloadUrl = 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip';
-            } else if (platform === 'darwin') {
-                downloadUrl = `https://evermeet.cx/ffmpeg/ffmpeg-7.0.zip`;
-            } else {
-                return resolve({ success: false, error: 'Hệ điều hành không được hỗ trợ để cài đặt tự động.' });
-            }
-
-            if (!fs.existsSync(ffmpegDir)) {
-                fs.mkdirSync(ffmpegDir, { recursive: true });
-            }
-            const zipPath = path.join(ffmpegDir, 'ffmpeg.zip');
-
-            const file = fs.createWriteStream(zipPath);
-            https.get(downloadUrl, (response) => {
-                if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-                    // Handle redirect
-                    https.get(response.headers.location, (redirectResponse) => {
-                        redirectResponse.pipe(file);
-                        file.on('finish', () => {
-                            file.close();
-                            extractAndInstall();
-                        });
-                    }).on('error', (err) => {
-                        fs.unlink(zipPath, () => {});
-                        resolve({ success: false, error: `Lỗi tải file (redirect): ${err.message}` });
-                    });
-                    return;
-                }
-                
-                response.pipe(file);
-                file.on('finish', () => {
-                    file.close();
-                    extractAndInstall();
-                });
-            }).on('error', (err) => {
-                fs.unlink(zipPath, () => {});
-                resolve({ success: false, error: `Lỗi tải file: ${err.message}` });
-            });
-
-            const extractAndInstall = () => {
-                const extractDir = path.join(ffmpegDir, 'extracted');
-                if (fs.existsSync(extractDir)) fs.rmSync(extractDir, { recursive: true, force: true });
-                fs.mkdirSync(extractDir);
-
-                const callback = async (error) => {
-                    if (error) {
-                        return resolve({ success: false, error: `Lỗi giải nén: ${error.message}` });
-                    }
-                    
-                    try {
-                        const allFiles = await findFilesRecursively(extractDir);
-                        
-                        const ffmpegBinaryName = platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
-                        const ffmpegBinary = allFiles.find(f => path.basename(f) === ffmpegBinaryName);
-                        if (!ffmpegBinary) {
-                           return resolve({ success: false, error: 'Không tìm thấy file thực thi ffmpeg sau khi giải nén.' });
-                        }
-                        fs.copyFileSync(ffmpegBinary, ffmpegPath);
-                        fs.chmodSync(ffmpegPath, 0o755);
-
-                        const ffprobeBinaryName = platform === 'win32' ? 'ffprobe.exe' : 'ffprobe';
-                        const ffprobeBinary = allFiles.find(f => path.basename(f) === ffprobeBinaryName);
-                        const ffprobeDestPath = path.join(ffmpegDir, ffprobeBinaryName);
-                        if (!ffprobeBinary) {
-                           return resolve({ success: false, error: 'Không tìm thấy file thực thi ffprobe sau khi giải nén.' });
-                        }
-                        fs.copyFileSync(ffprobeBinary, ffprobeDestPath);
-                        fs.chmodSync(ffprobeDestPath, 0o755);
-
-                        fs.unlinkSync(zipPath);
-                        fs.rmSync(extractDir, { recursive: true, force: true });
-
-                        resolve({ success: true, path: ffmpegPath });
-                    } catch (e) {
-                        resolve({ success: false, error: `Lỗi cài đặt: ${e.message}` });
-                    }
-                };
-
-                if (platform === 'win32') {
-                    execFile('powershell', ['-command', 'Expand-Archive', '-Path', zipPath, '-DestinationPath', extractDir, '-Force'], callback);
-                } else { // darwin
-                    execFile('unzip', ['-o', zipPath, '-d', extractDir], callback);
-                }
-            };
-        });
-    });
-
-    ipcMain.handle('execute-ffmpeg-combine', async (event, { ffmpegPath, jobs, targetDuration, mode }) => {
+    ipcMain.handle('execute-ffmpeg-combine', async (event, { jobs, targetDuration, mode }) => {
         const mainWindow = BrowserWindow.getFocusedWindow();
         if (!mainWindow) return { success: false, error: 'Window not found.' };
 
@@ -437,11 +352,12 @@ app.whenReady().then(() => {
         
         const inputArgs = jobs.flatMap(job => ['-i', job.videoPath]);
         
+        const ffmpegPath = getFfmpegPath('ffmpeg');
         let commandArgs;
 
         if (mode === 'timed') {
             try {
-                const ffprobePath = path.join(path.dirname(ffmpegPath), process.platform === 'win32' ? 'ffprobe.exe' : 'ffprobe');
+                const ffprobePath = getFfmpegPath('ffprobe');
                 
                 const getDurationPromises = jobs.map(job => 
                     new Promise((resolve, reject) => {

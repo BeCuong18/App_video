@@ -287,14 +287,7 @@ const App: React.FC = () => {
   const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
   const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
 
-  const [ffmpegStatus, setFfmpegStatus] = useState({
-    checking: true,
-    found: false,
-    installing: false,
-    path: '',
-    error: ''
-  });
-  const [showFfmpegInstallPrompt, setShowFfmpegInstallPrompt] = useState(false);
+  const [ffmpegFound, setFfmpegFound] = useState<boolean | null>(null);
   const [isCombiningVideo, setIsCombiningVideo] = useState(false);
   const [lastCombinedVideoPath, setLastCombinedVideoPath] = useState<string | null>(null);
 
@@ -554,9 +547,9 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (activeTab === 'tracker' && ipcRenderer) {
-      setFfmpegStatus(prev => ({ ...prev, checking: true }));
-      ipcRenderer.invoke('check-ffmpeg').then((result: { found: boolean, path?: string }) => {
-        setFfmpegStatus({ ...ffmpegStatus, checking: false, found: result.found, path: result.path || '' });
+      setFfmpegFound(null); // Checking state
+      ipcRenderer.invoke('check-ffmpeg').then((result: { found: boolean }) => {
+        setFfmpegFound(result.found);
       });
     }
   }, [activeTab]);
@@ -831,26 +824,9 @@ const App: React.FC = () => {
     }
   };
   
-    const handleStartFfmpegInstall = async () => {
-        if (!ipcRenderer) return;
-        setShowFfmpegInstallPrompt(false);
-        setFfmpegStatus(prev => ({ ...prev, installing: true, error: '' }));
-        setFeedback({ type: 'info', message: 'Đang tải và cài đặt FFmpeg, vui lòng chờ...' });
-
-        const result = await ipcRenderer.invoke('install-ffmpeg');
-
-        if (result.success) {
-            setFfmpegStatus({ checking: false, found: true, installing: false, path: result.path, error: '' });
-            setFeedback({ type: 'success', message: 'Cài đặt FFmpeg thành công!' });
-        } else {
-            setFfmpegStatus(prev => ({ ...prev, installing: false, found: false, error: result.error }));
-            setFeedback({ type: 'error', message: `Lỗi cài đặt FFmpeg: ${result.error}. Vui lòng cài đặt thủ công và khởi động lại ứng dụng.` });
-        }
-    };
-  
   const handleExecuteCombine = async (mode: 'normal' | 'timed') => {
     const currentFile = trackedFiles[activeTrackerFileIndex];
-    if (!currentFile || !ipcRenderer || !ffmpegStatus.found) return;
+    if (!currentFile || !ipcRenderer || !ffmpegFound) return;
 
     const completedJobs = currentFile.jobs.filter(j => j.status === 'Completed' && j.videoPath);
     if (completedJobs.length < 1) {
@@ -872,7 +848,6 @@ const App: React.FC = () => {
     
     try {
         const result = await ipcRenderer.invoke('execute-ffmpeg-combine', {
-            ffmpegPath: ffmpegStatus.path,
             jobs: completedJobs,
             targetDuration: currentFile.targetDurationSeconds,
             mode: mode,
@@ -1059,18 +1034,6 @@ const App: React.FC = () => {
   
   return (
     <div className="relative w-full h-full">
-      {showFfmpegInstallPrompt && (
-        <div className="absolute inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="glass-card rounded-xl p-8 max-w-lg text-center">
-                <h3 className="text-xl font-bold mb-3">Yêu cầu cài đặt FFmpeg</h3>
-                <p className="text-indigo-200 mb-6">Tính năng này cần có FFmpeg để hoạt động. Ứng dụng có thể tự động tải và cài đặt giúp bạn. Quá trình này có thể mất vài phút. Bạn có đồng ý không?</p>
-                <div className="flex justify-center gap-4">
-                    <button onClick={() => setShowFfmpegInstallPrompt(false)} className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition">Hủy</button>
-                    <button onClick={handleStartFfmpegInstall} className="bg-teal-500 text-white font-bold py-2 px-6 rounded-full hover:bg-teal-600 transition">Đồng ý & Cài đặt</button>
-                </div>
-            </div>
-        </div>
-      )}
       <div className="text-white min-h-screen p-4">
         <div className="w-full max-w-7xl mx-auto">
           <header className="text-center mb-6 relative">
@@ -1296,19 +1259,20 @@ const App: React.FC = () => {
                                             <span>Copy Path Thư mục</span>
                                         </button>
                                         
-                                        {ffmpegStatus.checking || ffmpegStatus.installing ? (
+                                        {ffmpegFound === null ? (
                                             <button 
                                                 disabled 
                                                 className="bg-gray-500 text-white font-bold py-2 px-4 rounded-full cursor-not-allowed"
                                             >
-                                                {ffmpegStatus.checking ? 'Đang kiểm tra FFmpeg...' : 'Đang cài đặt FFmpeg...'}
+                                                Đang kiểm tra FFmpeg...
                                             </button>
-                                        ) : !ffmpegStatus.found ? (
+                                        ) : !ffmpegFound ? (
                                             <button 
-                                                onClick={() => setShowFfmpegInstallPrompt(true)}
-                                                className="bg-amber-500 text-white font-bold py-2 px-4 rounded-full hover:bg-amber-600 transition"
+                                                disabled
+                                                className="bg-red-500 text-white font-bold py-2 px-4 rounded-full cursor-not-allowed"
+                                                title="FFmpeg không được tìm thấy. Vui lòng cài đặt lại ứng dụng."
                                             >
-                                                Cài đặt FFmpeg
+                                                Thiếu FFmpeg
                                             </button>
                                         ) : (
                                             <>
