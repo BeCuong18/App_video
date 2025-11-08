@@ -44,8 +44,7 @@
     ],
     "files": [
       "dist/**/*",
-      "main.js",
-      "resources/**/*"
+      "main.js"
     ],
     "extraResources": [
       {
