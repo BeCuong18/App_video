@@ -172,6 +172,30 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.handle('set-tool-flow-path', async (event) => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) return { success: false, error: 'Window not found.' };
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Chọn ứng dụng ToolFlows',
+        properties: ['openFile'],
+        filters: process.platform === 'win32'
+            ? [{ name: 'Applications', extensions: ['exe'] }]
+            : [{ name: 'Applications', extensions: ['app', '*'] }]
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, error: 'User canceled selection.' };
+    }
+
+    const toolFlowPath = result.filePaths[0];
+    let config = readConfig();
+    config.toolFlowPath = toolFlowPath;
+    writeConfig(config);
+
+    return { success: true, path: toolFlowPath };
+  });
+
   ipcMain.handle('open-tool-flow', async (event) => {
     const mainWindow = BrowserWindow.getFocusedWindow();
     if (!mainWindow) return { success: false, error: 'Window not found.' };

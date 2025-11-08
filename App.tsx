@@ -11,7 +11,7 @@ import CryptoJS from 'crypto-js';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -922,6 +922,22 @@ const App: React.FC = () => {
         setFeedback(null);
     }
   };
+  
+  const handleSetToolFlowsPath = async () => {
+    if (!ipcRenderer) {
+        setFeedback({ type: 'error', message: 'Chức năng này chỉ có trên ứng dụng desktop.' });
+        return;
+    }
+    setFeedback({ type: 'info', message: 'Vui lòng chọn file thực thi của ToolFlows...' });
+    const result = await ipcRenderer.invoke('set-tool-flow-path');
+    if (result.success) {
+        setFeedback({ type: 'success', message: `Đã cập nhật đường dẫn ToolFlows: ${result.path}` });
+    } else if (result.error && result.error !== 'User canceled selection.') {
+        setFeedback({ type: 'error', message: `Lỗi: ${result.error}` });
+    } else {
+        setFeedback(null);
+    }
+  };
 
   const handlePlayVideo = (videoPath: string | undefined) => {
     if (!ipcRenderer || !videoPath) return;
@@ -1258,10 +1274,15 @@ const App: React.FC = () => {
                                       </div>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <button onClick={handleOpenToolFlows} className="flex items-center gap-2 bg-purple-500 text-white font-bold py-2 px-4 rounded-full hover:bg-purple-600 transition text-sm">
-                                            <ExternalLinkIcon className="w-4 h-4"/>
-                                            <span>Mở ToolFlows</span>
-                                        </button>
+                                        <div className="flex rounded-full bg-purple-500 hover:bg-purple-600 transition shadow-md">
+                                            <button onClick={handleOpenToolFlows} className="flex items-center gap-2 text-white font-bold py-2 pl-4 pr-3 text-sm">
+                                                <ExternalLinkIcon className="w-4 h-4"/>
+                                                <span>Mở ToolFlows</span>
+                                            </button>
+                                            <button onClick={handleSetToolFlowsPath} className="text-white font-bold py-2 pr-3 pl-2 text-sm border-l border-purple-400 hover:bg-purple-700 rounded-r-full" title="Thay đổi đường dẫn ToolFlows">
+                                                <CogIcon className="w-4 h-4"/>
+                                            </button>
+                                        </div>
                                         <button onClick={() => handleOpenFolder(currentFile.path)} className="flex items-center gap-2 bg-indigo-500 text-white font-bold py-2 px-4 rounded-full hover:bg-indigo-600 transition text-sm">
                                             <FolderIcon className="w-4 h-4"/>
                                             <span>Mở Thư mục</span>
