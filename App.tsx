@@ -11,7 +11,7 @@ import CryptoJS from 'crypto-js';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon, RetryIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
@@ -1038,6 +1038,25 @@ const App: React.FC = () => {
       }
   };
 
+  const handleRetryJob = async (jobId: string) => {
+    const currentFile = trackedFiles[activeTrackerFileIndex];
+    if (!ipcRenderer || !currentFile?.path) return;
+
+    setFeedback({ type: 'info', message: `Đang yêu cầu tạo lại video cho job: ${jobId}...` });
+
+    const result = await ipcRenderer.invoke('retry-job', { 
+        filePath: currentFile.path, 
+        jobId: jobId 
+    });
+
+    if (result.success) {
+        setFeedback({ type: 'success', message: `Đã xóa trạng thái cho job ${jobId}. Video sẽ được tạo lại.` });
+        // The file watcher will automatically pick up the change and update the UI.
+    } else {
+        setFeedback({ type: 'error', message: `Lỗi khi tạo lại video: ${result.error}` });
+    }
+  };
+
   const getStatusBadge = (status: JobStatus) => {
     const baseClasses = "status-badge";
     switch (status) {
@@ -1056,18 +1075,11 @@ const App: React.FC = () => {
       case 'Completed':
         if (job.videoPath) {
           return (
-            <div className="flex items-center gap-2">
-                <div className="w-40 h-24 bg-black rounded-md overflow-hidden relative group">
-                    <video src={job.videoPath} className="w-full h-full object-cover" muted loop playsInline onMouseOver={e => e.currentTarget.play().catch(console.error)} onMouseOut={e => e.currentTarget.pause()}></video>
-                    <button onClick={() => handlePlayVideo(job.videoPath)} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                         <PlayIcon className="w-8 h-8 text-white"/>
-                    </button>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                    <button onClick={() => handlePlayVideo(job.videoPath)} title="Mở video" className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition"><PlayIcon className="w-4 h-4 text-white" /></button>
-                    <button onClick={() => handleShowInFolder(job.videoPath)} title="Mở thư mục chứa video" className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition"><FolderIcon className="w-4 h-4 text-white" /></button>
-                    <button onClick={() => handleDeleteVideo(job.id, job.videoPath)} title="Xóa video" className="p-2 rounded-full bg-red-500/20 hover:bg-red-500/40 transition"><TrashIcon className="w-4 h-4 text-red-300" /></button>
-                </div>
+            <div className="w-40 h-24 bg-black rounded-md overflow-hidden relative group">
+                <video src={job.videoPath} className="w-full h-full object-cover" muted loop playsInline onMouseOver={e => e.currentTarget.play().catch(console.error)} onMouseOut={e => e.currentTarget.pause()}></video>
+                <button onClick={() => handlePlayVideo(job.videoPath)} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <PlayIcon className="w-8 h-8 text-white"/>
+                </button>
             </div>
           );
         }
@@ -1418,6 +1430,7 @@ const App: React.FC = () => {
                                                   <th>Trạng Thái</th>
                                                   <th>Tên Video</th>
                                                   <th>Kết Quả</th>
+                                                  <th>Thao tác</th>
                                               </tr>
                                           </thead>
                                           <tbody>
@@ -1427,6 +1440,19 @@ const App: React.FC = () => {
                                                       <td><span className={getStatusBadge(job.status)}>{job.status}</span></td>
                                                       <td className="font-medium">{job.videoName}</td>
                                                       <td>{renderResultCell(job, activeTrackerFileIndex)}</td>
+                                                      <td>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <button onClick={() => handleRetryJob(job.id)} title="Tạo lại video (Xóa Status)" className="p-2 rounded-full bg-yellow-500/20 hover:bg-yellow-500/40 transition">
+                                                                <RetryIcon className="w-4 h-4 text-yellow-300"/>
+                                                            </button>
+                                                            <button onClick={() => handleShowInFolder(job.videoPath)} title="Mở thư mục chứa video" disabled={!job.videoPath} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                                                <FolderIcon className="w-4 h-4 text-white" />
+                                                            </button>
+                                                            <button onClick={() => handleDeleteVideo(job.id, job.videoPath)} title="Xóa video" disabled={!job.videoPath} className="p-2 rounded-full bg-red-500/20 hover:bg-red-500/40 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                                                <TrashIcon className="w-4 h-4 text-red-300" />
+                                                            </button>
+                                                        </div>
+                                                      </td>
                                                   </tr>
                                               ))}
                                           </tbody>

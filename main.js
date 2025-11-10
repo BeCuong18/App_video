@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 const { execFile } = require('child_process');
+const XLSX = require('xlsx');
 
 // Configure logging for autoUpdater
 autoUpdater.logger = require('electron-log');
@@ -327,6 +328,56 @@ app.whenReady().then(() => {
             }
         } else {
             return { success: false, error: 'User canceled deletion.' };
+        }
+    });
+
+    ipcMain.handle('retry-job', async (event, { filePath, jobId }) => {
+        if (!filePath || !jobId) {
+            return { success: false, error: 'File path or Job ID is missing.' };
+        }
+        try {
+            const buffer = fs.readFileSync(filePath);
+            const workbook = XLSX.read(buffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    
+            if (data.length < 2) {
+                return { success: false, error: 'Excel sheet is empty or has no headers.' };
+            }
+    
+            const headers = data[0].map(h => String(h).trim());
+            const jobIdIndex = headers.indexOf('JOB_ID');
+            const statusIndex = headers.indexOf('STATUS');
+    
+            if (jobIdIndex === -1 || statusIndex === -1) {
+                return { success: false, error: 'Could not find JOB_ID or STATUS columns.' };
+            }
+    
+            let jobFound = false;
+            for (let i = 1; i < data.length; i++) {
+                if (String(data[i][jobIdIndex]).trim() === String(jobId).trim()) {
+                    data[i][statusIndex] = ''; // Clear the status cell
+                    jobFound = true;
+                    break;
+                }
+            }
+    
+            if (!jobFound) {
+                return { success: false, error: `Job ID "${jobId}" not found in the file.` };
+            }
+    
+            const newWorksheet = XLSX.utils.aoa_to_sheet(data);
+            newWorksheet['!cols'] = worksheet['!cols']; // Preserve column widths
+            workbook.Sheets[sheetName] = newWorksheet;
+    
+            const newBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+            fs.writeFileSync(filePath, newBuffer);
+    
+            return { success: true };
+        } catch (err) {
+            console.error('Failed to retry job:', err);
+            return { success: false, error: err.message };
         }
     });
 
