@@ -1308,12 +1308,22 @@ const App: React.FC = () => {
                             <div>
                                <div className="flex justify-between items-start mb-4 gap-4">
                                   <div className="tracker-tabs-container flex-grow">
-                                      {trackedFiles.map((file, index) => (
-                                          <button key={`${file.path}-${index}`} className={`tracker-tab ${activeTrackerFileIndex === index ? 'active' : ''}`} onClick={() => setActiveTrackerFileIndex(index)}>
-                                              <span>{file.name}</span>
-                                              <span className="tab-close-btn" onClick={(e) => { e.stopPropagation(); handleCloseTrackerTab(index); }}>&times;</span>
-                                          </button>
-                                      ))}
+                                      {trackedFiles.map((file, index) => {
+                                          const completedCount = file.jobs.filter(j => j.status === 'Completed').length;
+                                          const totalJobs = file.jobs.length;
+                                          const progress = totalJobs > 0 ? (completedCount / totalJobs) * 100 : 0;
+
+                                          return (
+                                            <button key={`${file.path}-${index}`} className={`tracker-tab ${activeTrackerFileIndex === index ? 'active' : ''}`} onClick={() => setActiveTrackerFileIndex(index)}>
+                                                <div 
+                                                    className="tab-progress-frame"
+                                                    style={{ clipPath: `inset(0 ${100 - progress}% 0 0)` }}
+                                                ></div>
+                                                <span>{file.name}</span>
+                                                <span className="tab-close-btn" onClick={(e) => { e.stopPropagation(); handleCloseTrackerTab(index); }}>&times;</span>
+                                            </button>
+                                          )
+                                      })}
                                   </div>
                                   <button onClick={handleOpenNewFile} className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap">Tải File Mới</button>
                                </div>

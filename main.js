@@ -438,14 +438,19 @@ app.whenReady().then(() => {
         const successes = [];
         const failures = [];
         const ffmpegPath = getFfmpegPath('ffmpeg');
+        const totalFiles = filesToCombine.length;
 
+        // Use a standard for...of loop to ensure sequential execution
         for (const [index, file] of filesToCombine.entries()) {
             const completedJobs = file.jobs;
+            if (completedJobs.length === 0) continue; // Skip if no completed jobs
+
             const outputFileName = `${path.parse(file.name).name}.mp4`;
             const outputFilePath = path.join(outputDirectory, outputFileName);
 
+            // Send progress update to the renderer
             event.sender.send('combine-all-progress', { 
-                message: `Đang ghép file ${index + 1}/${filesToCombine.length}: "${file.name}"...` 
+                message: `Đang ghép file ${index + 1}/${totalFiles}: "${file.name}"...` 
             });
 
             const inputArgs = completedJobs.flatMap(job => ['-i', job.videoPath]);
@@ -454,11 +459,13 @@ app.whenReady().then(() => {
             const commandArgs = [...inputArgs, '-filter_complex', filterComplex, '-map', '[v]', '-y', outputFilePath];
 
             try {
+                // Wrap execFile in a Promise to use with await
                 await new Promise((resolve, reject) => {
                     execFile(ffmpegPath, commandArgs, (error, stdout, stderr) => {
                         if (error) {
                             console.error(`ffmpeg execFile error for ${file.name}: ${error}`);
-                            reject(new Error(`Lỗi FFmpeg: ${error.message}`));
+                            // Pass the actual error object to the reject function
+                            reject(error); 
                             return;
                         }
                         resolve({ success: true, filePath: outputFilePath });
@@ -466,7 +473,8 @@ app.whenReady().then(() => {
                 });
                 successes.push(file.name);
             } catch (error) {
-                failures.push({ name: file.name, reason: error.message });
+                // The error object from execFile has a message property
+                failures.push({ name: file.name, reason: error.message || 'Unknown FFmpeg error' });
             }
         }
 

@@ -75,6 +75,7 @@
             margin-bottom: 1.5rem;
         }
         .tracker-tab {
+            position: relative;
             display: flex;
             align-items: center;
             padding: 0.5rem 1rem;
@@ -86,6 +87,7 @@
             font-weight: 500;
             transition: all 0.2s ease-in-out;
             white-space: nowrap;
+            overflow: hidden; /* Important for progress frame */
         }
         .tracker-tab:hover {
             background-color: rgba(255, 255, 255, 0.05);
@@ -103,9 +105,25 @@
             border-radius: 9999px;
             line-height: 1;
             transition: background-color 0.2s;
+            position: relative;
+            z-index: 2;
         }
         .tab-close-btn:hover {
             background-color: rgba(255, 255, 255, 0.2);
+        }
+        .tab-progress-frame {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border: 2px solid #2dd4bf; /* Teal color */
+            border-radius: inherit;
+            transition: clip-path 0.4s ease-in-out;
+            pointer-events: none; /* Allows clicks to go through to the button */
+            z-index: 1;
+        }
+        .tracker-tab > span:not(.tab-close-btn) {
+            position: relative;
+            z-index: 2;
         }
         
         /* API Key Manager Styles */
