@@ -1057,18 +1057,18 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRetryFailedJobs = async () => {
+  const handleRetryStuckJobs = async () => {
     const currentFile = trackedFiles[activeTrackerFileIndex];
     if (!ipcRenderer || !currentFile?.path) return;
 
-    setFeedback({ type: 'info', message: `Đang yêu cầu tạo lại các video lỗi cho file: ${currentFile.name}...` });
+    setFeedback({ type: 'info', message: `Đang yêu cầu tạo lại các video đang xử lý cho file: ${currentFile.name}...` });
 
-    const result = await ipcRenderer.invoke('retry-failed-jobs', { 
-        filePath: currentFile.path, 
+    const result = await ipcRenderer.invoke('retry-stuck-jobs', {
+        filePath: currentFile.path,
     });
 
     if (result.success) {
-        setFeedback({ type: 'success', message: `Đã xóa trạng thái các video lỗi. Chúng sẽ được tạo lại.` });
+        setFeedback({ type: 'success', message: `Đã xóa trạng thái các video đang xử lý. Chúng sẽ được tạo lại.` });
         // The file watcher will automatically pick up the change and update the UI.
     } else {
         setFeedback({ type: 'error', message: `Lỗi khi tạo lại video: ${result.error}` });
@@ -1417,13 +1417,13 @@ const App: React.FC = () => {
                                           <span>Tải lại video</span>
                                       </button>
                                       <button
-                                          onClick={handleRetryFailedJobs}
-                                          disabled={!currentFile || !currentFile.jobs.some(j => j.status === 'Failed')}
+                                          onClick={handleRetryStuckJobs}
+                                          disabled={!currentFile || !currentFile.jobs.some(j => j.status === 'Generating' || j.status === 'Processing')}
                                           className="flex items-center gap-2 bg-yellow-500 text-white font-bold py-2 px-4 rounded-full hover:bg-yellow-600 transition text-sm disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                          title="Xóa trạng thái của tất cả các video bị lỗi để chúng được tạo lại."
+                                          title="Xóa trạng thái của tất cả các video đang trong trạng thái 'Generating' hoặc 'Processing' để chúng được tạo lại."
                                       >
                                           <RetryIcon className="w-4 h-4"/>
-                                          <span>Tạo lại các video lỗi</span>
+                                          <span>Tạo lại video đang xử lý</span>
                                       </button>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">

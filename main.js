@@ -382,7 +382,7 @@ app.whenReady().then(() => {
         }
     });
 
-    ipcMain.handle('retry-failed-jobs', async (event, { filePath }) => {
+    ipcMain.handle('retry-stuck-jobs', async (event, { filePath }) => {
         if (!filePath) {
             return { success: false, error: 'File path is missing.' };
         }
@@ -406,14 +406,15 @@ app.whenReady().then(() => {
     
             let jobsReset = 0;
             for (let i = 1; i < data.length; i++) {
-                if (String(data[i][statusIndex]).trim() === 'Failed') {
+                const status = String(data[i][statusIndex]).trim();
+                if (status === 'Generating' || status === 'Processing') {
                     data[i][statusIndex] = ''; // Clear the status cell
                     jobsReset++;
                 }
             }
     
             if (jobsReset === 0) {
-                return { success: false, error: `No failed jobs found to retry.` };
+                return { success: false, error: `Không tìm thấy video nào đang xử lý để tạo lại.` };
             }
     
             const newWorksheet = XLSX.utils.aoa_to_sheet(data);
@@ -425,7 +426,7 @@ app.whenReady().then(() => {
     
             return { success: true };
         } catch (err) {
-            console.error('Failed to retry failed jobs:', err);
+            console.error('Failed to retry stuck jobs:', err);
             return { success: false, error: err.message };
         }
     });
