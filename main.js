@@ -421,6 +421,58 @@ app.whenReady().then(() => {
         });
     });
 
+    ipcMain.handle('execute-ffmpeg-combine-all', async (event, filesToCombine) => {
+        const mainWindow = BrowserWindow.getFocusedWindow();
+        if (!mainWindow) return { canceled: true, error: 'Window not found.' };
+
+        const dirDialogResult = await dialog.showOpenDialog(mainWindow, {
+            title: 'Chọn thư mục để lưu tất cả video đã ghép',
+            properties: ['openDirectory', 'createDirectory']
+        });
+
+        if (dirDialogResult.canceled || dirDialogResult.filePaths.length === 0) {
+            return { canceled: true };
+        }
+        const outputDirectory = dirDialogResult.filePaths[0];
+
+        const successes = [];
+        const failures = [];
+        const ffmpegPath = getFfmpegPath('ffmpeg');
+
+        for (const [index, file] of filesToCombine.entries()) {
+            const completedJobs = file.jobs;
+            const outputFileName = `${path.parse(file.name).name}.mp4`;
+            const outputFilePath = path.join(outputDirectory, outputFileName);
+
+            event.sender.send('combine-all-progress', { 
+                message: `Đang ghép file ${index + 1}/${filesToCombine.length}: "${file.name}"...` 
+            });
+
+            const inputArgs = completedJobs.flatMap(job => ['-i', job.videoPath]);
+            const concatInputs = completedJobs.map((_, i) => `[${i}:v]`).join('');
+            const filterComplex = `${concatInputs}concat=n=${completedJobs.length}:v=1:a=0[v]`;
+            const commandArgs = [...inputArgs, '-filter_complex', filterComplex, '-map', '[v]', '-y', outputFilePath];
+
+            try {
+                await new Promise((resolve, reject) => {
+                    execFile(ffmpegPath, commandArgs, (error, stdout, stderr) => {
+                        if (error) {
+                            console.error(`ffmpeg execFile error for ${file.name}: ${error}`);
+                            reject(new Error(`Lỗi FFmpeg: ${error.message}`));
+                            return;
+                        }
+                        resolve({ success: true, filePath: outputFilePath });
+                    });
+                });
+                successes.push(file.name);
+            } catch (error) {
+                failures.push({ name: file.name, reason: error.message });
+            }
+        }
+
+        return { successes, failures, canceled: false };
+    });
+
 });
 
 autoUpdater.on('checking-for-update', () => console.log('Checking for update...'));

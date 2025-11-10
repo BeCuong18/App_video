@@ -485,42 +485,54 @@ const App: React.FC = () => {
         }).filter(job => job.id && String(job.id).trim());
     };
 
-  useEffect(() => {
-    if (!ipcRenderer) return;
+    // Effect for one-time IPC listener setup
+    useEffect(() => {
+      if (!ipcRenderer) return;
+  
+      const handleFileUpdate = (_event: any, { path, content }: { path: string, content: Uint8Array }) => {
+          const newJobs = parseExcelData(content);
+          setTrackedFiles(prevFiles => 
+              prevFiles.map(file => 
+                  file.path === path ? { ...file, jobs: newJobs } : file
+              )
+          );
+      };
+  
+      const handleCombineAllProgress = (_event: any, { message }: { message: string }) => {
+          setFeedback({ type: 'info', message });
+      };
+  
+      ipcRenderer.on('file-content-updated', handleFileUpdate);
+      ipcRenderer.on('combine-all-progress', handleCombineAllProgress);
+  
+      return () => {
+          ipcRenderer.removeListener('file-content-updated', handleFileUpdate);
+          ipcRenderer.removeListener('combine-all-progress', handleCombineAllProgress);
+      };
+    }, []);
 
-    const watchedPaths = new Set(trackedFiles.map(f => f.path).filter((path): path is string => !!path));
-    const previousWatchedPaths = new Set<string>(JSON.parse(sessionStorage.getItem('watchedPaths') || '[]') as string[]);
-
-    watchedPaths.forEach(path => {
-        if (!previousWatchedPaths.has(path)) {
-            ipcRenderer.send('start-watching-file', path);
-        }
-    });
-
-    previousWatchedPaths.forEach(path => {
-        if (!watchedPaths.has(path)) {
-            ipcRenderer.send('stop-watching-file', path);
-        }
-    });
-    
-    sessionStorage.setItem('watchedPaths', JSON.stringify(Array.from(watchedPaths)));
-
-    const handleFileUpdate = (_event: any, { path, content }: { path: string, content: Uint8Array }) => {
-        const newJobs = parseExcelData(content);
-        setTrackedFiles(prevFiles => 
-            prevFiles.map(file => 
-                file.path === path ? { ...file, jobs: newJobs } : file
-            )
-        );
-    };
-
-    ipcRenderer.on('file-content-updated', handleFileUpdate);
-
-    return () => {
-        ipcRenderer.removeListener('file-content-updated', handleFileUpdate);
-    };
-  }, [trackedFiles]);
-
+    // Effect for managing file watchers based on trackedFiles state
+    useEffect(() => {
+      if (!ipcRenderer) return;
+  
+      const watchedPaths = new Set(trackedFiles.map(f => f.path).filter((path): path is string => !!path));
+      const previousWatchedPaths = new Set<string>(JSON.parse(sessionStorage.getItem('watchedPaths') || '[]') as string[]);
+  
+      watchedPaths.forEach(path => {
+          if (!previousWatchedPaths.has(path)) {
+              ipcRenderer.send('start-watching-file', path);
+          }
+      });
+  
+      previousWatchedPaths.forEach(path => {
+          if (!watchedPaths.has(path)) {
+              ipcRenderer.send('stop-watching-file', path);
+          }
+      });
+      
+      sessionStorage.setItem('watchedPaths', JSON.stringify(Array.from(watchedPaths)));
+    }, [trackedFiles]);
+  
   const getFolderPath = (filePath: string | undefined): string => {
     if (!filePath) return '';
     const isWindows = navigator.userAgent.includes("Windows");
@@ -539,19 +551,16 @@ const App: React.FC = () => {
         
         if (hasIncompleteJobs && !fileDiscoveryRef.current.has(discoveryKey)) {
             const folderPath = getFolderPath(currentFile.path);
+            const filePath = currentFile.path; // Capture path for robust update
+            
             ipcRenderer.invoke('find-videos-for-jobs', { jobs: currentFile.jobs, basePath: folderPath })
                 .then((result: { success: boolean; jobs: VideoJob[]; error?: string; }) => {
                     if (result.success) {
-                        setTrackedFiles(prevFiles => {
-                            const newFiles = [...prevFiles];
-                            if(newFiles[activeTrackerFileIndex]) {
-                                newFiles[activeTrackerFileIndex] = {
-                                    ...newFiles[activeTrackerFileIndex],
-                                    jobs: result.jobs,
-                                };
-                            }
-                            return newFiles;
-                        });
+                        setTrackedFiles(prevFiles =>
+                            prevFiles.map(file =>
+                                file.path === filePath ? { ...file, jobs: result.jobs } : file
+                            )
+                        );
                         fileDiscoveryRef.current.add(discoveryKey);
                     }
                 });
@@ -910,40 +919,46 @@ const App: React.FC = () => {
 
     setIsCombiningAll(true);
     setLastCombinedVideoPath(null);
+    setFeedback({ type: 'info', message: 'Chuẩn bị ghép hàng loạt...' });
 
-    let successCount = 0;
-    let failCount = 0;
-    let canceled = false;
+    const filesToProcess = trackedFiles
+      .map(file => ({
+        name: file.name,
+        jobs: file.jobs.filter(j => j.status === 'Completed' && j.videoPath),
+      }))
+      .filter(file => file.jobs.length > 0);
 
-    for (const [index, file] of trackedFiles.entries()) {
-        if (canceled) break;
+    if (filesToProcess.length === 0) {
+      setFeedback({ type: 'error', message: 'Không có file nào có video đã hoàn thành để ghép.' });
+      setIsCombiningAll(false);
+      return;
+    }
+
+    try {
+      // The main process will now ask for the directory
+      const result = await ipcRenderer.invoke('execute-ffmpeg-combine-all', filesToProcess);
+
+      if (result.canceled) {
+        setFeedback({ type: 'info', message: 'Đã hủy thao tác ghép hàng loạt.' });
+      } else {
+        const { successes, failures } = result;
+        const finalMessage = `Hoàn tất ghép hàng loạt. Thành công: ${successes.length}. Thất bại: ${failures.length}.`;
         
-        setFeedback({ type: 'info', message: `Đang chuẩn bị ghép file ${index + 1}/${trackedFiles.length}: "${file.name}"...` });
-
-        try {
-            const success = await executeCombineForFile(file, 'normal');
-            if (success) {
-                successCount++;
-            } else {
-                // User canceled one of the save dialogs
-                canceled = true;
-            }
-        } catch (error) {
-            console.error(`Failed to combine ${file.name}:`, error);
-            failCount++;
+        let feedbackType: 'success' | 'error' | 'info' = 'success';
+        if (failures.length > 0 && successes.length === 0) {
+            feedbackType = 'error';
+        } else if (failures.length > 0) {
+            feedbackType = 'info'; // Partial success
         }
+        
+        setFeedback({ type: feedbackType, message: finalMessage });
+      }
+    } catch (err: any) {
+      console.error('Fatal error during combine all:', err);
+      setFeedback({ type: 'error', message: `Lỗi nghiêm trọng khi ghép hàng loạt: ${err.message}` });
+    } finally {
+      setIsCombiningAll(false);
     }
-
-    let finalMessage = '';
-    if (canceled) {
-        finalMessage = `Quá trình ghép hàng loạt đã dừng. Hoàn thành: ${successCount}. Thất bại: ${failCount}.`;
-        setFeedback({ type: 'info', message: finalMessage });
-    } else {
-        finalMessage = `Hoàn tất ghép hàng loạt. Thành công: ${successCount}. Thất bại: ${failCount}.`;
-        setFeedback({ type: (failCount > 0 ? 'error' : 'success'), message: finalMessage });
-    }
-    
-    setIsCombiningAll(false);
   };
   
   const handleCopyPath = async (path: string | undefined) => {
@@ -1009,7 +1024,6 @@ const App: React.FC = () => {
           setTrackedFiles(prevFiles => {
               const newFiles = [...prevFiles];
               if (newFiles[activeTrackerFileIndex]) {
-                  // FIX: Changed `activeTrackerFileFileIndex` to `activeTrackerFileIndex`
                   const fileToUpdate = { ...newFiles[activeTrackerFileIndex] };
                   fileToUpdate.jobs = fileToUpdate.jobs.map(job =>
                       job.id === jobId ? { ...job, videoPath: undefined } : job
