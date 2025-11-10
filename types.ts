@@ -30,6 +30,7 @@ export interface FormData {
   projectName: string;
   model: string;
   mvGenre: MvGenre;
+  filmingStyle: string;
   country: string;
   characterConsistency: boolean;
   characterCount: number;

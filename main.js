@@ -115,18 +115,25 @@ app.whenReady().then(() => {
     const mainWindow = BrowserWindow.getFocusedWindow();
     if (!mainWindow) return { success: false, error: 'Window not found.' };
     const result = await dialog.showOpenDialog(mainWindow, {
-        properties: ['openFile'],
+        properties: ['openFile', 'multiSelections'], // Allow multiple files to be selected
         filters: [{ name: 'Excel Files', extensions: ['xlsx', 'xls'] }]
     });
     if (result.canceled || result.filePaths.length === 0) {
-        return { success: false };
+        return { success: false, files: [] };
     }
-    const filePath = result.filePaths[0];
+    
     try {
-        const content = fs.readFileSync(filePath);
-        return { success: true, path: filePath, content: content, name: path.basename(filePath) };
+        const files = result.filePaths.map(filePath => {
+            const content = fs.readFileSync(filePath);
+            return {
+                path: filePath,
+                content: content,
+                name: path.basename(filePath)
+            };
+        });
+        return { success: true, files: files };
     } catch (err) {
-        return { success: false, error: err.message };
+        return { success: false, error: err.message, files: [] };
     }
   });
   
@@ -334,11 +341,14 @@ app.whenReady().then(() => {
         return { found: false };
     });
 
-    ipcMain.handle('execute-ffmpeg-combine', async (event, { jobs, targetDuration, mode }) => {
+    ipcMain.handle('execute-ffmpeg-combine', async (event, { jobs, targetDuration, mode, excelFileName }) => {
         const mainWindow = BrowserWindow.getFocusedWindow();
         if (!mainWindow) return { success: false, error: 'Window not found.' };
 
-        const defaultFileName = `combined_${Date.now()}.mp4`;
+        const defaultFileName = excelFileName 
+            ? `${path.parse(excelFileName).name}.mp4`
+            : `combined_${Date.now()}.mp4`;
+
         const saveDialogResult = await dialog.showSaveDialog(mainWindow, {
             title: 'Lưu Video Đã Ghép',
             defaultPath: defaultFileName,

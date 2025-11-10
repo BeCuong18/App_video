@@ -268,6 +268,7 @@ const App: React.FC = () => {
     projectName: '',
     model: 'gemini-flash-lite-latest',
     mvGenre: 'narrative',
+    filmingStyle: 'auto',
     country: 'Vietnamese',
     characterConsistency: true,
     characterCount: 1,
@@ -289,6 +290,7 @@ const App: React.FC = () => {
 
   const [ffmpegFound, setFfmpegFound] = useState<boolean | null>(null);
   const [isCombiningVideo, setIsCombiningVideo] = useState(false);
+  const [isCombiningAll, setIsCombiningAll] = useState(false);
   const [lastCombinedVideoPath, setLastCombinedVideoPath] = useState<string | null>(null);
 
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
@@ -302,6 +304,17 @@ const App: React.FC = () => {
     { value: 'scenic', label: 'Cảnh quan & Kiến trúc (Không người)' },
     { value: 'animation', label: 'Hoạt hình (Animation)' },
     { value: 'one-take', label: 'Một cú máy (One-take)' },
+  ];
+
+  const filmingStyleOptions: { value: string, label: string }[] = [
+    { value: 'auto', label: 'AI Tự động đề xuất' },
+    { value: 'Vintage 35mm Film', label: 'Phim 35mm Cổ điển' },
+    { value: 'Sharp & Modern Digital', label: 'Kỹ thuật số Sắc nét & Hiện đại' },
+    { value: 'Found Footage / Handheld', label: 'Giả tài liệu / Cầm tay' },
+    { value: 'Surreal & Dreamlike', label: 'Siêu thực & Mơ màng' },
+    { value: 'Artistic Black & White', label: 'Đen trắng Nghệ thuật' },
+    { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình 2D (Phong cách Ghibli)' },
+    { value: '3D Animation (Pixar Style)', label: 'Hoạt hình 3D (Phong cách Pixar)' },
   ];
   
   const countryOptions: { value: string, label: string }[] = [
@@ -619,6 +632,8 @@ const App: React.FC = () => {
         return;
       }
       const selectedGenre = mvGenreOptions.find(o => o.value === formData.mvGenre)?.label || formData.mvGenre;
+      const selectedFilmingStyle = filmingStyleOptions.find(o => o.value === formData.filmingStyle)?.label || formData.filmingStyle;
+      
       userPrompt += ` The creative input (lyrics or a detailed idea) is: "${formData.idea.trim()}".`;
       userPrompt += `\n**User Specifications:**`;
       userPrompt += `\n- **Nationality:** ${formData.country}`;
@@ -627,6 +642,7 @@ const App: React.FC = () => {
         userPrompt += `\n- **Number of Consistent Characters:** ${formData.characterCount}`;
       }
       userPrompt += `\n- **Music Video Genre:** "${selectedGenre}"`;
+      userPrompt += `\n- **Filming Style:** "${selectedFilmingStyle}"`;
 
     } else {
       if (!formData.liveAtmosphere.trim() && !formData.liveArtistName.trim() && !formData.liveArtist.trim() && !formData.liveArtistImage) {
@@ -783,19 +799,22 @@ const App: React.FC = () => {
     if (!ipcRenderer) return;
     setFeedback(null);
     const result = await ipcRenderer.invoke('open-file-dialog');
-    if (result.success) {
+    if (result.success && result.files.length > 0) {
         try {
-            const loadedJobs = parseExcelData(result.content);
-            const newTrackedFile: TrackedFile = {
-                name: result.name,
-                jobs: loadedJobs,
-                path: result.path,
-            };
-            setTrackedFiles(prev => [...prev, newTrackedFile]);
-            setActiveTrackerFileIndex(trackedFiles.length);
+            const newFiles: TrackedFile[] = [];
+            for (const file of result.files) {
+                const loadedJobs = parseExcelData(file.content);
+                newFiles.push({
+                    name: file.name,
+                    jobs: loadedJobs,
+                    path: file.path,
+                });
+            }
+            setTrackedFiles(prev => [...prev, ...newFiles]);
+            setActiveTrackerFileIndex(trackedFiles.length + newFiles.length - 1);
         } catch (error) {
-            console.error("Error parsing Excel file:", error);
-            setFeedback({ type: 'error', message: 'Không thể đọc file. File không đúng định dạng hoặc đã bị lỗi.' });
+            console.error("Error parsing Excel file(s):", error);
+            setFeedback({ type: 'error', message: 'Không thể đọc một hoặc nhiều file. File không đúng định dạng hoặc đã bị lỗi.' });
         }
     } else if (result.error) {
         setFeedback({ type: 'error', message: `Lỗi mở file: ${result.error}` });
@@ -825,48 +844,106 @@ const App: React.FC = () => {
     }
   };
   
+  const executeCombineForFile = async (file: TrackedFile, mode: 'normal' | 'timed') => {
+      if (!ipcRenderer || !ffmpegFound) return false;
+
+      const completedJobs = file.jobs.filter(j => j.status === 'Completed' && j.videoPath);
+      if (completedJobs.length < 1) {
+          setFeedback({ type: 'error', message: `File "${file.name}" không có video hoàn thành nào để ghép.` });
+          return false;
+      }
+
+      if (mode === 'timed') {
+          const targetDuration = file.targetDurationSeconds;
+          if (!targetDuration || targetDuration <= 0) {
+              setFeedback({ type: 'error', message: `File "${file.name}" không có thời lượng mục tiêu.` });
+              return false;
+          }
+      }
+
+      try {
+          const result = await ipcRenderer.invoke('execute-ffmpeg-combine', {
+              jobs: completedJobs,
+              targetDuration: file.targetDurationSeconds,
+              mode: mode,
+              excelFileName: file.name,
+          });
+
+          if (result.success) {
+              setLastCombinedVideoPath(result.filePath);
+              return true;
+          } else if (result.error && result.error !== 'Save dialog canceled') {
+              throw new Error(result.error);
+          } else {
+              // Canceled by user
+              return false;
+          }
+      } catch (err: any) {
+          throw err; // Propagate error up
+      }
+  };
+  
   const handleExecuteCombine = async (mode: 'normal' | 'timed') => {
-    const currentFile = trackedFiles[activeTrackerFileIndex];
-    if (!currentFile || !ipcRenderer || !ffmpegFound) return;
+      const currentFile = trackedFiles[activeTrackerFileIndex];
+      if (!currentFile) return;
 
-    const completedJobs = currentFile.jobs.filter(j => j.status === 'Completed' && j.videoPath);
-    if (completedJobs.length < 1) {
-        setFeedback({ type: 'error', message: 'Không có video hoàn thành nào được link để ghép.' });
-        return;
-    }
+      setIsCombiningVideo(true);
+      setLastCombinedVideoPath(null);
+      setFeedback({ type: 'info', message: `Bắt đầu quá trình ghép video cho "${currentFile.name}"...` });
+      
+      try {
+          const success = await executeCombineForFile(currentFile, mode);
+          if (success) {
+              setFeedback({ type: 'success', message: `Ghép video thành công cho "${currentFile.name}"!` });
+          } else {
+              setFeedback(null); // Canceled by user
+          }
+      } catch (err: any) {
+          setFeedback({ type: 'error', message: `Lỗi ghép video: ${err.message}` });
+      } finally {
+          setIsCombiningVideo(false);
+      }
+  };
 
-    if (mode === 'timed') {
-        const targetDuration = currentFile.targetDurationSeconds;
-        if (!targetDuration || targetDuration <= 0) {
-            setFeedback({ type: 'error', message: 'Không tìm thấy thời lượng mục tiêu. Vui lòng tạo kịch bản từ đầu để dùng tính năng này.' });
-            return;
-        }
-    }
+  const handleCombineAllFiles = async () => {
+    if (trackedFiles.length === 0 || !ipcRenderer || !ffmpegFound) return;
 
-    setIsCombiningVideo(true);
+    setIsCombiningAll(true);
     setLastCombinedVideoPath(null);
-    setFeedback({ type: 'info', message: 'Bắt đầu quá trình ghép video... Vui lòng chờ.' });
-    
-    try {
-        const result = await ipcRenderer.invoke('execute-ffmpeg-combine', {
-            jobs: completedJobs,
-            targetDuration: currentFile.targetDurationSeconds,
-            mode: mode,
-        });
 
-        if (result.success) {
-            setFeedback({ type: 'success', message: `Ghép video thành công!` });
-            setLastCombinedVideoPath(result.filePath);
-        } else if (result.error && result.error !== 'Save dialog canceled') {
-            setFeedback({ type: 'error', message: `Lỗi ghép video: ${result.error}` });
-        } else {
-            setFeedback(null); // Canceled by user
+    let successCount = 0;
+    let failCount = 0;
+    let canceled = false;
+
+    for (const [index, file] of trackedFiles.entries()) {
+        if (canceled) break;
+        
+        setFeedback({ type: 'info', message: `Đang chuẩn bị ghép file ${index + 1}/${trackedFiles.length}: "${file.name}"...` });
+
+        try {
+            const success = await executeCombineForFile(file, 'normal');
+            if (success) {
+                successCount++;
+            } else {
+                // User canceled one of the save dialogs
+                canceled = true;
+            }
+        } catch (error) {
+            console.error(`Failed to combine ${file.name}:`, error);
+            failCount++;
         }
-    } catch (err: any) {
-        setFeedback({ type: 'error', message: `Lỗi không xác định khi ghép video: ${err.message}` });
-    } finally {
-        setIsCombiningVideo(false);
     }
+
+    let finalMessage = '';
+    if (canceled) {
+        finalMessage = `Quá trình ghép hàng loạt đã dừng. Hoàn thành: ${successCount}. Thất bại: ${failCount}.`;
+        setFeedback({ type: 'info', message: finalMessage });
+    } else {
+        finalMessage = `Hoàn tất ghép hàng loạt. Thành công: ${successCount}. Thất bại: ${failCount}.`;
+        setFeedback({ type: (failCount > 0 ? 'error' : 'success'), message: finalMessage });
+    }
+    
+    setIsCombiningAll(false);
   };
   
   const handleCopyPath = async (path: string | undefined) => {
@@ -932,6 +1009,7 @@ const App: React.FC = () => {
           setTrackedFiles(prevFiles => {
               const newFiles = [...prevFiles];
               if (newFiles[activeTrackerFileIndex]) {
+                  // FIX: Changed `activeTrackerFileFileIndex` to `activeTrackerFileIndex`
                   const fileToUpdate = { ...newFiles[activeTrackerFileIndex] };
                   fileToUpdate.jobs = fileToUpdate.jobs.map(job =>
                       job.id === jobId ? { ...job, videoPath: undefined } : job
@@ -1080,6 +1158,12 @@ const App: React.FC = () => {
                                 {mvGenreOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
+                        <div>
+                            <label htmlFor="filmingStyle" className="block text-sm font-medium text-indigo-100 mb-2">Phong cách quay</label>
+                            <select id="filmingStyle" name="filmingStyle" value={formData.filmingStyle} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
+                                {filmingStyleOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                            </select>
+                        </div>
                          <div>
                             <label htmlFor="country" className="block text-sm font-medium text-indigo-100 mb-2">Quốc gia (Nationality)</label>
                             <select id="country" name="country" value={formData.country} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
@@ -1208,16 +1292,16 @@ const App: React.FC = () => {
                              </div>
                         ) : (
                             <div>
-                               <div className="flex justify-between items-center mb-4">
-                                  <div className="tracker-tabs flex-grow">
+                               <div className="flex justify-between items-start mb-4 gap-4">
+                                  <div className="tracker-tabs-container flex-grow">
                                       {trackedFiles.map((file, index) => (
-                                          <button key={index} className={`tracker-tab ${activeTrackerFileIndex === index ? 'active' : ''}`} onClick={() => setActiveTrackerFileIndex(index)}>
+                                          <button key={`${file.path}-${index}`} className={`tracker-tab ${activeTrackerFileIndex === index ? 'active' : ''}`} onClick={() => setActiveTrackerFileIndex(index)}>
                                               <span>{file.name}</span>
                                               <span className="tab-close-btn" onClick={(e) => { e.stopPropagation(); handleCloseTrackerTab(index); }}>&times;</span>
                                           </button>
                                       ))}
                                   </div>
-                                  <button onClick={handleOpenNewFile} className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap ml-4">Tải File Mới</button>
+                                  <button onClick={handleOpenNewFile} className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap">Tải File Mới</button>
                                </div>
 
                                 {currentFile && stats && (
@@ -1251,10 +1335,6 @@ const App: React.FC = () => {
                                             <FolderIcon className="w-4 h-4"/>
                                             <span>Mở Thư mục</span>
                                         </button>
-                                        <button onClick={() => handleCopyPath(currentFile.path)} className="flex items-center gap-2 bg-white/10 text-white py-2 px-4 rounded-full hover:bg-white/20 transition text-sm">
-                                            <CopyIcon className="w-4 h-4"/>
-                                            <span>Copy Path File</span>
-                                        </button>
                                         <button onClick={() => handleCopyPath(getFolderPath(currentFile.path))} className="flex items-center gap-2 bg-white/10 text-white py-2 px-4 rounded-full hover:bg-white/20 transition text-sm">
                                             <CopyIcon className="w-4 h-4"/>
                                             <span>Copy Path Thư mục</span>
@@ -1278,20 +1358,28 @@ const App: React.FC = () => {
                                         ) : (
                                             <>
                                                 <button 
-                                                    onClick={() => handleExecuteCombine('normal')}
-                                                    disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath) || isCombiningVideo}
-                                                    className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                                    title="Ghép các video đã hoàn thành theo thứ tự."
+                                                    onClick={handleCombineAllFiles}
+                                                    disabled={trackedFiles.length === 0 || isCombiningAll || isCombiningVideo}
+                                                    className="bg-orange-500 text-white font-bold py-2 px-4 rounded-full hover:bg-orange-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                                    title="Ghép video lần lượt cho tất cả các file đang được theo dõi."
                                                 >
-                                                    {isCombiningVideo ? 'Đang xử lý...' : 'Ghép Thường'}
+                                                    {isCombiningAll ? 'Đang xử lý...' : 'Ghép Thường Tất Cả'}
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleExecuteCombine('normal')}
+                                                    disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath) || isCombiningVideo || isCombiningAll}
+                                                    className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                                    title="Ghép các video đã hoàn thành của file hiện tại theo thứ tự."
+                                                >
+                                                    {(isCombiningVideo && !isCombiningAll) ? 'Đang xử lý...' : 'Ghép Thường'}
                                                 </button>
                                                 <button 
                                                     onClick={() => handleExecuteCombine('timed')}
-                                                    disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath) || !currentFile.targetDurationSeconds || isCombiningVideo}
+                                                    disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath) || !currentFile.targetDurationSeconds || isCombiningVideo || isCombiningAll}
                                                     className="bg-cyan-500 text-white font-bold py-2 px-4 rounded-full hover:bg-cyan-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                                    title="Ghép các video đã hoàn thành và đồng bộ với thời lượng bài hát"
+                                                    title="Ghép các video đã hoàn thành của file hiện tại và đồng bộ với thời lượng bài hát"
                                                 >
-                                                    {isCombiningVideo ? 'Đang xử lý...' : 'Ghép Theo Thời Gian'}
+                                                    {(isCombiningVideo && !isCombiningAll) ? 'Đang xử lý...' : 'Ghép Theo Thời Gian'}
                                                 </button>
                                             </>
                                         )}

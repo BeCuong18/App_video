@@ -66,22 +66,26 @@
             border-bottom: none;
         }
         /* Tracker Tab Styles */
-        .tracker-tabs {
+        .tracker-tabs-container {
             display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem; /* Spacing between tabs */
             border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 0.75rem;
             margin-bottom: 1.5rem;
         }
         .tracker-tab {
             display: flex;
             align-items: center;
-            padding: 0.75rem 1.25rem;
+            padding: 0.5rem 1rem;
             cursor: pointer;
-            border: none;
+            border: 1px solid transparent;
+            border-radius: 0.5rem;
             background-color: transparent;
             color: #d1d5db;
             font-weight: 500;
-            border-bottom: 2px solid transparent;
             transition: all 0.2s ease-in-out;
+            white-space: nowrap;
         }
         .tracker-tab:hover {
             background-color: rgba(255, 255, 255, 0.05);
@@ -90,7 +94,8 @@
         .tracker-tab.active {
             color: #fff;
             font-weight: 600;
-            border-bottom-color: #14b8a6;
+            background-color: rgba(20, 184, 166, 0.3);
+            border-color: rgba(20, 184, 166, 0.7);
         }
         .tab-close-btn {
             margin-left: 0.75rem;
