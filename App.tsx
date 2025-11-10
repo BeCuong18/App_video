@@ -168,7 +168,7 @@ const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onKeySelec
             <div className="w-full max-w-2xl mx-auto">
                 <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2 text-center">
-                        Quản lý API Keys(Đọc hướng dẫn để lấy khoá API)
+                        Quản lý API Keys (Đọc hướng dẫn để lấy khoá API)
                     </h1>
                     <p className="text-indigo-200 mb-6 text-center">
                         Thêm, xóa, hoặc chọn một Google AI API Key để sử dụng.
@@ -1050,7 +1050,7 @@ const App: React.FC = () => {
     });
 
     if (result.success) {
-        setFeedback({ type: 'success', message: `Đã xóa trạng thái cho job ${jobId}. Video sẽ được tạo lại.` });
+        setFeedback({ type: 'success', message: `Đã xóa trạng thái cho job ${jobId}. Video sẽ được tạo lại. Ahihi rồi nó sẽ lỗi tiép thôi` });
         // The file watcher will automatically pick up the change and update the UI.
     } else {
         setFeedback({ type: 'error', message: `Lỗi khi tạo lại video: ${result.error}` });
@@ -1068,7 +1068,7 @@ const App: React.FC = () => {
     });
 
     if (result.success) {
-        setFeedback({ type: 'success', message: `Đã xóa trạng thái các video đang xử lý. Chúng sẽ được tạo lại.` });
+        setFeedback({ type: 'success', message: `Đã xóa trạng thái các video đang xử lý. Chúng sẽ được tạo lại. Fact: Kiểu gì cũng có video lỗi` });
         // The file watcher will automatically pick up the change and update the UI.
     } else {
         setFeedback({ type: 'error', message: `Lỗi khi tạo lại video: ${result.error}` });
@@ -1136,7 +1136,7 @@ const App: React.FC = () => {
         return (
           <div className={`${containerClasses} flex-col text-indigo-200`}>
              <VideoIcon className="w-8 h-8 text-gray-400 mb-1" />
-             <p className="text-xs font-semibold mb-1">Không tìm thấy video</p>
+             <p className="text-xs font-semibold mb-1">Không tìm thấy video Bấm tải lại video</p>
              <button onClick={() => handleLinkVideo(job.id, fileIndex)} className="text-xs text-indigo-300 hover:underline">Link thủ công</button>
           </div>
         );
@@ -1431,9 +1431,11 @@ const App: React.FC = () => {
                                             <button onClick={handleOpenToolFlows} className="flex items-center gap-2 text-white font-bold py-2 pl-4 pr-3 text-sm">
                                                 <ExternalLinkIcon className="w-4 h-4"/>
                                                 <span>Mở ToolFlows</span>
+                                                title="Mở ToolFlows Veo 3"
                                             </button>
                                             <button onClick={handleSetToolFlowsPath} className="text-white font-bold py-2 pr-3 pl-2 text-sm border-l border-purple-400 hover:bg-purple-700 rounded-r-full" title="Thay đổi đường dẫn ToolFlows">
                                                 <CogIcon className="w-4 h-4"/>
+                                                title="Thay đổi đường đãn của ToolFlow Veo 3"
                                             </button>
                                         </div>
                                         <button onClick={() => handleOpenFolder(currentFile.path)} className="flex items-center gap-2 bg-indigo-500 text-white font-bold py-2 px-4 rounded-full hover:bg-indigo-600 transition text-sm">
@@ -1466,7 +1468,7 @@ const App: React.FC = () => {
                                                     onClick={handleCombineAllFiles}
                                                     disabled={trackedFiles.length === 0 || isCombiningAll || isCombiningVideo}
                                                     className="bg-orange-500 text-white font-bold py-2 px-4 rounded-full hover:bg-orange-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                                    title="Ghép video lần lượt cho tất cả các file đang được theo dõi."
+                                                    title="Ghép video lần lượt cho tất cả các file đang được theo dõi.Hãy kiểm tra tất cả các tab file trước khi ghép"
                                                 >
                                                     {isCombiningAll ? 'Đang xử lý...' : 'Ghép Thường Tất Cả'}
                                                 </button>
