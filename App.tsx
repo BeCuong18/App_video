@@ -65,7 +65,7 @@ const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
             Kích hoạt ứng dụng
           </h1>
           <p className="text-indigo-200 mb-6">
-            Vui lòng cung cấp mã máy tính cho quản trị viên để nhận mã kích hoạt.
+            Vui lòng cung cấp mã máy tính cho quản trị viên Cường-VFATS để nhận mã kích hoạt.
           </p>
           
           <div className="mb-6">
@@ -168,7 +168,7 @@ const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onKeySelec
             <div className="w-full max-w-2xl mx-auto">
                 <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
                     <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2 text-center">
-                        Quản lý API Keys
+                        Quản lý API Keys(Đọc hướng dẫn để lấy khoá API)
                     </h1>
                     <p className="text-indigo-200 mb-6 text-center">
                         Thêm, xóa, hoặc chọn một Google AI API Key để sử dụng.
@@ -629,7 +629,7 @@ const App: React.FC = () => {
       return;
     }
 
-    let sceneCount = Math.max(3, Math.round(totalSeconds / 7));
+    let sceneCount = Math.max(3, Math.round(totalSeconds / 8));
 
     const systemPrompt = videoType === 'story' ? storySystemPrompt : liveSystemPrompt;
     let userPrompt = `Generate prompts for a music video.`;
