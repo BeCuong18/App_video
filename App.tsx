@@ -1431,11 +1431,11 @@ const App: React.FC = () => {
                                             <button onClick={handleOpenToolFlows} className="flex items-center gap-2 text-white font-bold py-2 pl-4 pr-3 text-sm">
                                                 <ExternalLinkIcon className="w-4 h-4"/>
                                                 <span>Mở ToolFlows</span>
-                                                title="Mở ToolFlows Veo 3"
+                                                
                                             </button>
-                                            <button onClick={handleSetToolFlowsPath} className="text-white font-bold py-2 pr-3 pl-2 text-sm border-l border-purple-400 hover:bg-purple-700 rounded-r-full" title="Thay đổi đường dẫn ToolFlows">
+                                            <button onClick={handleSetToolFlowsPath} className="text-white font-bold py-2 pr-3 pl-2 text-sm border-l border-purple-400 hover:bg-purple-700 rounded-r-full" title="Thay đổi đường dẫn ToolFlows Veo 3">
                                                 <CogIcon className="w-4 h-4"/>
-                                                title="Thay đổi đường đãn của ToolFlow Veo 3"
+                                                
                                             </button>
                                         </div>
                                         <button onClick={() => handleOpenFolder(currentFile.path)} className="flex items-center gap-2 bg-indigo-500 text-white font-bold py-2 px-4 rounded-full hover:bg-indigo-600 transition text-sm">
