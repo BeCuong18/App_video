@@ -1057,6 +1057,24 @@ const App: React.FC = () => {
     }
   };
 
+  const handleRetryFailedJobs = async () => {
+    const currentFile = trackedFiles[activeTrackerFileIndex];
+    if (!ipcRenderer || !currentFile?.path) return;
+
+    setFeedback({ type: 'info', message: `Đang yêu cầu tạo lại các video lỗi cho file: ${currentFile.name}...` });
+
+    const result = await ipcRenderer.invoke('retry-failed-jobs', { 
+        filePath: currentFile.path, 
+    });
+
+    if (result.success) {
+        setFeedback({ type: 'success', message: `Đã xóa trạng thái các video lỗi. Chúng sẽ được tạo lại.` });
+        // The file watcher will automatically pick up the change and update the UI.
+    } else {
+        setFeedback({ type: 'error', message: `Lỗi khi tạo lại video: ${result.error}` });
+    }
+  };
+
   const getStatusBadge = (status: JobStatus) => {
     const baseClasses = "status-badge";
     switch (status) {
@@ -1127,6 +1145,7 @@ const App: React.FC = () => {
   const stats = currentFile ? {
     completed: currentFile.jobs.filter(j => j.status === 'Completed').length,
     inProgress: currentFile.jobs.filter(j => j.status === 'Processing' || j.status === 'Generating').length,
+    failed: currentFile.jobs.filter(j => j.status === 'Failed').length,
     total: currentFile.jobs.length,
   } : null;
 
@@ -1356,6 +1375,15 @@ const App: React.FC = () => {
                                           <div className="text-2xl font-bold text-indigo-300">{formatDuration(currentFile.targetDurationSeconds)}</div>
                                           <div className="text-xs text-gray-400 uppercase tracking-wider">Thời lượng</div>
                                       </div>
+                                      <button
+                                          onClick={handleRetryFailedJobs}
+                                          disabled={!currentFile || !currentFile.jobs.some(j => j.status === 'Failed')}
+                                          className="flex items-center gap-2 bg-yellow-500 text-white font-bold py-2 px-4 rounded-full hover:bg-yellow-600 transition text-sm disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                          title="Xóa trạng thái của tất cả các video bị lỗi để chúng được tạo lại."
+                                      >
+                                          <RetryIcon className="w-4 h-4"/>
+                                          <span>Tạo lại các video lỗi</span>
+                                      </button>
                                     </div>
                                     <div className="flex flex-wrap items-center gap-2">
                                         <div className="flex rounded-full bg-purple-500 hover:bg-purple-600 transition shadow-md">

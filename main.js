@@ -381,6 +381,54 @@ app.whenReady().then(() => {
         }
     });
 
+    ipcMain.handle('retry-failed-jobs', async (event, { filePath }) => {
+        if (!filePath) {
+            return { success: false, error: 'File path is missing.' };
+        }
+        try {
+            const buffer = fs.readFileSync(filePath);
+            const workbook = XLSX.read(buffer, { type: 'buffer' });
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+            const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    
+            if (data.length < 2) {
+                return { success: false, error: 'Excel sheet is empty or has no headers.' };
+            }
+    
+            const headers = data[0].map(h => String(h).trim());
+            const statusIndex = headers.indexOf('STATUS');
+    
+            if (statusIndex === -1) {
+                return { success: false, error: 'Could not find STATUS column.' };
+            }
+    
+            let jobsReset = 0;
+            for (let i = 1; i < data.length; i++) {
+                if (String(data[i][statusIndex]).trim() === 'Failed') {
+                    data[i][statusIndex] = ''; // Clear the status cell
+                    jobsReset++;
+                }
+            }
+    
+            if (jobsReset === 0) {
+                return { success: false, error: `No failed jobs found to retry.` };
+            }
+    
+            const newWorksheet = XLSX.utils.aoa_to_sheet(data);
+            newWorksheet['!cols'] = worksheet['!cols']; // Preserve column widths
+            workbook.Sheets[sheetName] = newWorksheet;
+    
+            const newBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+            fs.writeFileSync(filePath, newBuffer);
+    
+            return { success: true };
+        } catch (err) {
+            console.error('Failed to retry failed jobs:', err);
+            return { success: false, error: err.message };
+        }
+    });
+
     // --- FFmpeg Management ---
     ipcMain.handle('check-ffmpeg', async () => {
         // Strict check: both ffmpeg and ffprobe must exist in the bundled location.
