@@ -299,6 +299,7 @@ const App: React.FC = () => {
     { value: 'performance', label: 'Trình diễn (Performance)' },
     { value: 'conceptual', label: 'Trừu tượng (Conceptual)' },
     { value: 'lyrical', label: 'Minh hoạ lời bài hát (Lyrical Montage)' },
+    { value: 'scenic', label: 'Cảnh quan & Kiến trúc (Không người)' },
     { value: 'animation', label: 'Hoạt hình (Animation)' },
     { value: 'one-take', label: 'Một cú máy (One-take)' },
   ];
@@ -613,12 +614,12 @@ const App: React.FC = () => {
 
     if (videoType === 'story') {
       if (!formData.idea.trim()) {
-        setFeedback({ type: 'error', message: 'Vui lòng nhập Lời bài hát.' });
+        setFeedback({ type: 'error', message: 'Vui lòng nhập Lời bài hát hoặc Ý tưởng.' });
         setIsLoading(false);
         return;
       }
       const selectedGenre = mvGenreOptions.find(o => o.value === formData.mvGenre)?.label || formData.mvGenre;
-      userPrompt += ` The song lyrics are: "${formData.idea.trim()}".`;
+      userPrompt += ` The creative input (lyrics or a detailed idea) is: "${formData.idea.trim()}".`;
       userPrompt += `\n**User Specifications:**`;
       userPrompt += `\n- **Nationality:** ${formData.country}`;
       userPrompt += `\n- **Enforce Character Consistency:** ${formData.characterConsistency ? 'Yes' : 'No'}`;
@@ -1069,8 +1070,8 @@ const App: React.FC = () => {
 
                   <div className={`${videoType === 'story' ? 'block' : 'hidden'} space-y-6`}>
                     <div>
-                      <label htmlFor="idea" className="block text-sm font-medium text-indigo-100 mb-2">Nhập lời bài hát (Lyrics)</label>
-                      <textarea id="idea" name="idea" value={formData.idea} onChange={handleInputChange} rows={4} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Dán toàn bộ lời bài hát vào đây để AI phân tích và tạo kịch bản..."></textarea>
+                      <label htmlFor="idea" className="block text-sm font-medium text-indigo-100 mb-2">Nhập Lời bài hát hoặc Ý tưởng Kịch bản</label>
+                      <textarea id="idea" name="idea" value={formData.idea} onChange={handleInputChange} rows={4} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Dán toàn bộ lời bài hát hoặc mô tả chi tiết ý tưởng của bạn cho MV..."></textarea>
                     </div>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>

@@ -1,5 +1,5 @@
 
-export type MvGenre = 'narrative' | 'performance' | 'conceptual' | 'lyrical' | 'animation' | 'one-take';
+export type MvGenre = 'narrative' | 'performance' | 'conceptual' | 'lyrical' | 'animation' | 'one-take' | 'scenic';
 export type VideoType = 'story' | 'live';
 export type ActiveTab = 'generator' | 'tracker';
 export type JobStatus = 'Pending' | 'Processing' | 'Generating' | 'Completed' | 'Failed';
