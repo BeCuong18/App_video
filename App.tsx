@@ -1075,6 +1075,38 @@ const App: React.FC = () => {
     }
   };
 
+  const handleReloadVideos = async () => {
+    const currentFile = trackedFiles[activeTrackerFileIndex];
+    if (!ipcRenderer || !currentFile?.path) return;
+
+    setFeedback({ type: 'info', message: `Đang quét lại thư mục để tìm video cho file: ${currentFile.name}...` });
+    
+    const folderPath = getFolderPath(currentFile.path);
+    const filePath = currentFile.path;
+
+    try {
+        const result: { success: boolean; jobs: VideoJob[]; error?: string; } = await ipcRenderer.invoke('find-videos-for-jobs', { 
+            jobs: currentFile.jobs, 
+            basePath: folderPath 
+        });
+
+        if (result.success) {
+            setTrackedFiles(prevFiles =>
+                prevFiles.map(file =>
+                    file.path === filePath ? { ...file, jobs: result.jobs } : file
+                )
+            );
+            const discoveryKey = `${filePath}-${result.jobs.map(j => j.status).join(',')}`;
+            fileDiscoveryRef.current.delete(discoveryKey);
+            setFeedback({ type: 'success', message: 'Tải lại danh sách video thành công.' });
+        } else {
+             throw new Error(result.error || 'Lỗi không xác định.');
+        }
+    } catch (err: any) {
+        setFeedback({ type: 'error', message: `Lỗi khi tải lại video: ${err.message}` });
+    }
+  };
+
   const getStatusBadge = (status: JobStatus) => {
     const baseClasses = "status-badge";
     switch (status) {
@@ -1375,6 +1407,15 @@ const App: React.FC = () => {
                                           <div className="text-2xl font-bold text-indigo-300">{formatDuration(currentFile.targetDurationSeconds)}</div>
                                           <div className="text-xs text-gray-400 uppercase tracking-wider">Thời lượng</div>
                                       </div>
+                                      <button
+                                          onClick={handleReloadVideos}
+                                          disabled={!currentFile}
+                                          className="flex items-center gap-2 bg-blue-500 text-white font-bold py-2 px-4 rounded-full hover:bg-blue-600 transition text-sm disabled:bg-gray-500 disabled:cursor-not-allowed"
+                                          title="Quét lại thư mục để tìm và cập nhật các video đã được tạo."
+                                      >
+                                          <RetryIcon className="w-4 h-4"/>
+                                          <span>Tải lại video</span>
+                                      </button>
                                       <button
                                           onClick={handleRetryFailedJobs}
                                           disabled={!currentFile || !currentFile.jobs.some(j => j.status === 'Failed')}

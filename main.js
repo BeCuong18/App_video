@@ -271,17 +271,18 @@ app.whenReady().then(() => {
             const videoFiles = allFiles.filter(file => /\.(mp4|mov|avi|mkv|webm)$/i.test(file));
             
             const updatedJobs = jobs.map(job => {
-                if (job.status === 'Completed' && !job.videoPath) {
+                // For 'Completed' jobs, always re-check for the video file.
+                if (job.status === 'Completed') {
                     const videoNamePattern = `Video_${job.id}_${job.videoName}`;
                     const foundVideo = videoFiles.find(file => {
                         const fileNameWithoutExt = path.parse(file).name;
                         return fileNameWithoutExt === videoNamePattern;
                     });
     
-                    if (foundVideo) {
-                        return { ...job, videoPath: foundVideo };
-                    }
+                    // Return the job with the updated video path, or undefined if not found.
+                    return { ...job, videoPath: foundVideo }; 
                 }
+                // For other statuses, just return the job as is.
                 return job;
             });
     
