@@ -1,5 +1,5 @@
 // main.js
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
@@ -50,15 +50,46 @@ const isPackaged = app.isPackaged;
 function getFfmpegPath(binary) { // binary can be 'ffmpeg' or 'ffprobe'
     const binaryName = process.platform === 'win32' ? `${binary}.exe` : binary;
     
-    // In production, binaries are in the 'ffmpeg' directory within the app's resources,
-    // configured via extraResources in package.json.
-    // In development, we assume they are in a 'resources/ffmpeg' directory at the project root.
     const basePath = isPackaged
         ? path.join(process.resourcesPath, 'ffmpeg')
         : path.join(__dirname, 'resources', 'ffmpeg');
 
     const platformFolder = process.platform === 'win32' ? 'win' : 'mac';
     return path.join(basePath, platformFolder, binaryName);
+}
+
+async function updateExcelStatus(filePath, jobIdsToUpdate, newStatus = '') {
+    try {
+        const fileContent = fs.readFileSync(filePath);
+        const workbook = XLSX.read(fileContent, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        const data = XLSX.utils.sheet_to_json(worksheet);
+
+        const updatedData = data.map(row => {
+            if (jobIdsToUpdate.includes(row.JOB_ID)) {
+                return { ...row, STATUS: newStatus };
+            }
+            return row;
+        });
+
+        const newWorksheet = XLSX.utils.json_to_sheet(updatedData, { header: Object.keys(updatedData[0] || {}) });
+        if (worksheet['!cols']) {
+            newWorksheet['!cols'] = worksheet['!cols'];
+        }
+        
+        const newWorkbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, sheetName);
+        
+        const newFileContent = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'buffer' });
+        fs.writeFileSync(filePath, newFileContent);
+        
+        return { success: true };
+    } catch (error) {
+        console.error('Error updating Excel file:', error);
+        return { success: false, error: error.message };
+    }
 }
 
 
@@ -82,6 +113,65 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  const menuTemplate = [
+    {
+      label: 'File',
+      submenu: [
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'close' }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'About',
+          click: () => {
+            const focusedWindow = BrowserWindow.getFocusedWindow();
+            if (focusedWindow) {
+              dialog.showMessageBox(focusedWindow, {
+                type: 'info',
+                title: 'About Prompt Generator Pro',
+                message: `Prompt Generator Pro v${app.getVersion()}`,
+                detail: 'An application to generate professional visual scripts for Music Videos and Live Shows.\n\nCreated by Cường-VFATS.'
+              });
+            }
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(menuTemplate);
+  Menu.setApplicationMenu(menu);
+
   createWindow();
 
   autoUpdater.checkForUpdatesAndNotify();
@@ -100,9 +190,11 @@ app.whenReady().then(() => {
         defaultPath: defaultPath,
         filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }]
     });
+
     if (result.canceled || !result.filePath) {
         return { success: false, error: 'Save dialog canceled' };
     }
+
     try {
         fs.writeFileSync(result.filePath, Buffer.from(fileContent));
         return { success: true, filePath: result.filePath };
@@ -112,486 +204,347 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('open-file-dialog', async (event) => {
+  ipcMain.handle('open-file-dialog', async () => {
     const mainWindow = BrowserWindow.getFocusedWindow();
-    if (!mainWindow) return { success: false, error: 'Window not found.' };
+    if (!mainWindow) return { success: false, error: 'No focused window' };
+
     const result = await dialog.showOpenDialog(mainWindow, {
-        properties: ['openFile', 'multiSelections'], // Allow multiple files to be selected
-        filters: [{ name: 'Excel Files', extensions: ['xlsx', 'xls'] }]
+      title: 'Chọn file Excel để theo dõi',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Excel Files', extensions: ['xlsx'] }]
     });
+
     if (result.canceled || result.filePaths.length === 0) {
-        return { success: false, files: [] };
+      return { success: false, error: 'User canceled selection' };
     }
-    
+
     try {
-        const files = result.filePaths.map(filePath => {
-            const content = fs.readFileSync(filePath);
-            return {
-                path: filePath,
-                content: content,
-                name: path.basename(filePath)
-            };
-        });
-        return { success: true, files: files };
-    } catch (err) {
-        return { success: false, error: err.message, files: [] };
+      const files = result.filePaths.map(filePath => ({
+        path: filePath,
+        name: path.basename(filePath),
+        content: fs.readFileSync(filePath),
+      }));
+      return { success: true, files };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-  });
-  
-  ipcMain.handle('open-video-file-dialog', async (event) => {
-    const mainWindow = BrowserWindow.getFocusedWindow();
-    if (!mainWindow) return { success: false, error: 'Window not found.' };
-    const result = await dialog.showOpenDialog(mainWindow, {
-        properties: ['openFile'],
-        filters: [{ name: 'Video Files', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'] }]
-    });
-    if (result.canceled || result.filePaths.length === 0) {
-        return { success: false };
-    }
-    const filePath = result.filePaths[0];
-    return { success: true, path: filePath };
   });
 
   ipcMain.on('start-watching-file', (event, filePath) => {
-    if (!filePath || fileWatchers.has(filePath)) {
-        return;
-    }
-    try {
-        const watcher = fs.watch(filePath, (eventType) => {
-            if (eventType === 'change') {
-                try {
-                    const content = fs.readFileSync(filePath);
-                    const mainWindow = BrowserWindow.fromWebContents(event.sender);
-                    mainWindow?.webContents.send('file-content-updated', { path: filePath, content });
-                } catch (readErr) {
-                    console.error(`Error reading watched file ${filePath}:`, readErr);
-                }
-            }
-        });
+    if (fileWatchers.has(filePath)) return;
 
-        watcher.on('error', (err) => {
-            console.error(`Watcher error for ${filePath}:`, err);
-            ipcMain.emit('stop-watching-file', event, filePath);
-        });
+    const watcher = fs.watch(filePath, (eventType) => {
+      if (eventType === 'change') {
+        try {
+          const content = fs.readFileSync(filePath);
+          event.sender.send('file-content-updated', { path: filePath, content });
+        } catch (error) {
+          console.error(`Error reading file ${filePath}:`, error);
+        }
+      }
+    });
 
-        fileWatchers.set(filePath, watcher);
-        console.log(`Started watching ${filePath}`);
-    } catch (watchErr) {
-        console.error(`Failed to start watching ${filePath}:`, watchErr);
-    }
+    watcher.on('error', (error) => {
+      console.error(`Watcher error for ${filePath}:`, error);
+      fileWatchers.delete(filePath);
+    });
+
+    fileWatchers.set(filePath, watcher);
   });
 
   ipcMain.on('stop-watching-file', (event, filePath) => {
     if (fileWatchers.has(filePath)) {
-        fileWatchers.get(filePath).close();
-        fileWatchers.delete(filePath);
-        console.log(`Stopped watching ${filePath}`);
+      fileWatchers.get(filePath).close();
+      fileWatchers.delete(filePath);
     }
   });
 
-  ipcMain.on('open-folder', (event, folderPath) => {
-    if (folderPath) {
-        shell.openPath(folderPath).catch(err => console.error("Failed to open path", err));
+  ipcMain.handle('find-videos-for-jobs', async (event, { jobs, basePath }) => {
+    try {
+        const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+        const allFiles = await findFilesRecursively(basePath);
+        
+        const videoFiles = allFiles.filter(file => 
+            videoExtensions.includes(path.extname(file).toLowerCase())
+        );
+
+        const updatedJobs = jobs.map(job => {
+            if (job.status === 'Completed' && !job.videoPath) {
+                const videoName = job.videoName;
+                const foundVideo = videoFiles.find(file => path.basename(file, path.extname(file)) === videoName);
+                if (foundVideo) {
+                    return { ...job, videoPath: foundVideo };
+                }
+            }
+            return job;
+        });
+
+        return { success: true, jobs: updatedJobs };
+    } catch (error) {
+        console.error('Error finding videos:', error);
+        return { success: false, jobs, error: error.message };
     }
   });
 
-  ipcMain.handle('set-tool-flow-path', async (event) => {
+  ipcMain.handle('check-ffmpeg', async () => {
+    const ffmpegPath = getFfmpegPath('ffmpeg');
+    try {
+      await fs.promises.access(ffmpegPath, fs.constants.X_OK);
+      return { found: true };
+    } catch (error) {
+      console.error('FFmpeg not found or not executable:', error);
+      return { found: false };
+    }
+  });
+
+  ipcMain.handle('open-video-file-dialog', async () => {
     const mainWindow = BrowserWindow.getFocusedWindow();
-    if (!mainWindow) return { success: false, error: 'Window not found.' };
+    if (!mainWindow) return { success: false, error: 'No focused window' };
 
     const result = await dialog.showOpenDialog(mainWindow, {
-        title: 'Chọn ứng dụng ToolFlows',
-        properties: ['openFile'],
-        filters: process.platform === 'win32'
-            ? [{ name: 'Applications', extensions: ['exe'] }]
-            : [{ name: 'Applications', extensions: ['app', '*'] }]
+      title: 'Chọn file Video',
+      properties: ['openFile'],
+      filters: [{ name: 'Video Files', extensions: ['mp4', 'mov', 'avi', 'mkv', 'webm'] }]
     });
 
     if (result.canceled || result.filePaths.length === 0) {
-        return { success: false, error: 'User canceled selection.' };
+      return { success: false, error: 'User canceled selection' };
     }
-
-    const toolFlowPath = result.filePaths[0];
-    let config = readConfig();
-    config.toolFlowPath = toolFlowPath;
-    writeConfig(config);
-
-    return { success: true, path: toolFlowPath };
+    return { success: true, path: result.filePaths[0] };
   });
 
-  ipcMain.handle('open-tool-flow', async (event) => {
+  ipcMain.handle('execute-ffmpeg-combine', async (event, { jobs, targetDuration, mode, excelFileName }) => {
     const mainWindow = BrowserWindow.getFocusedWindow();
-    if (!mainWindow) return { success: false, error: 'Window not found.' };
+    if (!mainWindow) return { success: false, error: 'No focused window' };
 
-    let config = readConfig();
-    let toolFlowPath = config.toolFlowPath;
+    const safeFileName = excelFileName.replace(/\.xlsx$/, '');
+    const defaultPath = mode === 'timed' ? `${safeFileName}_timed.mp4` : `${safeFileName}_combined.mp4`;
 
-    if (!toolFlowPath || !fs.existsSync(toolFlowPath)) {
-        const result = await dialog.showOpenDialog(mainWindow, {
-            title: 'Chọn ứng dụng ToolFlows',
-            properties: ['openFile'],
-            filters: process.platform === 'win32'
-                ? [{ name: 'Applications', extensions: ['exe'] }]
-                : [{ name: 'Applications', extensions: ['app', '*'] }]
-        });
+    const result = await dialog.showSaveDialog(mainWindow, {
+        title: 'Lưu Video Đã Ghép',
+        defaultPath,
+        filters: [{ name: 'MP4 Video', extensions: ['mp4'] }]
+    });
 
-        if (result.canceled || result.filePaths.length === 0) {
-            return { success: false, error: 'User canceled selection.' };
-        }
-
-        toolFlowPath = result.filePaths[0];
-        config.toolFlowPath = toolFlowPath;
-        writeConfig(config);
+    if (result.canceled || !result.filePath) {
+        return { success: false, error: 'Save dialog canceled' };
     }
-    
-    try {
-        const err = await shell.openPath(toolFlowPath);
-        if (err) {
-            console.error('Failed to open ToolFlows:', err);
-            let config = readConfig();
-            delete config.toolFlowPath;
-            writeConfig(config);
-            return { success: false, error: `Không thể mở ứng dụng. Vui lòng chọn lại. Lỗi: ${err}` };
-        }
-        return { success: true };
-    } catch (e) {
-        console.error('Exception opening ToolFlows:', e);
-        return { success: false, error: 'Đã xảy ra lỗi không mong muốn khi cố gắng mở ứng dụng.' };
-    }
-  });
 
-    // --- Video Management ---
-    ipcMain.handle('find-videos-for-jobs', async (event, { jobs, basePath }) => {
-        if (!basePath || !fs.existsSync(basePath)) {
-            return { success: false, jobs: jobs, error: "Base path does not exist." };
-        }
-    
-        try {
-            const allFiles = await findFilesRecursively(basePath);
-            const videoFiles = allFiles.filter(file => /\.(mp4|mov|avi|mkv|webm)$/i.test(file));
-            
-            const updatedJobs = jobs.map(job => {
-                // For 'Completed' jobs, always re-check for the video file.
-                if (job.status === 'Completed') {
-                    const videoNamePattern = `Video_${job.id}_${job.videoName}`;
-                    const foundVideo = videoFiles.find(file => {
-                        const fileNameWithoutExt = path.parse(file).name;
-                        return fileNameWithoutExt === videoNamePattern;
-                    });
-    
-                    // Return the job with the updated video path, or undefined if not found.
-                    return { ...job, videoPath: foundVideo }; 
-                }
-                // For other statuses, just return the job as is.
-                return job;
-            });
-    
-            return { success: true, jobs: updatedJobs };
-        } catch (err) {
-            console.error("Error finding videos:", err);
-            return { success: false, jobs: jobs, error: err.message };
-        }
-    });
-    
-    ipcMain.on('open-video-path', (event, videoPath) => {
-        if (videoPath && fs.existsSync(videoPath)) {
-            shell.openPath(videoPath).catch(err => console.error(`Failed to open video: ${videoPath}`, err));
-        }
-    });
-    
-    ipcMain.on('show-video-in-folder', (event, videoPath) => {
-        if (videoPath && fs.existsSync(videoPath)) {
-            shell.showItemInFolder(videoPath);
-        }
-    });
-    
-    ipcMain.handle('delete-video-file', async (event, videoPath) => {
-        if (!videoPath || !fs.existsSync(videoPath)) {
-            return { success: false, error: 'File not found.' };
-        }
-        const mainWindow = BrowserWindow.getFocusedWindow();
-        const result = await dialog.showMessageBox(mainWindow, {
-            type: 'warning',
-            buttons: ['Hủy', 'Xóa'],
-            defaultId: 0,
-            title: 'Xác nhận xóa',
-            message: 'Bạn có chắc chắn muốn xóa video này không?',
-            detail: `Video sẽ được chuyển vào thùng rác.\n${videoPath}`
-        });
-    
-        if (result.response === 1) { // 'Xóa' button
-            try {
-                await shell.trashItem(videoPath);
-                return { success: true };
-            } catch (error) {
-                console.error('Failed to delete video:', error);
-                return { success: false, error: error.message };
-            }
-        } else {
-            return { success: false, error: 'User canceled deletion.' };
-        }
-    });
+    const ffmpegPath = getFfmpegPath('ffmpeg');
+    const videoPaths = jobs.map(j => j.videoPath);
+    const tempFilePath = path.join(app.getPath('temp'), `filelist-${Date.now()}.txt`);
+    const fileContent = videoPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
+    fs.writeFileSync(tempFilePath, fileContent);
 
-    ipcMain.handle('retry-job', async (event, { filePath, jobId }) => {
-        if (!filePath || !jobId) {
-            return { success: false, error: 'File path or Job ID is missing.' };
-        }
-        try {
-            const buffer = fs.readFileSync(filePath);
-            const workbook = XLSX.read(buffer, { type: 'buffer' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-    
-            if (data.length < 2) {
-                return { success: false, error: 'Excel sheet is empty or has no headers.' };
-            }
-    
-            const headers = data[0].map(h => String(h).trim());
-            const jobIdIndex = headers.indexOf('JOB_ID');
-            const statusIndex = headers.indexOf('STATUS');
-    
-            if (jobIdIndex === -1 || statusIndex === -1) {
-                return { success: false, error: 'Could not find JOB_ID or STATUS columns.' };
-            }
-    
-            let jobFound = false;
-            for (let i = 1; i < data.length; i++) {
-                if (String(data[i][jobIdIndex]).trim() === String(jobId).trim()) {
-                    data[i][statusIndex] = ''; // Clear the status cell
-                    jobFound = true;
-                    break;
-                }
-            }
-    
-            if (!jobFound) {
-                return { success: false, error: `Job ID "${jobId}" not found in the file.` };
-            }
-    
-            const newWorksheet = XLSX.utils.aoa_to_sheet(data);
-            newWorksheet['!cols'] = worksheet['!cols']; // Preserve column widths
-            workbook.Sheets[sheetName] = newWorksheet;
-    
-            const newBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
-            fs.writeFileSync(filePath, newBuffer);
-    
-            return { success: true };
-        } catch (err) {
-            console.error('Failed to retry job:', err);
-            return { success: false, error: err.message };
-        }
-    });
-
-    ipcMain.handle('retry-stuck-jobs', async (event, { filePath }) => {
-        if (!filePath) {
-            return { success: false, error: 'File path is missing.' };
-        }
-        try {
-            const buffer = fs.readFileSync(filePath);
-            const workbook = XLSX.read(buffer, { type: 'buffer' });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-    
-            if (data.length < 2) {
-                return { success: false, error: 'Excel sheet is empty or has no headers.' };
-            }
-    
-            const headers = data[0].map(h => String(h).trim());
-            const statusIndex = headers.indexOf('STATUS');
-    
-            if (statusIndex === -1) {
-                return { success: false, error: 'Could not find STATUS column.' };
-            }
-    
-            let jobsReset = 0;
-            for (let i = 1; i < data.length; i++) {
-                const status = String(data[i][statusIndex]).trim();
-                if (status === 'Generating' || status === 'Processing') {
-                    data[i][statusIndex] = ''; // Clear the status cell
-                    jobsReset++;
-                }
-            }
-    
-            if (jobsReset === 0) {
-                return { success: false, error: `Không tìm thấy video nào đang xử lý để tạo lại.` };
-            }
-    
-            const newWorksheet = XLSX.utils.aoa_to_sheet(data);
-            newWorksheet['!cols'] = worksheet['!cols']; // Preserve column widths
-            workbook.Sheets[sheetName] = newWorksheet;
-    
-            const newBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
-            fs.writeFileSync(filePath, newBuffer);
-    
-            return { success: true };
-        } catch (err) {
-            console.error('Failed to retry stuck jobs:', err);
-            return { success: false, error: err.message };
-        }
-    });
-
-    // --- FFmpeg Management ---
-    ipcMain.handle('check-ffmpeg', async () => {
-        // Strict check: both ffmpeg and ffprobe must exist in the bundled location.
-        const ffmpegPath = getFfmpegPath('ffmpeg');
+    let args;
+    if (mode === 'timed' && targetDuration) {
         const ffprobePath = getFfmpegPath('ffprobe');
-        if (fs.existsSync(ffmpegPath) && fs.existsSync(ffprobePath)) {
-            return { found: true };
-        }
-        return { found: false };
-    });
-
-    ipcMain.handle('execute-ffmpeg-combine', async (event, { jobs, targetDuration, mode, excelFileName }) => {
-        const mainWindow = BrowserWindow.getFocusedWindow();
-        if (!mainWindow) return { success: false, error: 'Window not found.' };
-
-        const defaultFileName = excelFileName 
-            ? `${path.parse(excelFileName).name}.mp4`
-            : `combined_${Date.now()}.mp4`;
-
-        const saveDialogResult = await dialog.showSaveDialog(mainWindow, {
-            title: 'Lưu Video Đã Ghép',
-            defaultPath: defaultFileName,
-            filters: [{ name: 'MP4 Video', extensions: ['mp4'] }]
-        });
-
-        if (saveDialogResult.canceled || !saveDialogResult.filePath) {
-            return { success: false, error: 'Save dialog canceled' };
-        }
-        const outputFilePath = saveDialogResult.filePath;
-        
-        const inputArgs = jobs.flatMap(job => ['-i', job.videoPath]);
-        
-        const ffmpegPath = getFfmpegPath('ffmpeg');
-        let commandArgs;
-
-        if (mode === 'timed') {
+        let totalInputDuration = 0;
+        for (const videoPath of videoPaths) {
             try {
-                const ffprobePath = getFfmpegPath('ffprobe');
-                
-                const getDurationPromises = jobs.map(job => 
-                    new Promise((resolve, reject) => {
-                        const args = ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', job.videoPath];
-                        execFile(ffprobePath, args, (err, stdout, stderr) => {
-                            if (err) {
-                                reject(new Error(`ffprobe error for ${job.videoName}: ${err.message}`));
-                                return;
-                            }
-                            resolve(parseFloat(stdout));
-                        });
-                    })
-                );
-                
-                const durations = await Promise.all(getDurationPromises);
-                const actualTotalDuration = durations.reduce((sum, duration) => sum + duration, 0);
-
-                if (actualTotalDuration <= 0) {
-                    return { success: false, error: 'Không thể xác định tổng thời lượng của các video nguồn.' };
-                }
-                
-                const speedFactor = actualTotalDuration / targetDuration;
-                if (speedFactor <= 0) {
-                     return { success: false, error: 'Hệ số tốc độ không hợp lệ. Vui lòng kiểm tra lại thời lượng.' };
-                }
-                const ptsMultiplier = (1 / speedFactor).toFixed(6);
-                
-                const filterParts = jobs.map((_, index) => `[${index}:v]setpts=${ptsMultiplier}*PTS[v${index}]`);
-                const concatVideoInputs = jobs.map((_, index) => `[v${index}]`).join('');
-                const filterComplex = `${filterParts.join(';')};${concatVideoInputs}concat=n=${jobs.length}:v=1:a=0[v]`;
-                commandArgs = [...inputArgs, '-filter_complex', filterComplex, '-map', '[v]', '-y', outputFilePath];
-
-            } catch (err) {
-                 return { success: false, error: `Lỗi khi lấy thời lượng video: ${err.message}` };
-            }
-        } else { // 'normal' mode
-            const concatInputs = jobs.map((_, index) => `[${index}:v]`).join('');
-            const filterComplex = `${concatInputs}concat=n=${jobs.length}:v=1:a=0[v]`;
-            commandArgs = [...inputArgs, '-filter_complex', filterComplex, '-map', '[v]', '-y', outputFilePath];
-        }
-
-        return new Promise((resolve) => {
-            execFile(ffmpegPath, commandArgs, (error, stdout, stderr) => {
-                if (error) {
-                    console.error(`ffmpeg execFile error: ${error}`);
-                    resolve({ success: false, error: `Lỗi FFmpeg: ${error.message}` });
-                    return;
-                }
-                resolve({ success: true, filePath: outputFilePath });
-            });
-        });
-    });
-
-    ipcMain.handle('execute-ffmpeg-combine-all', async (event, filesToCombine) => {
-        const mainWindow = BrowserWindow.getFocusedWindow();
-        if (!mainWindow) return { canceled: true, error: 'Window not found.' };
-
-        const dirDialogResult = await dialog.showOpenDialog(mainWindow, {
-            title: 'Chọn thư mục để lưu tất cả video đã ghép',
-            properties: ['openDirectory', 'createDirectory']
-        });
-
-        if (dirDialogResult.canceled || dirDialogResult.filePaths.length === 0) {
-            return { canceled: true };
-        }
-        const outputDirectory = dirDialogResult.filePaths[0];
-
-        const successes = [];
-        const failures = [];
-        const ffmpegPath = getFfmpegPath('ffmpeg');
-        const totalFiles = filesToCombine.length;
-
-        // Use a standard for...of loop to ensure sequential execution
-        for (const [index, file] of filesToCombine.entries()) {
-            const completedJobs = file.jobs;
-            if (completedJobs.length === 0) continue; // Skip if no completed jobs
-
-            const outputFileName = `${path.parse(file.name).name}.mp4`;
-            const outputFilePath = path.join(outputDirectory, outputFileName);
-
-            // Send progress update to the renderer
-            event.sender.send('combine-all-progress', { 
-                message: `Đang ghép file ${index + 1}/${totalFiles}: "${file.name}"...` 
-            });
-
-            const inputArgs = completedJobs.flatMap(job => ['-i', job.videoPath]);
-            const concatInputs = completedJobs.map((_, i) => `[${i}:v]`).join('');
-            const filterComplex = `${concatInputs}concat=n=${completedJobs.length}:v=1:a=0[v]`;
-            const commandArgs = [...inputArgs, '-filter_complex', filterComplex, '-map', '[v]', '-y', outputFilePath];
-
-            try {
-                // Wrap execFile in a Promise to use with await
-                await new Promise((resolve, reject) => {
-                    execFile(ffmpegPath, commandArgs, (error, stdout, stderr) => {
-                        if (error) {
-                            console.error(`ffmpeg execFile error for ${file.name}: ${error}`);
-                            // Pass the actual error object to the reject function
-                            reject(error); 
-                            return;
-                        }
-                        resolve({ success: true, filePath: outputFilePath });
+                const probeOutput = await new Promise((resolve, reject) => {
+                    execFile(ffprobePath, ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', videoPath], (error, stdout) => {
+                        if (error) reject(error);
+                        resolve(stdout);
                     });
                 });
-                successes.push(file.name);
-            } catch (error) {
-                // The error object from execFile has a message property
-                failures.push({ name: file.name, reason: error.message || 'Unknown FFmpeg error' });
-            }
+                totalInputDuration += parseFloat(probeOutput);
+            } catch(e) { console.error("ffprobe error:", e) }
         }
 
-        return { successes, failures, canceled: false };
+        const speedFactor = totalInputDuration > 0 ? totalInputDuration / targetDuration : 1;
+        const ptsFactor = 1 / speedFactor; 
+        args = [
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', tempFilePath,
+            '-filter_complex', `[0:v]setpts=${ptsFactor}*PTS[v];[0:a]atempo=${speedFactor}[a]`,
+            '-map', '[v]',
+            '-map', '[a]',
+            '-y', result.filePath
+        ];
+    } else { // Normal combine
+        args = [
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', tempFilePath,
+            '-c', 'copy',
+            '-y', result.filePath
+        ];
+    }
+
+    return new Promise((resolve) => {
+        execFile(ffmpegPath, args, (error, stdout, stderr) => {
+            fs.unlinkSync(tempFilePath);
+            if (error) {
+                console.error('FFmpeg error:', stderr);
+                resolve({ success: false, error: stderr || error.message });
+            } else {
+                resolve({ success: true, filePath: result.filePath });
+            }
+        });
+    });
+  });
+
+  ipcMain.handle('execute-ffmpeg-combine-all', async (event, filesToProcess) => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) return { canceled: true };
+  
+    const dirResult = await dialog.showOpenDialog(mainWindow, {
+      title: 'Chọn thư mục để lưu tất cả video đã ghép',
+      properties: ['openDirectory']
+    });
+  
+    if (dirResult.canceled || dirResult.filePaths.length === 0) {
+      return { canceled: true };
+    }
+  
+    const outputDir = dirResult.filePaths[0];
+    const ffmpegPath = getFfmpegPath('ffmpeg');
+    const successes = [];
+    const failures = [];
+  
+    for (let i = 0; i < filesToProcess.length; i++) {
+        const file = filesToProcess[i];
+        const safeFileName = file.name.replace(/\.xlsx$/, '');
+        const outputFilePath = path.join(outputDir, `${safeFileName}_combined.mp4`);
+        
+        mainWindow.webContents.send('combine-all-progress', { message: `Đang xử lý file ${i + 1}/${filesToProcess.length}: ${file.name}` });
+
+        const videoPaths = file.jobs.map(j => j.videoPath);
+        const tempFilePath = path.join(app.getPath('temp'), `filelist-all-${Date.now()}.txt`);
+        const fileContent = videoPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
+        fs.writeFileSync(tempFilePath, fileContent);
+
+        const args = [
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', tempFilePath,
+            '-c', 'copy',
+            '-y', outputFilePath
+        ];
+        
+        await new Promise((resolve) => {
+            execFile(ffmpegPath, args, (error) => {
+                fs.unlinkSync(tempFilePath);
+                if (error) {
+                    console.error(`FFmpeg error for ${file.name}:`, error);
+                    failures.push({ name: file.name, error: error.message });
+                    resolve(false);
+                } else {
+                    successes.push({ name: file.name, path: outputFilePath });
+                    resolve(true);
+                }
+            });
+        });
+    }
+  
+    return { successes, failures };
+  });
+
+  ipcMain.on('open-folder', (event, folderPath) => {
+    shell.openPath(folderPath).catch(err => console.error('Failed to open folder:', err));
+  });
+
+  ipcMain.handle('open-tool-flow', async () => {
+    const config = readConfig();
+    const toolFlowPath = config.toolFlowPath;
+
+    if (!toolFlowPath || !fs.existsSync(toolFlowPath)) {
+        return { success: false, error: 'Đường dẫn ToolFlows chưa được thiết lập hoặc không hợp lệ. Vui lòng thiết lập lại.' };
+    }
+
+    try {
+        shell.openPath(toolFlowPath);
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('set-tool-flow-path', async () => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) return { success: false, error: 'No focused window' };
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Chọn file thực thi ToolFlows',
+        properties: ['openFile'],
+        filters: process.platform === 'win32' ? [{ name: 'Executable', extensions: ['exe'] }] : []
     });
 
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, error: 'User canceled selection.' };
+    }
+    
+    const selectedPath = result.filePaths[0];
+    const config = readConfig();
+    config.toolFlowPath = selectedPath;
+    writeConfig(config);
+
+    return { success: true, path: selectedPath };
+  });
+
+  ipcMain.on('open-video-path', (event, videoPath) => {
+    shell.openPath(videoPath).catch(err => console.error('Failed to open video:', err));
+  });
+
+  ipcMain.on('show-video-in-folder', (event, videoPath) => {
+      shell.showItemInFolder(videoPath);
+  });
+
+  ipcMain.handle('delete-video-file', async (event, videoPath) => {
+    const mainWindow = BrowserWindow.getFocusedWindow();
+    if (!mainWindow) return { success: false, error: 'No focused window' };
+
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['Xóa', 'Hủy'],
+      defaultId: 1,
+      title: 'Xác nhận xóa video',
+      message: 'Bạn có chắc chắn muốn xóa file video này không?',
+      detail: `Đường dẫn: ${videoPath}\nHành động này không thể hoàn tác.`
+    });
+
+    if (result.response === 1) {
+      return { success: false, error: 'User canceled deletion.' };
+    }
+
+    try {
+      fs.unlinkSync(videoPath);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('retry-job', async (event, { filePath, jobId }) => {
+    return await updateExcelStatus(filePath, [jobId]);
+  });
+
+  ipcMain.handle('retry-stuck-jobs', async (event, { filePath }) => {
+    try {
+        const fileContent = fs.readFileSync(filePath);
+        const workbook = XLSX.read(fileContent, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(worksheet);
+
+        const stuckJobIds = data
+            .filter(row => row.STATUS === 'Processing' || row.STATUS === 'Generating')
+            .map(row => row.JOB_ID);
+
+        if (stuckJobIds.length === 0) {
+            return { success: true }; // Nothing to do
+        }
+
+        return await updateExcelStatus(filePath, stuckJobIds);
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+  });
 });
 
-autoUpdater.on('checking-for-update', () => console.log('Checking for update...'));
-autoUpdater.on('update-available', (info) => console.log('Update available.', info));
-autoUpdater.on('update-not-available', (info) => console.log('Update not available.', info));
-autoUpdater.on('error', (err) => console.error('Error in auto-updater. ' + err));
-autoUpdater.on('update-downloaded', (info) => console.log('Update downloaded.', info));
-
 app.on('window-all-closed', () => {
-  fileWatchers.forEach(watcher => watcher.close());
   if (process.platform !== 'darwin') {
     app.quit();
   }
