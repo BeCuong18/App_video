@@ -1,5 +1,5 @@
 
-export type MvGenre = 'narrative' | 'performance' | 'conceptual' | 'lyrical' | 'animation' | 'one-take' | 'scenic';
+export type MvGenre = 'narrative' | 'performance' | 'conceptual' | 'lyrical' | 'animation' | 'one-take' | 'scenic' | 'surreal' | 'sci-fi' | 'horror' | 'retro-futurism' | 'documentary';
 export type VideoType = 'story' | 'live';
 export type ActiveTab = 'generator' | 'tracker';
 export type JobStatus = 'Pending' | 'Processing' | 'Generating' | 'Completed' | 'Failed';
@@ -32,8 +32,11 @@ export interface FormData {
   mvGenre: MvGenre;
   filmingStyle: string;
   country: string;
+  musicGenre: string;
+  customMusicGenre: string;
   characterConsistency: boolean;
   characterCount: number;
+  temperature: number;
 }
 
 export interface VideoJob {

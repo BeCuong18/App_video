@@ -1,4 +1,5 @@
 
+
 // main.js
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
@@ -66,16 +67,35 @@ async function updateExcelStatus(filePath, jobIdsToUpdate, newStatus = '') {
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         
-        const data = XLSX.utils.sheet_to_json(worksheet);
+        // Convert to array of arrays to preserve column order
+        const dataAsArrays = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-        const updatedData = data.map(row => {
-            if (jobIdsToUpdate.includes(row.JOB_ID)) {
-                return { ...row, STATUS: newStatus };
+        if (dataAsArrays.length < 2) {
+            // Not a valid data sheet, perhaps only a header
+            return { success: true }; 
+        }
+
+        const headers = dataAsArrays[0].map(h => String(h).trim());
+        const jobIdIndex = headers.indexOf('JOB_ID');
+        const statusIndex = headers.indexOf('STATUS');
+
+        if (jobIdIndex === -1 || statusIndex === -1) {
+            throw new Error('Could not find required JOB_ID or STATUS columns in the Excel file.');
+        }
+        
+        // Iterate through data rows (skip header row)
+        for (let i = 1; i < dataAsArrays.length; i++) {
+            const row = dataAsArrays[i];
+            const currentJobId = row[jobIdIndex];
+            if (jobIdsToUpdate.includes(currentJobId)) {
+                row[statusIndex] = newStatus;
             }
-            return row;
-        });
+        }
 
-        const newWorksheet = XLSX.utils.json_to_sheet(updatedData, { header: Object.keys(updatedData[0] || {}) });
+        // Create a new worksheet from the modified array of arrays
+        const newWorksheet = XLSX.utils.aoa_to_sheet(dataAsArrays);
+
+        // Preserve original column widths
         if (worksheet['!cols']) {
             newWorksheet['!cols'] = worksheet['!cols'];
         }
@@ -573,12 +593,27 @@ app.whenReady().then(() => {
         const workbook = XLSX.read(fileContent, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(worksheet);
+        const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-        const stuckJobIds = data
-            .filter(row => row.STATUS === 'Processing' || row.STATUS === 'Generating')
-            .map(row => row.JOB_ID);
+        if (data.length < 2) return { success: true }; // No data to process
 
+        const headers = data[0].map(h => String(h).trim());
+        const jobIdIndex = headers.indexOf('JOB_ID');
+        const statusIndex = headers.indexOf('STATUS');
+
+        if (jobIdIndex === -1 || statusIndex === -1) {
+            throw new Error('Missing JOB_ID or STATUS column');
+        }
+
+        const stuckJobIds = [];
+        for (let i = 1; i < data.length; i++) {
+            const row = data[i];
+            const status = row[statusIndex];
+            if (status === 'Processing' || status === 'Generating') {
+                stuckJobIds.push(row[jobIdIndex]);
+            }
+        }
+        
         if (stuckJobIds.length === 0) {
             return { success: true }; // Nothing to do
         }

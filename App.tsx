@@ -272,8 +272,11 @@ const App: React.FC = () => {
     mvGenre: 'narrative',
     filmingStyle: 'auto',
     country: 'Vietnamese',
+    musicGenre: 'v-pop',
+    customMusicGenre: '',
     characterConsistency: true,
     characterCount: 1,
+    temperature: 0.7,
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
@@ -306,6 +309,11 @@ const App: React.FC = () => {
     { value: 'scenic', label: 'Cảnh quan & Kiến trúc (Không người)' },
     { value: 'animation', label: 'Hoạt hình (Animation)' },
     { value: 'one-take', label: 'Một cú máy (One-take)' },
+    { value: 'surreal', label: 'Siêu thực (Surreal)' },
+    { value: 'sci-fi', label: 'Khoa học viễn tưởng (Sci-Fi)' },
+    { value: 'horror', label: 'Kinh dị (Horror)' },
+    { value: 'retro-futurism', label: 'Hoài cổ Tương lai (Retro-futurism)' },
+    { value: 'documentary', label: 'Phong cách Tài liệu (Documentary Style)' },
   ];
 
   const filmingStyleOptions: { value: string, label: string }[] = [
@@ -315,6 +323,11 @@ const App: React.FC = () => {
     { value: 'Found Footage / Handheld', label: 'Giả tài liệu / Cầm tay' },
     { value: 'Surreal & Dreamlike', label: 'Siêu thực & Mơ màng' },
     { value: 'Artistic Black & White', label: 'Đen trắng Nghệ thuật' },
+    { value: 'Wes Anderson Style', label: 'Phong cách Wes Anderson (Đối xứng, màu pastel)' },
+    { value: 'David Fincher Style', label: 'Phong cách David Fincher (Tối, màu lạnh, tĩnh)' },
+    { value: 'Cinematic Neon Noir', label: 'Neon Noir Điện ảnh' },
+    { value: 'Epic Drone Cinematography', label: 'Quay phim Drone Sử thi' },
+    { value: 'Macro & Extreme Close-up', label: 'Quay phim Cận cảnh & Siêu cận cảnh' },
     { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình 2D (Phong cách Ghibli)' },
     { value: '3D Animation (Pixar Style)', label: 'Hoạt hình 3D (Phong cách Pixar)' },
   ];
@@ -330,6 +343,18 @@ const App: React.FC = () => {
     { value: 'Brazilian', label: 'Brazil' },
     { value: 'Spanish', label: 'Tây Ban Nha (Spanish)' },
     { value: 'Generic/International', label: 'Quốc tế / Không xác định' },
+  ];
+
+  const musicGenreOptions: { value: string, label: string }[] = [
+    { value: 'v-pop', label: 'V-Pop' },
+    { value: 'k-pop', label: 'K-Pop' },
+    { value: 'us-uk-pop', label: 'US-UK Pop' },
+    { value: 'jazz-bossa-nova', label: 'Jazz Bossa Nova' },
+    { value: 'smooth-jazz', label: 'Smooth Jazz' },
+    { value: 'edm', label: 'EDM (Electronic Dance Music)' },
+    { value: 'worship', label: 'Nhạc Thờ Phụng (Worship)' },
+    { value: 'country', label: 'Nhạc Country' },
+    { value: 'other', label: 'Khác (Nhập thủ công)' }
   ];
 
   const getEncryptionKey = useCallback(() => CryptoJS.SHA256(machineId + SECRET_KEY).toString(), [machineId]);
@@ -585,6 +610,8 @@ const App: React.FC = () => {
         setFormData((prev) => ({ ...prev, [name]: checked }));
       } else if (name === 'characterCount') {
         setFormData((prev) => ({ ...prev, [name]: parseInt(value, 10) }));
+      } else if (name === 'temperature') {
+        setFormData((prev) => ({ ...prev, [name]: parseFloat(value) }));
       }
       else {
         setFormData((prev) => ({ ...prev, [name]: value }));
@@ -643,10 +670,16 @@ const App: React.FC = () => {
       }
       const selectedGenre = mvGenreOptions.find(o => o.value === formData.mvGenre)?.label || formData.mvGenre;
       const selectedFilmingStyle = filmingStyleOptions.find(o => o.value === formData.filmingStyle)?.label || formData.filmingStyle;
-      
+      const musicGenre = formData.musicGenre === 'other' 
+        ? formData.customMusicGenre.trim() 
+        : musicGenreOptions.find(o => o.value === formData.musicGenre)?.label || formData.musicGenre;
+
       userPrompt += ` The creative input (lyrics or a detailed idea) is: "${formData.idea.trim()}".`;
       userPrompt += `\n**User Specifications:**`;
       userPrompt += `\n- **Nationality:** ${formData.country}`;
+      if (musicGenre) {
+        userPrompt += `\n- **Music Genre:** "${musicGenre}"`;
+      }
       userPrompt += `\n- **Enforce Character Consistency:** ${formData.characterConsistency ? 'Yes' : 'No'}`;
       if (formData.characterConsistency) {
         userPrompt += `\n- **Number of Consistent Characters:** ${formData.characterCount}`;
@@ -682,6 +715,7 @@ const App: React.FC = () => {
         contents: { parts: parts },
         config: {
           systemInstruction: systemPrompt,
+          temperature: formData.temperature,
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -727,6 +761,8 @@ const App: React.FC = () => {
         displayMessage = 'Bạn đã vượt quá hạn ngạch sử dụng cho Khóa API này.';
       } else if (errorMessage.includes('Requested entity was not found')) {
         displayMessage = `Model "${formData.model}" không tồn tại hoặc bạn không có quyền truy cập. Vui lòng chọn model khác.`;
+      } else if (errorMessage.includes('overloaded')) {
+        displayMessage = 'Model AI đang bị quá tải. Vui lòng thử lại sau vài phút.';
       }
       setFeedback({ type: 'error', message: `Đã có lỗi xảy ra: ${displayMessage}` });
     } finally {
@@ -1241,12 +1277,34 @@ const App: React.FC = () => {
                                 {filmingStyleOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
-                         <div>
+                     </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
                             <label htmlFor="country" className="block text-sm font-medium text-indigo-100 mb-2">Quốc gia (Nationality)</label>
                             <select id="country" name="country" value={formData.country} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
                                 {countryOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
+                        <div>
+                            <label htmlFor="musicGenre" className="block text-sm font-medium text-indigo-100 mb-2">Thể loại nhạc</label>
+                            <select id="musicGenre" name="musicGenre" value={formData.musicGenre} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
+                                {musicGenreOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                            </select>
+                        </div>
+                        {formData.musicGenre === 'other' && (
+                            <div className="md:col-span-2">
+                                <label htmlFor="customMusicGenre" className="block text-sm font-medium text-indigo-100 mb-2">Nhập thể loại nhạc khác</label>
+                                <input
+                                    type="text"
+                                    id="customMusicGenre"
+                                    name="customMusicGenre"
+                                    value={formData.customMusicGenre}
+                                    onChange={handleInputChange}
+                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
+                                    placeholder="Ví dụ: Lofi Chill, Future Bass, ..."
+                                />
+                            </div>
+                        )}
                      </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
@@ -1305,21 +1363,47 @@ const App: React.FC = () => {
                       <label htmlFor="projectName" className="block text-sm font-medium text-indigo-100 mb-2">Tên Dự Án (Để đặt tên file)</label>
                       <input type="text" id="projectName" name="projectName" value={formData.projectName} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Ví dụ: MV_Bai_Hat_Moi" />
                     </div>
-                    <div>
-                      <label htmlFor="model" className="block text-sm font-medium text-indigo-100 mb-2">Chọn Model AI</label>
-                      <select id="model" name="model" value={formData.model} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
-                        <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
-                        <option value="gemini-flash-latest">Gemini Flash</option>
-                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                      </select>
+                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label htmlFor="model" className="block text-sm font-medium text-indigo-100 mb-2">Chọn Model AI</label>
+                            <select id="model" name="model" value={formData.model} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
+                                <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
+                                <option value="gemini-flash-latest">Gemini Flash</option>
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="temperature" className="block text-sm font-medium text-indigo-100 mb-2">
+                                Độ Sáng Tạo (Temperature) - <span className="font-bold text-teal-300">{formData.temperature.toFixed(1)}</span>
+                            </label>
+                            <input
+                                type="range"
+                                id="temperature"
+                                name="temperature"
+                                min="0.1"
+                                max="1.0"
+                                step="0.1"
+                                value={formData.temperature}
+                                onChange={handleInputChange}
+                                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                            />
+                            <p className="text-xs text-indigo-200 mt-1">Thấp: an toàn, logic. Cao: sáng tạo, bất ngờ.</p>
+                        </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="text-center">
-                  <button onClick={generatePrompts} disabled={isLoading} className="bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100" title="Tạo kịch bản">
-                    {isLoading ? <LoaderIcon /> : <span>Tạo Kịch Bản Prompt</span>}
-                  </button>
+                <div className="mt-6 pt-6 border-t border-white/20">
+                    <div className="flex justify-center items-center gap-4">
+                        <button onClick={generatePrompts} disabled={isLoading} className="bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100" title="Tạo kịch bản">
+                            {isLoading ? <LoaderIcon /> : <span>Tạo Kịch Bản Prompt</span>}
+                        </button>
+                        {generatedScenes.length > 0 && (
+                            <button onClick={startProcess} className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300">
+                                Lưu kịch bản & Theo dõi
+                            </button>
+                        )}
+                    </div>
                 </div>
                 
                 {feedback && ( <div className={`text-center mt-6 font-medium p-3 rounded-lg flex items-center justify-center gap-4 ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>
@@ -1331,11 +1415,8 @@ const App: React.FC = () => {
                     )}
                 </div> )}
                 {generatedScenes.length > 0 && !feedback && (
-                  <div className="text-center mt-8 pt-6 border-t border-white/20 space-y-4">
+                  <div className="text-center mt-6 text-emerald-300">
                     <h3 className="text-xl font-bold">Hoàn thành! Kịch bản của bạn đã sẵn sàng.</h3>
-                    <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-                      <button onClick={startProcess} className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300 w-full sm:w-auto">Lưu kịch bản & Theo dõi</button>
-                    </div>
                   </div>
                 )}
                 <Results scenes={generatedScenes} />
