@@ -152,6 +152,24 @@ app.whenReady().then(() => {
       label: 'Help',
       submenu: [
         {
+          label: 'Hướng dẫn sử dụng',
+          click: () => {
+            const guideWindow = new BrowserWindow({
+              width: 900,
+              height: 700,
+              title: 'Hướng dẫn sử dụng - Prompt Generator Pro',
+              webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true
+              },
+              icon: path.join(__dirname, 'assets/icon.png')
+            });
+            guideWindow.loadFile(path.join(__dirname, 'dist', 'guide.html'));
+            guideWindow.setMenu(null);
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'About',
           click: () => {
             const focusedWindow = BrowserWindow.getFocusedWindow();
