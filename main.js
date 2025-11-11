@@ -1,3 +1,4 @@
+
 // main.js
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
@@ -277,21 +278,48 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('find-videos-for-jobs', async (event, { jobs, basePath }) => {
+  ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) => {
+    if (!excelFilePath) {
+        return { success: false, jobs, error: 'Excel file path is missing.' };
+    }
     try {
         const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
-        const allFiles = await findFilesRecursively(basePath);
+        
+        const basePath = path.dirname(excelFilePath);
+        const excelFileNameWithoutExt = path.basename(excelFilePath, '.xlsx');
+        const specificSearchPath = path.join(basePath, excelFileNameWithoutExt);
+
+        let allFiles = [];
+
+        // Primary search: Look inside the specific subdirectory named after the Excel file.
+        if (fs.existsSync(specificSearchPath) && fs.lstatSync(specificSearchPath).isDirectory()) {
+            allFiles = await findFilesRecursively(specificSearchPath);
+        } else {
+            // Fallback: If the specific directory doesn't exist, search the parent directory recursively.
+            allFiles = await findFilesRecursively(basePath);
+        }
         
         const videoFiles = allFiles.filter(file => 
             videoExtensions.includes(path.extname(file).toLowerCase())
         );
 
         const updatedJobs = jobs.map(job => {
+            // Also update existing video paths to make sure they are still valid
+            if (job.videoPath && !fs.existsSync(job.videoPath)) {
+                job.videoPath = undefined;
+            }
+
             if (job.status === 'Completed' && !job.videoPath) {
                 const videoName = job.videoName;
-                const foundVideo = videoFiles.find(file => path.basename(file, path.extname(file)) === videoName);
-                if (foundVideo) {
-                    return { ...job, videoPath: foundVideo };
+                const jobId = job.id;
+                if (videoName && jobId) {
+                    const expectedPrefix = `Video_${jobId}_${videoName}`.toLowerCase();
+                    const foundVideo = videoFiles.find(file => 
+                        path.basename(file, path.extname(file)).toLowerCase().startsWith(expectedPrefix)
+                    );
+                    if (foundVideo) {
+                        return { ...job, videoPath: foundVideo };
+                    }
                 }
             }
             return job;

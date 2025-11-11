@@ -1,4 +1,5 @@
 
+
 import React, {
   useState,
   useCallback,
@@ -551,10 +552,9 @@ const App: React.FC = () => {
         const discoveryKey = `${currentFile.path}-${currentFile.jobs.map(j => j.status).join(',')}`;
         
         if (hasIncompleteJobs && !fileDiscoveryRef.current.has(discoveryKey)) {
-            const folderPath = getFolderPath(currentFile.path);
             const filePath = currentFile.path; // Capture path for robust update
             
-            ipcRenderer.invoke('find-videos-for-jobs', { jobs: currentFile.jobs, basePath: folderPath })
+            ipcRenderer.invoke('find-videos-for-jobs', { jobs: currentFile.jobs, excelFilePath: filePath })
                 .then((result: { success: boolean; jobs: VideoJob[]; error?: string; }) => {
                     if (result.success) {
                         setTrackedFiles(prevFiles =>
@@ -1082,13 +1082,12 @@ const App: React.FC = () => {
 
     setFeedback({ type: 'info', message: `Đang quét lại thư mục để tìm video cho file: ${currentFile.name}...` });
     
-    const folderPath = getFolderPath(currentFile.path);
     const filePath = currentFile.path;
 
     try {
         const result: { success: boolean; jobs: VideoJob[]; error?: string; } = await ipcRenderer.invoke('find-videos-for-jobs', { 
             jobs: currentFile.jobs, 
-            basePath: folderPath 
+            excelFilePath: filePath 
         });
 
         if (result.success) {
