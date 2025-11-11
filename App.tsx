@@ -1051,7 +1051,7 @@ const App: React.FC = () => {
     });
 
     if (result.success) {
-        setFeedback({ type: 'success', message: `Đã xóa trạng thái cho job ${jobId}. Video sẽ được tạo lại. Ahihi rồi nó sẽ lỗi tiép thôi` });
+        setFeedback({ type: 'success', message: `Đã xóa trạng thái cho job ${jobId}. Video sẽ được tạo lại. Fact: Rồi nó sẽ lỗi tiếp thôi` });
         // The file watcher will automatically pick up the change and update the UI.
     } else {
         setFeedback({ type: 'error', message: `Lỗi khi tạo lại video: ${result.error}` });
