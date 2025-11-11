@@ -1,4 +1,5 @@
 
+
 export type MvGenre = 'narrative' | 'performance' | 'conceptual' | 'lyrical' | 'animation' | 'one-take' | 'scenic' | 'surreal' | 'sci-fi' | 'horror' | 'retro-futurism' | 'documentary';
 export type VideoType = 'story' | 'live';
 export type ActiveTab = 'generator' | 'tracker';
@@ -62,4 +63,11 @@ export interface ApiKey {
   id: string;
   name: string;
   value: string;
+}
+
+export interface AppConfig {
+  machineId?: string;
+  licenseKey?: string;
+  apiKeysEncrypted?: string;
+  activeApiKeyId?: string;
 }

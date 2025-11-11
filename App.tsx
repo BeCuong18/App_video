@@ -1,5 +1,6 @@
 
 
+
 import React, {
   useState,
   useCallback,
@@ -10,7 +11,7 @@ import React, {
 import { GoogleGenAI, Type } from '@google/genai';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre } from './types';
+import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre, AppConfig } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
 import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon, RetryIcon } from './components/Icons';
@@ -429,7 +430,7 @@ const App: React.FC = () => {
     if (isElectron && ipcRenderer) {
       ipcRenderer.invoke('get-app-version').then(setAppVersion);
   
-      ipcRenderer.invoke('get-app-config').then(config => {
+      ipcRenderer.invoke('get-app-config').then((config: AppConfig) => {
         const newMachineId = config.machineId || '';
         setMachineId(newMachineId);
   
@@ -442,7 +443,7 @@ const App: React.FC = () => {
           } catch { return ''; }
         };
   
-        const decryptedKeysStr = decryptLocal(config.apiKeysEncrypted, newMachineId);
+        const decryptedKeysStr = decryptLocal(config.apiKeysEncrypted || '', newMachineId);
         let loadedKeys: ApiKey[] = [];
         if (decryptedKeysStr) {
           try {
