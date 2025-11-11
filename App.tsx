@@ -278,7 +278,7 @@ const App: React.FC = () => {
     customMusicGenre: '',
     characterConsistency: true,
     characterCount: 1,
-    temperature: 0.7,
+    temperature: 0.4,
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
