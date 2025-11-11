@@ -282,9 +282,10 @@ const App: React.FC = () => {
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
   const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
   
-  const [isActivated, setIsActivated] = useState<boolean | null>(null);
+  const [isActivated, setIsActivated] = useState<boolean>(false);
   const [machineId, setMachineId] = useState<string>('');
   const [appVersion, setAppVersion] = useState<string>('');
+  const [configLoaded, setConfigLoaded] = useState<boolean>(false);
   
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [activeApiKey, setActiveApiKey] = useState<ApiKey | null>(null);
@@ -364,32 +365,6 @@ const App: React.FC = () => {
     return CryptoJS.AES.encrypt(text, getEncryptionKey()).toString();
   }, [machineId, getEncryptionKey]);
 
-  const decrypt = useCallback((ciphertext: string) => {
-    if (!machineId) return '';
-    try {
-      const bytes = CryptoJS.AES.decrypt(ciphertext, getEncryptionKey());
-      return bytes.toString(CryptoJS.enc.Utf8);
-    } catch {
-      return '';
-    }
-  }, [machineId, getEncryptionKey]);
-
-  useEffect(() => {
-    if (machineId) {
-      const storedKeysEncrypted = localStorage.getItem('api_keys_storage');
-      if (storedKeysEncrypted) {
-        const decryptedKeys = decrypt(storedKeysEncrypted);
-        if (decryptedKeys) {
-          try {
-            setApiKeys(JSON.parse(decryptedKeys));
-          } catch {
-            localStorage.removeItem('api_keys_storage');
-          }
-        }
-      }
-    }
-  }, [machineId, decrypt]);
-
   const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
     if (!machineId) return false;
     try {
@@ -407,7 +382,9 @@ const App: React.FC = () => {
   const handleActivate = useCallback(async (key: string): Promise<boolean> => {
       const isValid = await validateLicenseKey(key);
       if (isValid) {
-          localStorage.setItem('license_key', key);
+          if (isElectron && ipcRenderer) {
+              await ipcRenderer.invoke('save-app-config', { licenseKey: key });
+          }
           setIsActivated(true);
           return true;
       }
@@ -417,62 +394,87 @@ const App: React.FC = () => {
   const handleKeyAdd = (newKey: ApiKey) => {
     const updatedKeys = [...apiKeys, newKey];
     setApiKeys(updatedKeys);
-    localStorage.setItem('api_keys_storage', encrypt(JSON.stringify(updatedKeys)));
+    if (isElectron && ipcRenderer) {
+        ipcRenderer.invoke('save-app-config', { apiKeysEncrypted: encrypt(JSON.stringify(updatedKeys)) });
+    }
   };
 
   const handleKeyDelete = (keyId: string) => {
     const updatedKeys = apiKeys.filter(k => k.id !== keyId);
     setApiKeys(updatedKeys);
-    localStorage.setItem('api_keys_storage', encrypt(JSON.stringify(updatedKeys)));
+
+    const configUpdate: { apiKeysEncrypted: string, activeApiKeyId?: string | null } = {
+        apiKeysEncrypted: encrypt(JSON.stringify(updatedKeys))
+    };
+
     if(activeApiKey?.id === keyId) {
       setActiveApiKey(null);
-      sessionStorage.removeItem('active_api_key_id');
+      configUpdate.activeApiKeyId = null;
+    }
+
+    if (isElectron && ipcRenderer) {
+        ipcRenderer.invoke('save-app-config', configUpdate);
     }
   };
 
   const handleKeySelect = (key: ApiKey) => {
     setActiveApiKey(key);
-    sessionStorage.setItem('active_api_key_id', key.id);
+    if (isElectron && ipcRenderer) {
+        ipcRenderer.invoke('save-app-config', { activeApiKeyId: key.id });
+    }
     setIsManagingKeys(false);
   };
 
   useEffect(() => {
     if (isElectron && ipcRenderer) {
       ipcRenderer.invoke('get-app-version').then(setAppVersion);
-    }
-    
-    setTimeout(() => {
-        let storedMachineId = localStorage.getItem('machine_id');
-        if (!storedMachineId) {
-            storedMachineId = crypto.randomUUID();
-            localStorage.setItem('machine_id', storedMachineId);
+  
+      ipcRenderer.invoke('get-app-config').then(config => {
+        const newMachineId = config.machineId || '';
+        setMachineId(newMachineId);
+  
+        const decryptLocal = (ciphertext: string, mid: string) => {
+          if (!mid || !ciphertext) return '';
+          try {
+            const getEncryptionKeyLocal = () => CryptoJS.SHA256(mid + SECRET_KEY).toString();
+            const bytes = CryptoJS.AES.decrypt(ciphertext, getEncryptionKeyLocal());
+            return bytes.toString(CryptoJS.enc.Utf8);
+          } catch { return ''; }
+        };
+  
+        const decryptedKeysStr = decryptLocal(config.apiKeysEncrypted, newMachineId);
+        let loadedKeys: ApiKey[] = [];
+        if (decryptedKeysStr) {
+          try {
+            loadedKeys = JSON.parse(decryptedKeysStr);
+          } catch { /* ignore parsing errors */ }
         }
-        setMachineId(storedMachineId);
-
-        let activationStatus = false;
-        const storedLicenseKey = localStorage.getItem('license_key');
-        if (storedLicenseKey) {
-            const parts = storedLicenseKey.split('.');
-            if (parts.length === 2 && parts[0] === storedMachineId) {
-                const expectedSignature = CryptoJS.HmacSHA256(storedMachineId, SECRET_KEY).toString(CryptoJS.enc.Hex);
-                if (parts[1] === expectedSignature) {
-                    activationStatus = true;
-                }
+        setApiKeys(loadedKeys);
+  
+        const activeKeyId = config.activeApiKeyId;
+        if (activeKeyId) {
+          const keyToActivate = loadedKeys.find(k => k.id === activeKeyId);
+          if (keyToActivate) setActiveApiKey(keyToActivate);
+        }
+  
+        const storedLicenseKey = config.licenseKey;
+        if (storedLicenseKey && newMachineId) {
+          const parts = storedLicenseKey.split('.');
+          if (parts.length === 2 && parts[0] === newMachineId) {
+            const expectedSignature = CryptoJS.HmacSHA256(newMachineId, SECRET_KEY).toString(CryptoJS.enc.Hex);
+            if (parts[1] === expectedSignature) {
+              setIsActivated(true);
             }
+          }
         }
-        setIsActivated(activationStatus);
-    }, 100);
-  }, []);
-
-  useEffect(() => {
-    if(isActivated && apiKeys.length > 0 && !activeApiKey) {
-      const activeKeyId = sessionStorage.getItem('active_api_key_id');
-      if (activeKeyId) {
-        const keyToActivate = apiKeys.find(k => k.id === activeKeyId);
-        if (keyToActivate) setActiveApiKey(keyToActivate);
-      }
+        
+        setConfigLoaded(true);
+      });
+    } else {
+      setIsActivated(true);
+      setConfigLoaded(true);
     }
-  }, [isActivated, apiKeys, activeApiKey]);
+  }, []);
 
     const parseExcelData = (data: Uint8Array): VideoJob[] => {
         const workbook = XLSX.read(data, { type: 'buffer' });
@@ -1199,7 +1201,7 @@ const App: React.FC = () => {
     </label>
   );
 
-  if (isActivated === null) {
+  if (!configLoaded) {
     return <div className="text-white min-h-screen flex items-center justify-center p-4"><LoaderIcon /></div>;
   }
   if (!isActivated && machineId) {

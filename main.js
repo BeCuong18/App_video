@@ -7,6 +7,7 @@ const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 const { execFile } = require('child_process');
 const XLSX = require('xlsx');
+const { randomUUID } = require('crypto');
 
 // Configure logging for autoUpdater
 autoUpdater.logger = require('electron-log');
@@ -20,12 +21,20 @@ const configPath = path.join(userDataPath, 'app-config.json');
 function readConfig() {
   try {
     if (fs.existsSync(configPath)) {
-      return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (!config.machineId) {
+          config.machineId = randomUUID();
+          writeConfig(config);
+      }
+      return config;
     }
   } catch (error) {
     console.error('Error reading config file:', error);
   }
-  return {}; // Return empty object if file doesn't exist or is corrupted
+  // If file doesn't exist or is corrupted, create a new one with a machineId
+  const newConfig = { machineId: randomUUID() };
+  writeConfig(newConfig);
+  return newConfig;
 }
 
 function writeConfig(config) {
@@ -217,6 +226,21 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-app-version', () => {
     return app.getVersion();
+  });
+
+  ipcMain.handle('get-app-config', () => {
+    return readConfig();
+  });
+
+  ipcMain.handle('save-app-config', async (event, configToSave) => {
+    try {
+      const currentConfig = readConfig();
+      const updatedConfig = { ...currentConfig, ...configToSave };
+      writeConfig(updatedConfig);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   });
 
   ipcMain.handle('save-file-dialog', async (event, { defaultPath, fileContent }) => {
