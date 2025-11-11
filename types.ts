@@ -1,6 +1,6 @@
 
 
-export type MvGenre = 'narrative' | 'performance' | 'conceptual' | 'lyrical' | 'animation' | 'one-take' | 'scenic' | 'surreal' | 'sci-fi' | 'horror' | 'retro-futurism' | 'documentary';
+export type MvGenre = 'narrative' | 'performance' | 'conceptual' | 'lyrical' | 'animation' | 'one-take' | 'scenic' | 'surreal' | 'sci-fi' | 'horror' | 'retro-futurism' | 'documentary' | 'dance-choreography' | 'abstract-visualizer' | 'social-commentary' | 'historical-period' | 'cinematic-short-film';
 export type VideoType = 'story' | 'live';
 export type ActiveTab = 'generator' | 'tracker';
 export type JobStatus = 'Pending' | 'Processing' | 'Generating' | 'Completed' | 'Failed';

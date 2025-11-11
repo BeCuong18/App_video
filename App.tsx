@@ -2,6 +2,7 @@
 
 
 
+
 import React, {
   useState,
   useCallback,
@@ -278,7 +279,7 @@ const App: React.FC = () => {
     customMusicGenre: '',
     characterConsistency: true,
     characterCount: 1,
-    temperature: 0.4,
+    temperature: 0.7,
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
@@ -306,31 +307,41 @@ const App: React.FC = () => {
 
   const mvGenreOptions: { value: MvGenre, label: string }[] = [
     { value: 'narrative', label: 'Kể chuyện (Narrative)' },
+    { value: 'cinematic-short-film', label: 'Phim ngắn Điện ảnh (Cinematic Short Film)' },
     { value: 'performance', label: 'Trình diễn (Performance)' },
-    { value: 'conceptual', label: 'Trừu tượng (Conceptual)' },
+    { value: 'dance-choreography', label: 'Vũ đạo (Dance Choreography)' },
     { value: 'lyrical', label: 'Minh hoạ lời bài hát (Lyrical Montage)' },
+    { value: 'conceptual', label: 'Trừu tượng (Conceptual)' },
+    { value: 'abstract-visualizer', label: 'Đồ họa Trừu tượng (Abstract Visualizer)' },
     { value: 'scenic', label: 'Cảnh quan & Kiến trúc (Không người)' },
     { value: 'animation', label: 'Hoạt hình (Animation)' },
     { value: 'one-take', label: 'Một cú máy (One-take)' },
     { value: 'surreal', label: 'Siêu thực (Surreal)' },
     { value: 'sci-fi', label: 'Khoa học viễn tưởng (Sci-Fi)' },
     { value: 'horror', label: 'Kinh dị (Horror)' },
+    { value: 'historical-period', label: 'Phim Cổ trang (Historical Period)' },
     { value: 'retro-futurism', label: 'Hoài cổ Tương lai (Retro-futurism)' },
+    { value: 'social-commentary', label: 'Bình luận Xã hội (Social Commentary)' },
     { value: 'documentary', label: 'Phong cách Tài liệu (Documentary Style)' },
-  ];
+];
 
   const filmingStyleOptions: { value: string, label: string }[] = [
     { value: 'auto', label: 'AI Tự động đề xuất' },
     { value: 'Vintage 35mm Film', label: 'Phim 35mm Cổ điển' },
     { value: 'Sharp & Modern Digital', label: 'Kỹ thuật số Sắc nét & Hiện đại' },
-    { value: 'Found Footage / Handheld', label: 'Giả tài liệu / Cầm tay' },
-    { value: 'Surreal & Dreamlike', label: 'Siêu thực & Mơ màng' },
     { value: 'Artistic Black & White', label: 'Đen trắng Nghệ thuật' },
-    { value: 'Wes Anderson Style', label: 'Phong cách Wes Anderson (Đối xứng, màu pastel)' },
-    { value: 'David Fincher Style', label: 'Phong cách David Fincher (Tối, màu lạnh, tĩnh)' },
     { value: 'Cinematic Neon Noir', label: 'Neon Noir Điện ảnh' },
+    { value: 'Dark & Moody Low-Key', label: 'Ánh sáng Tối & Tâm trạng (Low-Key)' },
+    { value: 'Golden Hour Glow', label: 'Ánh sáng Giờ vàng (Golden Hour)' },
+    { value: 'Clean & Minimalist', label: 'Tối giản & Sạch sẽ (Minimalist)' },
+    { value: 'Surreal & Dreamlike', label: 'Siêu thực & Mơ màng' },
     { value: 'Epic Drone Cinematography', label: 'Quay phim Drone Sử thi' },
+    { value: 'High-Speed Slow Motion', label: 'Slow Motion Tốc độ cao (Phantom Cam)' },
     { value: 'Macro & Extreme Close-up', label: 'Quay phim Cận cảnh & Siêu cận cảnh' },
+    { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất (GoPro / POV)' },
+    { value: 'Found Footage / Handheld', label: 'Giả tài liệu / Cầm tay' },
+    { value: 'Wes Anderson Style', label: 'Phong cách Wes Anderson (Đối xứng, màu pastel)' },
+    { value: '80s VHS Look', label: 'Phong cách VHS thập niên 80' },
     { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình 2D (Phong cách Ghibli)' },
     { value: '3D Animation (Pixar Style)', label: 'Hoạt hình 3D (Phong cách Pixar)' },
   ];
@@ -360,11 +371,11 @@ const App: React.FC = () => {
     { value: 'other', label: 'Khác (Nhập thủ công)' }
   ];
 
-  const getEncryptionKey = useCallback(() => CryptoJS.SHA256(machineId + SECRET_KEY).toString(), [machineId]);
+  const getEncryptionKey = useCallback((mid: string) => CryptoJS.SHA256(mid + SECRET_KEY).toString(), []);
 
   const encrypt = useCallback((text: string) => {
     if (!machineId) return '';
-    return CryptoJS.AES.encrypt(text, getEncryptionKey()).toString();
+    return CryptoJS.AES.encrypt(text, getEncryptionKey(machineId)).toString();
   }, [machineId, getEncryptionKey]);
 
   const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
@@ -385,13 +396,13 @@ const App: React.FC = () => {
       const isValid = await validateLicenseKey(key);
       if (isValid) {
           if (isElectron && ipcRenderer) {
-              await ipcRenderer.invoke('save-app-config', { licenseKey: key });
+              await ipcRenderer.invoke('save-app-config', { licenseKey: key, machineId: machineId });
           }
           setIsActivated(true);
           return true;
       }
       return false;
-  }, [validateLicenseKey]);
+  }, [validateLicenseKey, machineId]);
   
   const handleKeyAdd = (newKey: ApiKey) => {
     const updatedKeys = [...apiKeys, newKey];
@@ -432,11 +443,10 @@ const App: React.FC = () => {
       ipcRenderer.invoke('get-app-version').then(setAppVersion);
   
       ipcRenderer.invoke('get-app-config').then(async (config: AppConfig) => {
-        const newMachineId = config.machineId || '';
-        setMachineId(newMachineId);
-  
-        // --- License Key Check & Migration Logic ---
+        let currentMachineId = config.machineId || '';
+        let finalConfig = { ...config };
         let isActivatedResult = false;
+        
         const localValidateLicenseKey = (key: string, mid: string): boolean => {
           if (!key || !mid) return false;
           try {
@@ -446,27 +456,39 @@ const App: React.FC = () => {
             if (receivedMachineId !== mid) return false;
             const expectedSignature = CryptoJS.HmacSHA256(mid, SECRET_KEY).toString(CryptoJS.enc.Hex);
             return receivedSignature === expectedSignature;
-          } catch (e) {
-            return false;
-          }
+          } catch (e) { return false; }
         };
   
-        // 1. Check for key in the new config file
-        if (config.licenseKey && localValidateLicenseKey(config.licenseKey, newMachineId)) {
+        // 1. Check for key in the new config file using the machineId from the file
+        if (finalConfig.licenseKey && currentMachineId && localValidateLicenseKey(finalConfig.licenseKey, currentMachineId)) {
           isActivatedResult = true;
         } else {
-          // 2. If not found in config, check old localStorage for migration
+          // 2. If not found/valid in config, check old localStorage for migration
           const oldLicenseKey = localStorage.getItem('licenseKey');
-          if (oldLicenseKey && localValidateLicenseKey(oldLicenseKey, newMachineId)) {
-            // 3. Key is valid, migrate it
-            isActivatedResult = true;
-            await ipcRenderer.invoke('save-app-config', { licenseKey: oldLicenseKey });
-            localStorage.removeItem('licenseKey'); // Clean up old storage after successful migration
+          if (oldLicenseKey) {
+            const parts = oldLicenseKey.trim().split('.');
+            if (parts.length === 2) {
+              const oldMachineId = parts[0];
+              // 3. Validate the old key with ITS OWN embedded machineId
+              if (localValidateLicenseKey(oldLicenseKey, oldMachineId)) {
+                // 4. Migration is needed! Adopt the old key and old machineId as the source of truth.
+                isActivatedResult = true;
+                finalConfig.licenseKey = oldLicenseKey;
+                finalConfig.machineId = oldMachineId;
+                currentMachineId = oldMachineId; // Update the current machineId for this session
+                
+                // Save the migrated config and clean up
+                await ipcRenderer.invoke('save-app-config', { licenseKey: oldLicenseKey, machineId: oldMachineId });
+                localStorage.removeItem('licenseKey'); 
+              }
+            }
           }
         }
+        
+        setMachineId(currentMachineId);
         setIsActivated(isActivatedResult);
   
-        // --- API Keys Loading Logic (remains the same) ---
+        // --- API Keys Loading Logic (uses the final, potentially migrated, machineId) ---
         const decryptLocal = (ciphertext: string, mid: string) => {
           if (!mid || !ciphertext) return '';
           try {
@@ -476,7 +498,7 @@ const App: React.FC = () => {
           } catch { return ''; }
         };
   
-        const decryptedKeysStr = decryptLocal(config.apiKeysEncrypted || '', newMachineId);
+        const decryptedKeysStr = decryptLocal(finalConfig.apiKeysEncrypted || '', currentMachineId);
         let loadedKeys: ApiKey[] = [];
         if (decryptedKeysStr) {
           try {
@@ -485,7 +507,7 @@ const App: React.FC = () => {
         }
         setApiKeys(loadedKeys);
   
-        const activeKeyId = config.activeApiKeyId;
+        const activeKeyId = finalConfig.activeApiKeyId;
         if (activeKeyId) {
           const keyToActivate = loadedKeys.find(k => k.id === activeKeyId);
           if (keyToActivate) setActiveApiKey(keyToActivate);
@@ -1224,6 +1246,13 @@ const App: React.FC = () => {
     </label>
   );
 
+  const getTemperatureLabel = (temp: number): { text: string; color: string } => {
+    if (temp <= 0.3) return { text: 'An toàn & Logic', color: 'text-blue-300' };
+    if (temp <= 0.6) return { text: 'Cân bằng & Sáng tạo', color: 'text-teal-300' };
+    return { text: 'Đột phá & Bất ngờ', color: 'text-indigo-300' };
+  };
+  const tempLabel = getTemperatureLabel(formData.temperature);
+
   if (!configLoaded) {
     return <div className="text-white min-h-screen flex items-center justify-center p-4"><LoaderIcon /></div>;
   }
@@ -1399,7 +1428,7 @@ const App: React.FC = () => {
                         </div>
                         <div>
                             <label htmlFor="temperature" className="block text-sm font-medium text-indigo-100 mb-2">
-                                Độ Sáng Tạo (Temperature) - <span className="font-bold text-teal-300">{formData.temperature.toFixed(1)}</span>
+                                Độ Sáng Tạo - <span className={`font-bold ${tempLabel.color}`}>{tempLabel.text} ({formData.temperature.toFixed(1)})</span>
                             </label>
                             <input
                                 type="range"
@@ -1412,7 +1441,6 @@ const App: React.FC = () => {
                                 onChange={handleInputChange}
                                 className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
                             />
-                            <p className="text-xs text-indigo-200 mt-1">Thấp: an toàn, logic. Cao: sáng tạo, bất ngờ.</p>
                         </div>
                     </div>
                   </div>
