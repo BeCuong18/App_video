@@ -1,6 +1,7 @@
 
 
 
+
 import React, {
   useState,
   useCallback,
@@ -430,10 +431,42 @@ const App: React.FC = () => {
     if (isElectron && ipcRenderer) {
       ipcRenderer.invoke('get-app-version').then(setAppVersion);
   
-      ipcRenderer.invoke('get-app-config').then((config: AppConfig) => {
+      ipcRenderer.invoke('get-app-config').then(async (config: AppConfig) => {
         const newMachineId = config.machineId || '';
         setMachineId(newMachineId);
   
+        // --- License Key Check & Migration Logic ---
+        let isActivatedResult = false;
+        const localValidateLicenseKey = (key: string, mid: string): boolean => {
+          if (!key || !mid) return false;
+          try {
+            const parts = key.trim().split('.');
+            if (parts.length !== 2) return false;
+            const [receivedMachineId, receivedSignature] = parts;
+            if (receivedMachineId !== mid) return false;
+            const expectedSignature = CryptoJS.HmacSHA256(mid, SECRET_KEY).toString(CryptoJS.enc.Hex);
+            return receivedSignature === expectedSignature;
+          } catch (e) {
+            return false;
+          }
+        };
+  
+        // 1. Check for key in the new config file
+        if (config.licenseKey && localValidateLicenseKey(config.licenseKey, newMachineId)) {
+          isActivatedResult = true;
+        } else {
+          // 2. If not found in config, check old localStorage for migration
+          const oldLicenseKey = localStorage.getItem('licenseKey');
+          if (oldLicenseKey && localValidateLicenseKey(oldLicenseKey, newMachineId)) {
+            // 3. Key is valid, migrate it
+            isActivatedResult = true;
+            await ipcRenderer.invoke('save-app-config', { licenseKey: oldLicenseKey });
+            localStorage.removeItem('licenseKey'); // Clean up old storage after successful migration
+          }
+        }
+        setIsActivated(isActivatedResult);
+  
+        // --- API Keys Loading Logic (remains the same) ---
         const decryptLocal = (ciphertext: string, mid: string) => {
           if (!mid || !ciphertext) return '';
           try {
@@ -456,17 +489,6 @@ const App: React.FC = () => {
         if (activeKeyId) {
           const keyToActivate = loadedKeys.find(k => k.id === activeKeyId);
           if (keyToActivate) setActiveApiKey(keyToActivate);
-        }
-  
-        const storedLicenseKey = config.licenseKey;
-        if (storedLicenseKey && newMachineId) {
-          const parts = storedLicenseKey.split('.');
-          if (parts.length === 2 && parts[0] === newMachineId) {
-            const expectedSignature = CryptoJS.HmacSHA256(newMachineId, SECRET_KEY).toString(CryptoJS.enc.Hex);
-            if (parts[1] === expectedSignature) {
-              setIsActivated(true);
-            }
-          }
         }
         
         setConfigLoaded(true);
