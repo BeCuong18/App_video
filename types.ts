@@ -1,6 +1,7 @@
 
 
-export type MvGenre = 'narrative' | 'performance' | 'conceptual' | 'lyrical' | 'animation' | 'one-take' | 'scenic' | 'surreal' | 'sci-fi' | 'horror' | 'retro-futurism' | 'documentary' | 'dance-choreography' | 'abstract-visualizer' | 'social-commentary' | 'historical-period' | 'cinematic-short-film';
+
+export type MvGenre = 'narrative' | 'cinematic-short-film' | 'performance' | 'dance-choreography' | 'lyrical' | 'conceptual' | 'abstract-visualizer' | 'scenic' | 'animation' | 'one-take' | 'surreal' | 'sci-fi' | 'horror' | 'historical-period' | 'retro-futurism' | 'social-commentary' | 'documentary';
 export type VideoType = 'story' | 'live';
 export type ActiveTab = 'generator' | 'tracker';
 export type JobStatus = 'Pending' | 'Processing' | 'Generating' | 'Completed' | 'Failed';
@@ -65,9 +66,16 @@ export interface ApiKey {
   value: string;
 }
 
+export interface Preset {
+    id: string;
+    name: string;
+    settings: Partial<FormData>;
+}
+
 export interface AppConfig {
   machineId?: string;
   licenseKey?: string;
   apiKeysEncrypted?: string;
   activeApiKeyId?: string;
+  presets?: Preset[];
 }

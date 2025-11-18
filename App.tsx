@@ -1,8 +1,3 @@
-
-
-
-
-
 import React, {
   useState,
   useCallback,
@@ -13,7 +8,7 @@ import React, {
 import { GoogleGenAI, Type } from '@google/genai';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre, AppConfig } from './types';
+import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre, AppConfig, Preset } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
 import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon, RetryIcon } from './components/Icons';
@@ -279,7 +274,7 @@ const App: React.FC = () => {
     customMusicGenre: '',
     characterConsistency: true,
     characterCount: 1,
-    temperature: 0.7,
+    temperature: 0.3,
   });
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
@@ -302,48 +297,52 @@ const App: React.FC = () => {
   const [isCombiningAll, setIsCombiningAll] = useState(false);
   const [lastCombinedVideoPath, setLastCombinedVideoPath] = useState<string | null>(null);
 
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [selectedPresetId, setSelectedPresetId] = useState('');
+
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
   const mvGenreOptions: { value: MvGenre, label: string }[] = [
-    { value: 'narrative', label: 'Kể chuyện (Narrative)' },
-    { value: 'cinematic-short-film', label: 'Phim ngắn Điện ảnh (Cinematic Short Film)' },
-    { value: 'performance', label: 'Trình diễn (Performance)' },
-    { value: 'dance-choreography', label: 'Vũ đạo (Dance Choreography)' },
-    { value: 'lyrical', label: 'Minh hoạ lời bài hát (Lyrical Montage)' },
-    { value: 'conceptual', label: 'Trừu tượng (Conceptual)' },
-    { value: 'abstract-visualizer', label: 'Đồ họa Trừu tượng (Abstract Visualizer)' },
-    { value: 'scenic', label: 'Cảnh quan & Kiến trúc (Không người)' },
-    { value: 'animation', label: 'Hoạt hình (Animation)' },
-    { value: 'one-take', label: 'Một cú máy (One-take)' },
-    { value: 'surreal', label: 'Siêu thực (Surreal)' },
-    { value: 'sci-fi', label: 'Khoa học viễn tưởng (Sci-Fi)' },
-    { value: 'horror', label: 'Kinh dị (Horror)' },
-    { value: 'historical-period', label: 'Phim Cổ trang (Historical Period)' },
-    { value: 'retro-futurism', label: 'Hoài cổ Tương lai (Retro-futurism)' },
-    { value: 'social-commentary', label: 'Bình luận Xã hội (Social Commentary)' },
-    { value: 'documentary', label: 'Phong cách Tài liệu (Documentary Style)' },
-];
+      { value: 'narrative', label: 'Kể chuyện có nội dung, nhân vật' },
+      { value: 'cinematic-short-film', label: 'Phim ngắn chuyên nghiệp, điện ảnh' },
+      { value: 'performance', label: 'Tập trung vào ca sĩ đang trình diễn' },
+      { value: 'dance-choreography', label: 'Tập trung vào vũ đạo, nhóm nhảy' },
+      { value: 'lyrical', label: 'Minh hoạ lời bài hát bằng hình ảnh' },
+      { value: 'conceptual', label: 'Ý tưởng trừu tượng, hình ảnh ẩn dụ' },
+      { value: 'abstract-visualizer', label: 'Đồ hoạ chuyển động trừu tượng (Visualizer)' },
+      { value: 'scenic', label: 'Chỉ có cảnh quan, kiến trúc (Không có người)' },
+      { value: 'animation', label: 'Video hoạt hình' },
+      { value: 'one-take', label: 'Quay bằng một cú máy duy nhất (One-shot)' },
+      { value: 'surreal', label: 'Siêu thực, kỳ ảo, như trong mơ' },
+      { value: 'sci-fi', label: 'Khoa học viễn tưởng, tương lai' },
+      { value: 'horror', label: 'Kinh dị, rùng rợn' },
+      { value: 'historical-period', label: 'Phim cổ trang, lịch sử' },
+      { value: 'retro-futurism', label: 'Tương lai theo phong cách hoài cổ' },
+      { value: 'social-commentary', label: 'Phản ánh các vấn đề xã hội' },
+      { value: 'documentary', label: 'Phong cách phim tài liệu, chân thực' },
+  ];
 
   const filmingStyleOptions: { value: string, label: string }[] = [
-    { value: 'auto', label: 'AI Tự động đề xuất' },
-    { value: 'Vintage 35mm Film', label: 'Phim 35mm Cổ điển' },
-    { value: 'Sharp & Modern Digital', label: 'Kỹ thuật số Sắc nét & Hiện đại' },
-    { value: 'Artistic Black & White', label: 'Đen trắng Nghệ thuật' },
-    { value: 'Cinematic Neon Noir', label: 'Neon Noir Điện ảnh' },
-    { value: 'Dark & Moody Low-Key', label: 'Ánh sáng Tối & Tâm trạng (Low-Key)' },
-    { value: 'Golden Hour Glow', label: 'Ánh sáng Giờ vàng (Golden Hour)' },
-    { value: 'Clean & Minimalist', label: 'Tối giản & Sạch sẽ (Minimalist)' },
-    { value: 'Surreal & Dreamlike', label: 'Siêu thực & Mơ màng' },
-    { value: 'Epic Drone Cinematography', label: 'Quay phim Drone Sử thi' },
-    { value: 'High-Speed Slow Motion', label: 'Slow Motion Tốc độ cao (Phantom Cam)' },
-    { value: 'Macro & Extreme Close-up', label: 'Quay phim Cận cảnh & Siêu cận cảnh' },
-    { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất (GoPro / POV)' },
-    { value: 'Found Footage / Handheld', label: 'Giả tài liệu / Cầm tay' },
-    { value: 'Wes Anderson Style', label: 'Phong cách Wes Anderson (Đối xứng, màu pastel)' },
-    { value: '80s VHS Look', label: 'Phong cách VHS thập niên 80' },
-    { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình 2D (Phong cách Ghibli)' },
-    { value: '3D Animation (Pixar Style)', label: 'Hoạt hình 3D (Phong cách Pixar)' },
+      { value: 'auto', label: 'AI Tự động đề xuất' },
+      { value: 'Vintage 35mm Film', label: 'Phong cách phim nhựa cũ, hoài niệm (35mm)' },
+      { value: 'Sharp & Modern Digital', label: 'Sắc nét, hiện đại (Máy ảnh kỹ thuật số)' },
+      { value: 'Artistic Black & White', label: 'Đen trắng nghệ thuật, chiều sâu' },
+      { value: 'Cinematic Neon Noir', label: 'Đèn neon trong đêm, màu sắc u tối (Blade Runner)' },
+      { value: 'Dark & Moody Low-Key', label: 'Ánh sáng tối, tâm trạng sâu lắng (Low-Key)' },
+      { value: 'Golden Hour Glow', label: 'Ánh sáng giờ vàng, màu sắc ấm áp' },
+      { value: 'Clean & Minimalist', label: 'Tối giản, sạch sẽ, tinh tế' },
+      { value: 'Surreal & Dreamlike', label: 'Siêu thực, kỳ ảo, như trong mơ' },
+      { value: 'Epic Drone Cinematography', label: 'Những cú máy flycam hoành tráng' },
+      { value: 'High-Speed Slow Motion', label: 'Quay siêu chậm, sắc nét (Phantom Cam)' },
+      { value: 'Macro & Extreme Close-up', label: 'Quay cận cảnh, chi tiết vật thể nhỏ' },
+      { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất, hành động (GoPro)' },
+      { value: 'Found Footage / Handheld', label: 'Phong cách máy quay cầm tay, chân thực' },
+      { value: 'Wes Anderson Style', label: 'Đối xứng, màu pastel (Phong cách Wes Anderson)' },
+      { value: '80s VHS Look', label: 'Chất lượng video cũ của thập niên 80 (VHS)' },
+      { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình 2D (Phong cách Ghibli)' },
+      { value: '3D Animation (Pixar Style)', label: 'Hoạt hình 3D (Phong cách Pixar)' },
   ];
   
   const countryOptions: { value: string, label: string }[] = [
@@ -511,6 +510,10 @@ const App: React.FC = () => {
         if (activeKeyId) {
           const keyToActivate = loadedKeys.find(k => k.id === activeKeyId);
           if (keyToActivate) setActiveApiKey(keyToActivate);
+        }
+        
+        if (finalConfig.presets) {
+          setPresets(finalConfig.presets);
         }
         
         setConfigLoaded(true);
@@ -1190,6 +1193,56 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSavePreset = () => {
+      if (!newPresetName.trim()) {
+          setFeedback({ type: 'error', message: 'Vui lòng nhập tên cho cài đặt sẵn.' });
+          return;
+      }
+
+      const { model, mvGenre, filmingStyle, country, musicGenre, customMusicGenre, characterConsistency, characterCount, temperature } = formData;
+      const settingsToSave: Partial<FormData> = { model, mvGenre, filmingStyle, country, musicGenre, customMusicGenre, characterConsistency, characterCount, temperature };
+
+      const newPreset: Preset = {
+          id: crypto.randomUUID(),
+          name: newPresetName.trim(),
+          settings: settingsToSave,
+      };
+
+      const updatedPresets = [...presets, newPreset];
+      setPresets(updatedPresets);
+      setNewPresetName('');
+      if (ipcRenderer) {
+          ipcRenderer.invoke('save-app-config', { presets: updatedPresets });
+      }
+      setFeedback({ type: 'success', message: 'Đã lưu cài đặt!' });
+  };
+
+  const handlePresetSelect = (presetId: string) => {
+      setSelectedPresetId(presetId);
+      if (!presetId) return;
+
+      const presetToLoad = presets.find(p => p.id === presetId);
+      if (presetToLoad) {
+          setFormData(prev => ({ ...prev, ...presetToLoad.settings }));
+          setFeedback({ type: 'info', message: `Đã tải cài đặt "${presetToLoad.name}".` });
+      }
+  };
+
+  const handleDeletePreset = () => {
+      if (!selectedPresetId) return;
+      const presetToDelete = presets.find(p => p.id === selectedPresetId);
+      const updatedPresets = presets.filter(p => p.id !== selectedPresetId);
+      setPresets(updatedPresets);
+      setSelectedPresetId('');
+      if (ipcRenderer) {
+          ipcRenderer.invoke('save-app-config', { presets: updatedPresets });
+      }
+      if (presetToDelete) {
+        setFeedback({ type: 'info', message: `Đã xóa cài đặt "${presetToDelete.name}".` });
+      }
+  };
+
+
   const getStatusBadge = (status: JobStatus) => {
     const baseClasses = "status-badge";
     switch (status) {
@@ -1312,6 +1365,33 @@ const App: React.FC = () => {
                       <RadioLabel name="videoType" value="live" checked={videoType === 'live'} onChange={setVideoType}>Live Acoustic</RadioLabel>
                     </div>
                   </div>
+
+                 <div className="space-y-4 pt-4 border-t border-white/10">
+                    <h3 className="text-base font-semibold text-indigo-100">Cài đặt sẵn (Presets)</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center gap-2">
+                            <select 
+                                value={selectedPresetId}
+                                onChange={e => handlePresetSelect(e.target.value)}
+                                className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-2 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition"
+                            >
+                                <option value="">Chọn để tải cài đặt...</option>
+                                {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                            <button onClick={handleDeletePreset} disabled={!selectedPresetId} className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition disabled:opacity-50"><TrashIcon className="w-5 h-5"/></button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="text"
+                                value={newPresetName}
+                                onChange={e => setNewPresetName(e.target.value)}
+                                className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-2 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 transition"
+                                placeholder="Tên cài đặt mới..."
+                            />
+                            <button onClick={handleSavePreset} className="bg-indigo-500 text-white font-bold p-2 rounded-lg hover:bg-indigo-600 transition">Lưu</button>
+                        </div>
+                    </div>
+                 </div>
 
                   <div className={`${videoType === 'story' ? 'block' : 'hidden'} space-y-6`}>
                     <div>
