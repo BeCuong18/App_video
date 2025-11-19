@@ -102,14 +102,14 @@
         </p>
         <ul>
             <li><strong>Lưu cài đặt:</strong> Sau khi đã chọn xong các tùy chọn (Thể loại, Phong cách quay, Model AI, v.v.), hãy nhập tên cho cài đặt của bạn vào ô "Tên cài đặt mới..." và nhấn "Lưu".</li>
-            <li><strong>Tải cài đặt:</strong> Chọn một cài đặt đã lưu từ danh sách và nhấn "Tải" để áp dụng lại toàn bộ các tùy chọn đó.</li>
+            <li><strong>Tải cài đặt:</strong> Đơn giản chỉ cần chọn tên cài đặt từ danh sách, ứng dụng sẽ <strong>tự động áp dụng ngay lập tức</strong>.</li>
             <li><strong>Xóa cài đặt:</strong> Chọn một cài đặt từ danh sách và nhấn vào biểu tượng thùng rác để xóa.</li>
         </ul>
 
         <h3>B. Loại Video: MV Kể Chuyện</h3>
         <ul>
             <li><strong>Lời bài hát hoặc Ý tưởng:</strong> Dán toàn bộ lời bài hát hoặc mô tả chi tiết nhất có thể về câu chuyện, cảm xúc, bối cảnh bạn muốn thể hiện trong MV.</li>
-            <li><strong>Thể Loại MV & Phong cách quay (Nâng cấp):</strong> Các lựa chọn đã được viết lại bằng ngôn ngữ dễ hiểu hơn, giúp bạn dễ dàng hình dung và lựa chọn đúng phong cách mình muốn mà không cần biết các thuật ngữ chuyên ngành.</li>
+            <li><strong>Thể Loại MV & Phong cách quay (Đơn giản hóa):</strong> Các lựa chọn giờ đây sử dụng ngôn ngữ dễ hiểu, ví dụ "Kể chuyện (Phim ngắn)", "Đêm Neon huyền ảo", v.v. giúp bạn dễ dàng chọn đúng phong cách mà không cần am hiểu thuật ngữ kỹ thuật.</li>
             <li><strong>Quốc gia:</strong> Rất quan trọng để AI tạo ra nhân vật, trang phục, kiến trúc và bối cảnh phù hợp với văn hóa bạn chọn.</li>
             <li><strong>Thể loại nhạc:</strong> Chọn thể loại nhạc phù hợp (V-Pop, Jazz, EDM...) hoặc chọn "Khác" để nhập thủ công. Điều này giúp AI hiểu rõ hơn về nhịp điệu và năng lượng của kịch bản.</li>
             <li><strong>Đồng nhất nhân vật:</strong> Chọn "Có" nếu bạn muốn các nhân vật chính có ngoại hình nhất quán trong suốt MV.</li>
@@ -125,7 +125,7 @@
             <li><strong>Thời lượng bài hát:</strong> Nhập số phút và giây để ứng dụng tự động tính toán số lượng cảnh phù hợp.</li>
             <li><strong>Tên Dự Án:</strong> Dùng để đặt tên cho file Excel kịch bản.</li>
             <li><strong>Model AI:</strong> Chọn model phù hợp. <code>Gemini Flash Lite</code> nhanh nhất, <code>Gemini 2.5 Pro</code> mạnh và sáng tạo nhất.</li>
-            <li><strong>Độ Sáng Tạo (Nâng cấp):</strong> Thanh trượt giờ đây sẽ mặc định ở mức <strong>"An toàn & Logic"</strong> để giảm thiểu lỗi. Khi điều chỉnh, ứng dụng sẽ hiển thị các nhãn mô tả trực quan như <strong>"Cân bằng & Sáng tạo"</strong> hoặc <strong>"Đột phá & Bất ngờ"</strong> để bạn dễ dàng lựa chọn.</li>
+            <li><strong>Độ Sáng Tạo (Nâng cấp):</strong> Thanh trượt giờ đây mặc định ở mức <strong>"An toàn & Logic"</strong> (0.3) để giảm thiểu lỗi. Khi điều chỉnh, ứng dụng sẽ hiển thị các nhãn mô tả trực quan như <strong>"Cân bằng & Sáng tạo"</strong> hoặc <strong>"Đột phá & Bất ngờ"</strong>.</li>
             <li>Nhấn <strong>"Tạo Kịch Bản Prompt"</strong>. Sau khi AI tạo xong, nút <strong>"Lưu kịch bản & Theo dõi"</strong> sẽ xuất hiện bên cạnh.</li>
             <li>Nhấn <strong>"Lưu kịch bản & Theo dõi"</strong>. Ứng dụng sẽ yêu cầu bạn chọn nơi lưu file Excel và tự động chuyển bạn sang tab "Theo Dõi Sản Xuất".</li>
         </ul>
@@ -146,9 +146,10 @@
             <li><strong>Mở ToolFlows:</strong> Chạy trực tiếp ToolFlows VEO 3. Lần đầu, bạn cần nhấn nút cài đặt (hình bánh răng) để chỉ định đường dẫn đến file <code>.exe</code> của ToolFlows.</li>
             <li><strong>Ghép Thường / Ghép Theo Thời Gian / Ghép Thường Tất Cả:</strong> Nối các video đã hoàn thành lại thành một video duy nhất.</li>
         </ul>
-        <h3>C. Tự động hóa (Tính năng mới!)</h3>
+        <h3>C. Tự động hóa & Cảnh báo (Tính năng mới!)</h3>
         <ul>
-            <li><strong>Thông báo hoàn thành:</strong> Ứng dụng sẽ tự động hiển thị thông báo ngoài màn hình khi <strong>toàn bộ video của một file excel</strong> đã được tạo xong.</li>
+            <li><strong>Cảnh báo Hoàn thành:</strong> Khi <strong>tất cả các file</strong> bạn đang theo dõi đều hoàn thành 100%, một cửa sổ màu vàng nổi bật sẽ hiện lên giữa màn hình để thông báo cho bạn.</li>
+            <li><strong>Cảnh báo Cập nhật:</strong> Khi có bản cập nhật mới, một cửa sổ tương tự sẽ xuất hiện yêu cầu bạn cập nhật ngay.</li>
             <li><strong>Tự động tạo lại video bị kẹt:</strong> Ứng dụng sẽ tự động giám sát. Nếu một video bị kẹt ở trạng thái "Processing" hoặc "Generating" quá 3 phút, nó sẽ được tự động reset để ToolFlows tạo lại.</li>
         </ul>
 

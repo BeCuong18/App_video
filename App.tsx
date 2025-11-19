@@ -14,7 +14,8 @@ import Results from './components/Results';
 import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon, RetryIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
-const ipcRenderer = isElectron ? (window as any).require('electron').ipcRenderer : null;
+// Safely get ipcRenderer only if in Electron
+const ipcRenderer = isElectron && (window as any).require ? (window as any).require('electron').ipcRenderer : null;
 
 
 // --- Activation Component ---
@@ -254,6 +255,55 @@ const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onKeySelec
     );
 };
 
+// --- Modal Alert Component ---
+interface AlertModalProps {
+  title: string;
+  message: string;
+  type: 'completion' | 'update';
+  onClose: () => void;
+  onConfirm?: () => void;
+}
+
+const AlertModal: React.FC<AlertModalProps> = ({ title, message, type, onClose, onConfirm }) => {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-gray-900 border-2 border-yellow-500 rounded-xl max-w-md w-full shadow-2xl transform scale-100 transition-all">
+        <div className="p-6 text-center">
+          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 mb-4">
+             {type === 'update' ? (
+                <svg className="h-10 w-10 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+             ) : (
+                <svg className="h-10 w-10 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+             )}
+          </div>
+          <h3 className="text-2xl font-bold text-white mb-2">{title}</h3>
+          <p className="text-gray-300 mb-6">{message}</p>
+          <div className="flex justify-center gap-4">
+            <button 
+              onClick={onClose}
+              className="px-6 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-semibold transition"
+            >
+              Đóng
+            </button>
+            {onConfirm && (
+              <button 
+                onClick={onConfirm}
+                className="px-6 py-2 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold transition"
+              >
+                {type === 'update' ? 'Cập nhật ngay' : 'OK'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('generator');
   const [videoType, setVideoType] = useState<VideoType>('story');
@@ -301,48 +351,50 @@ const App: React.FC = () => {
   const [newPresetName, setNewPresetName] = useState('');
   const [selectedPresetId, setSelectedPresetId] = useState('');
 
+  const [alertModal, setAlertModal] = useState<{title: string, message: string, type: 'completion' | 'update', onConfirm?: () => void} | null>(null);
+
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
   const mvGenreOptions: { value: MvGenre, label: string }[] = [
-      { value: 'narrative', label: 'Kể chuyện có nội dung, nhân vật' },
-      { value: 'cinematic-short-film', label: 'Phim ngắn chuyên nghiệp, điện ảnh' },
-      { value: 'performance', label: 'Tập trung vào ca sĩ đang trình diễn' },
-      { value: 'dance-choreography', label: 'Tập trung vào vũ đạo, nhóm nhảy' },
-      { value: 'lyrical', label: 'Minh hoạ lời bài hát bằng hình ảnh' },
-      { value: 'conceptual', label: 'Ý tưởng trừu tượng, hình ảnh ẩn dụ' },
-      { value: 'abstract-visualizer', label: 'Đồ hoạ chuyển động trừu tượng (Visualizer)' },
-      { value: 'scenic', label: 'Chỉ có cảnh quan, kiến trúc (Không có người)' },
-      { value: 'animation', label: 'Video hoạt hình' },
-      { value: 'one-take', label: 'Quay bằng một cú máy duy nhất (One-shot)' },
-      { value: 'surreal', label: 'Siêu thực, kỳ ảo, như trong mơ' },
-      { value: 'sci-fi', label: 'Khoa học viễn tưởng, tương lai' },
-      { value: 'horror', label: 'Kinh dị, rùng rợn' },
-      { value: 'historical-period', label: 'Phim cổ trang, lịch sử' },
-      { value: 'retro-futurism', label: 'Tương lai theo phong cách hoài cổ' },
-      { value: 'social-commentary', label: 'Phản ánh các vấn đề xã hội' },
-      { value: 'documentary', label: 'Phong cách phim tài liệu, chân thực' },
+      { value: 'narrative', label: 'Kể chuyện (Có cốt truyện, diễn viên)' },
+      { value: 'cinematic-short-film', label: 'Phim ngắn điện ảnh (Cinematic)' },
+      { value: 'performance', label: 'Trình diễn (Ca sĩ hát/Nhóm nhạc)' },
+      { value: 'dance-choreography', label: 'Vũ đạo (Nhảy múa)' },
+      { value: 'lyrical', label: 'Minh hoạ lời bài hát (Lyrical)' },
+      { value: 'conceptual', label: 'Trừu tượng & Ẩn dụ (Conceptual)' },
+      { value: 'abstract-visualizer', label: 'Hiệu ứng thị giác (Visualizer)' },
+      { value: 'scenic', label: 'Phong cảnh & Kiến trúc (Không người)' },
+      { value: 'animation', label: 'Hoạt hình (2D/3D)' },
+      { value: 'one-take', label: 'Quay một cú máy (One-shot)' },
+      { value: 'surreal', label: 'Siêu thực & Kỳ ảo (Surreal)' },
+      { value: 'sci-fi', label: 'Khoa học viễn tưởng (Sci-Fi)' },
+      { value: 'horror', label: 'Kinh dị & Rùng rợn' },
+      { value: 'historical-period', label: 'Cổ trang & Lịch sử' },
+      { value: 'retro-futurism', label: 'Tương lai hoài cổ (Retro)' },
+      { value: 'social-commentary', label: 'Phim tài liệu xã hội' },
+      { value: 'documentary', label: 'Phim tài liệu chân thực' },
   ];
 
   const filmingStyleOptions: { value: string, label: string }[] = [
-      { value: 'auto', label: 'AI Tự động đề xuất' },
-      { value: 'Vintage 35mm Film', label: 'Phong cách phim nhựa cũ, hoài niệm (35mm)' },
-      { value: 'Sharp & Modern Digital', label: 'Sắc nét, hiện đại (Máy ảnh kỹ thuật số)' },
-      { value: 'Artistic Black & White', label: 'Đen trắng nghệ thuật, chiều sâu' },
-      { value: 'Cinematic Neon Noir', label: 'Đèn neon trong đêm, màu sắc u tối (Blade Runner)' },
-      { value: 'Dark & Moody Low-Key', label: 'Ánh sáng tối, tâm trạng sâu lắng (Low-Key)' },
-      { value: 'Golden Hour Glow', label: 'Ánh sáng giờ vàng, màu sắc ấm áp' },
-      { value: 'Clean & Minimalist', label: 'Tối giản, sạch sẽ, tinh tế' },
-      { value: 'Surreal & Dreamlike', label: 'Siêu thực, kỳ ảo, như trong mơ' },
-      { value: 'Epic Drone Cinematography', label: 'Những cú máy flycam hoành tráng' },
-      { value: 'High-Speed Slow Motion', label: 'Quay siêu chậm, sắc nét (Phantom Cam)' },
-      { value: 'Macro & Extreme Close-up', label: 'Quay cận cảnh, chi tiết vật thể nhỏ' },
-      { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất, hành động (GoPro)' },
-      { value: 'Found Footage / Handheld', label: 'Phong cách máy quay cầm tay, chân thực' },
-      { value: 'Wes Anderson Style', label: 'Đối xứng, màu pastel (Phong cách Wes Anderson)' },
-      { value: '80s VHS Look', label: 'Chất lượng video cũ của thập niên 80 (VHS)' },
-      { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình 2D (Phong cách Ghibli)' },
-      { value: '3D Animation (Pixar Style)', label: 'Hoạt hình 3D (Phong cách Pixar)' },
+      { value: 'auto', label: 'AI Tự động đề xuất (Khuyên dùng)' },
+      { value: 'Vintage 35mm Film', label: 'Phim nhựa cổ điển (35mm)' },
+      { value: 'Sharp & Modern Digital', label: 'Kỹ thuật số sắc nét, hiện đại' },
+      { value: 'Artistic Black & White', label: 'Đen trắng nghệ thuật' },
+      { value: 'Cinematic Neon Noir', label: 'Đêm Neon huyền ảo (Cyberpunk)' },
+      { value: 'Dark & Moody Low-Key', label: 'Ánh sáng tối, tâm trạng (Low-Key)' },
+      { value: 'Golden Hour Glow', label: 'Ánh sáng giờ vàng (Ấm áp)' },
+      { value: 'Clean & Minimalist', label: 'Tối giản & Tinh tế' },
+      { value: 'Surreal & Dreamlike', label: 'Mơ màng & Siêu thực' },
+      { value: 'Epic Drone Cinematography', label: 'Quay Flycam hoành tráng' },
+      { value: 'High-Speed Slow Motion', label: 'Quay siêu chậm (Slow Motion)' },
+      { value: 'Macro & Extreme Close-up', label: 'Quay cận cảnh chi tiết' },
+      { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất (POV/Action)' },
+      { value: 'Found Footage / Handheld', label: 'Máy quay cầm tay (Rung lắc nhẹ)' },
+      { value: 'Wes Anderson Style', label: 'Màu Pastel đối xứng (Wes Anderson)' },
+      { value: '80s VHS Look', label: 'Băng từ thập niên 80 (VHS)' },
+      { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình Ghibli (2D)' },
+      { value: '3D Animation (Pixar Style)', label: 'Hoạt hình Pixar (3D)' },
   ];
   
   const countryOptions: { value: string, label: string }[] = [
@@ -458,25 +510,20 @@ const App: React.FC = () => {
           } catch (e) { return false; }
         };
   
-        // 1. Check for key in the new config file using the machineId from the file
         if (finalConfig.licenseKey && currentMachineId && localValidateLicenseKey(finalConfig.licenseKey, currentMachineId)) {
           isActivatedResult = true;
         } else {
-          // 2. If not found/valid in config, check old localStorage for migration
           const oldLicenseKey = localStorage.getItem('licenseKey');
           if (oldLicenseKey) {
             const parts = oldLicenseKey.trim().split('.');
             if (parts.length === 2) {
               const oldMachineId = parts[0];
-              // 3. Validate the old key with ITS OWN embedded machineId
               if (localValidateLicenseKey(oldLicenseKey, oldMachineId)) {
-                // 4. Migration is needed! Adopt the old key and old machineId as the source of truth.
                 isActivatedResult = true;
                 finalConfig.licenseKey = oldLicenseKey;
                 finalConfig.machineId = oldMachineId;
-                currentMachineId = oldMachineId; // Update the current machineId for this session
+                currentMachineId = oldMachineId;
                 
-                // Save the migrated config and clean up
                 await ipcRenderer.invoke('save-app-config', { licenseKey: oldLicenseKey, machineId: oldMachineId });
                 localStorage.removeItem('licenseKey'); 
               }
@@ -487,7 +534,6 @@ const App: React.FC = () => {
         setMachineId(currentMachineId);
         setIsActivated(isActivatedResult);
   
-        // --- API Keys Loading Logic (uses the final, potentially migrated, machineId) ---
         const decryptLocal = (ciphertext: string, mid: string) => {
           if (!mid || !ciphertext) return '';
           try {
@@ -562,7 +608,7 @@ const App: React.FC = () => {
         }).filter(job => job.id && String(job.id).trim());
     };
 
-    // Effect for one-time IPC listener setup
+    // Effect for IPC listener setup
     useEffect(() => {
       if (!ipcRenderer) return;
   
@@ -578,17 +624,31 @@ const App: React.FC = () => {
       const handleCombineAllProgress = (_event: any, { message }: { message: string }) => {
           setFeedback({ type: 'info', message });
       };
+
+      const handleShowAlertModal = (_event: any, data: { title: string, message: string, type: 'completion' | 'update', onConfirm?: () => void }) => {
+        // If type is update, we bind the confirm to restart logic (sent back to main)
+        if (data.type === 'update') {
+            setAlertModal({
+                ...data,
+                onConfirm: () => ipcRenderer.send('restart_app')
+            });
+        } else {
+            setAlertModal(data);
+        }
+      };
   
       ipcRenderer.on('file-content-updated', handleFileUpdate);
       ipcRenderer.on('combine-all-progress', handleCombineAllProgress);
+      ipcRenderer.on('show-alert-modal', handleShowAlertModal);
   
       return () => {
           ipcRenderer.removeListener('file-content-updated', handleFileUpdate);
           ipcRenderer.removeListener('combine-all-progress', handleCombineAllProgress);
+          ipcRenderer.removeListener('show-alert-modal', handleShowAlertModal);
       };
     }, []);
 
-    // Effect for managing file watchers based on trackedFiles state
+    // Effect for managing file watchers
     useEffect(() => {
       if (!ipcRenderer) return;
   
@@ -618,7 +678,6 @@ const App: React.FC = () => {
   };
   
   useEffect(() => {
-    // Reset combined video path when switching files
     setLastCombinedVideoPath(null);
 
     const currentFile = trackedFiles.length > 0 ? trackedFiles[activeTrackerFileIndex] : null;
@@ -627,7 +686,7 @@ const App: React.FC = () => {
         const discoveryKey = `${currentFile.path}-${currentFile.jobs.map(j => j.status).join(',')}`;
         
         if (hasIncompleteJobs && !fileDiscoveryRef.current.has(discoveryKey)) {
-            const filePath = currentFile.path; // Capture path for robust update
+            const filePath = currentFile.path;
             
             ipcRenderer.invoke('find-videos-for-jobs', { jobs: currentFile.jobs, excelFilePath: filePath })
                 .then((result: { success: boolean; jobs: VideoJob[]; error?: string; }) => {
@@ -645,8 +704,8 @@ const App: React.FC = () => {
   }, [trackedFiles, activeTrackerFileIndex]);
 
   useEffect(() => {
-    if (activeTab === 'tracker' && ipcRenderer) {
-      setFfmpegFound(null); // Checking state
+    if (activeTab === 'tracker' && isElectron && ipcRenderer) {
+      setFfmpegFound(null);
       ipcRenderer.invoke('check-ffmpeg').then((result: { found: boolean }) => {
         setFfmpegFound(result.found);
       });
@@ -1022,7 +1081,6 @@ const App: React.FC = () => {
     }
 
     try {
-      // The main process will now ask for the directory
       const result = await ipcRenderer.invoke('execute-ffmpeg-combine-all', filesToProcess);
 
       if (result.canceled) {
@@ -1138,7 +1196,6 @@ const App: React.FC = () => {
 
     if (result.success) {
         setFeedback({ type: 'success', message: `Đã xóa trạng thái cho job ${jobId}. Video sẽ được tạo lại. Fact: Rồi nó sẽ lỗi tiếp thôi` });
-        // The file watcher will automatically pick up the change and update the UI.
     } else {
         setFeedback({ type: 'error', message: `Lỗi khi tạo lại video: ${result.error}` });
     }
@@ -1156,7 +1213,6 @@ const App: React.FC = () => {
 
     if (result.success) {
         setFeedback({ type: 'success', message: `Đã xóa trạng thái các video đang xử lý. Chúng sẽ được tạo lại. Fact: Kiểu gì cũng có video lỗi` });
-        // The file watcher will automatically pick up the change and update the UI.
     } else {
         setFeedback({ type: 'error', message: `Lỗi khi tạo lại video: ${result.error}` });
     }
@@ -1211,7 +1267,7 @@ const App: React.FC = () => {
       const updatedPresets = [...presets, newPreset];
       setPresets(updatedPresets);
       setNewPresetName('');
-      if (ipcRenderer) {
+      if (isElectron && ipcRenderer) {
           ipcRenderer.invoke('save-app-config', { presets: updatedPresets });
       }
       setFeedback({ type: 'success', message: 'Đã lưu cài đặt!' });
@@ -1224,6 +1280,7 @@ const App: React.FC = () => {
       const presetToLoad = presets.find(p => p.id === presetId);
       if (presetToLoad) {
           setFormData(prev => ({ ...prev, ...presetToLoad.settings }));
+          // Instant feedback instead of waiting for a button click
           setFeedback({ type: 'info', message: `Đã tải cài đặt "${presetToLoad.name}".` });
       }
   };
@@ -1234,7 +1291,7 @@ const App: React.FC = () => {
       const updatedPresets = presets.filter(p => p.id !== selectedPresetId);
       setPresets(updatedPresets);
       setSelectedPresetId('');
-      if (ipcRenderer) {
+      if (isElectron && ipcRenderer) {
           ipcRenderer.invoke('save-app-config', { presets: updatedPresets });
       }
       if (presetToDelete) {
@@ -1375,7 +1432,7 @@ const App: React.FC = () => {
                                 onChange={e => handlePresetSelect(e.target.value)}
                                 className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-2 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition"
                             >
-                                <option value="">Chọn để tải cài đặt...</option>
+                                <option value="">Chọn để tải & áp dụng ngay...</option>
                                 {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                             </select>
                             <button onClick={handleDeletePreset} disabled={!selectedPresetId} className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition disabled:opacity-50"><TrashIcon className="w-5 h-5"/></button>
@@ -1757,6 +1814,17 @@ const App: React.FC = () => {
         <div className="absolute bottom-2 right-4 text-xs text-indigo-300/50 font-mono z-50">
           v{appVersion}
         </div>
+      )}
+      
+      {/* Global Alert Modal */}
+      {alertModal && (
+        <AlertModal 
+          title={alertModal.title} 
+          message={alertModal.message} 
+          type={alertModal.type} 
+          onClose={() => setAlertModal(null)}
+          onConfirm={alertModal.onConfirm}
+        />
       )}
     </div>
   );

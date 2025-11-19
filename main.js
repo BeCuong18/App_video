@@ -148,6 +148,14 @@ function createWindow() {
     icon: path.join(__dirname, 'assets/icon.png')
   });
   mainWindow.loadFile(path.join(__dirname, 'dist', 'index.html'));
+
+  autoUpdater.on('update-downloaded', () => {
+      mainWindow.webContents.send('show-alert-modal', {
+          title: 'Có bản cập nhật mới!',
+          message: 'Bản cập nhật mới đã được tải về. Vui lòng khởi động lại ứng dụng để áp dụng các thay đổi.',
+          type: 'update'
+      });
+  });
 }
 
 app.whenReady().then(() => {
@@ -239,6 +247,21 @@ ipcMain.handle('open-file-dialog', async () => {
         return { success: false, error: error.message };
     }
 });
+
+ipcMain.on('restart_app', () => {
+    autoUpdater.quitAndInstall();
+});
+
+function areAllTrackedFilesComplete() {
+   if (jobStateTimestamps.size === 0) return false;
+   for (const [path, jobs] of jobStateTimestamps) {
+       for (const [jobId, state] of jobs) {
+           if (state.status !== 'Completed') return false;
+       }
+   }
+   return true;
+}
+
 ipcMain.on('start-watching-file', (event, filePath) => {
     if (fileWatchers.has(filePath)) return;
     try {
@@ -256,18 +279,14 @@ ipcMain.on('start-watching-file', (event, filePath) => {
             try {
                 const content = fs.readFileSync(filePath);
                 const newJobs = parseExcelData(content);
+                
+                // Update internal map
                 const oldJobMap = jobStateTimestamps.get(filePath) || new Map();
-                const wasPreviouslyIncomplete = newJobs.length === 0 || Array.from(oldJobMap.values()).some(j => j.status !== 'Completed');
-                const allNewJobsAreComplete = newJobs.length > 0 && newJobs.every(j => j.status === 'Completed');
-
-                if (allNewJobsAreComplete && wasPreviouslyIncomplete && Notification.isSupported()) {
-                    new Notification({
-                        title: 'Dự án Hoàn Thành!',
-                        body: `Tất cả video cho file "${path.basename(filePath)}" đã được tạo xong.`,
-                        icon: path.join(__dirname, 'assets/icon.png')
-                    }).show();
-                }
                 const newJobMap = new Map();
+                let fileJustCompleted = false;
+                const newJobsAllCompleted = newJobs.every(j => j.status === 'Completed');
+                const oldJobsNotCompleted = Array.from(oldJobMap.values()).some(j => j.status !== 'Completed');
+
                 newJobs.forEach(newJob => {
                     const oldState = oldJobMap.get(newJob.id);
                     if (oldState && oldState.status === newJob.status) {
@@ -277,7 +296,33 @@ ipcMain.on('start-watching-file', (event, filePath) => {
                     }
                 });
                 jobStateTimestamps.set(filePath, newJobMap);
+                
+                // Send content update to UI
                 event.sender.send('file-content-updated', { path: filePath, content });
+
+                // Check for Global Completion (All files in watcher)
+                if (areAllTrackedFilesComplete()) {
+                    // We check if this current update was the "tipping point"
+                    // To avoid spamming the modal, we only send if the *current file* just transitioned to complete
+                    // and that made *everything* complete.
+                    if (newJobsAllCompleted && oldJobsNotCompleted) {
+                        event.sender.send('show-alert-modal', {
+                            title: 'Dự án Hoàn Thành Xuất Sắc!',
+                            message: 'Tuyệt vời! Tất cả các file bạn đang theo dõi đều đã hoàn thành 100%.',
+                            type: 'completion'
+                        });
+                        
+                        // Also trigger desktop notification
+                        if (Notification.isSupported()) {
+                            new Notification({
+                                title: 'Tất Cả Đã Xong!',
+                                body: 'Mọi video trong danh sách theo dõi đã hoàn tất.',
+                                icon: path.join(__dirname, 'assets/icon.png')
+                            }).show();
+                        }
+                    }
+                }
+
             } catch (error) {
                 console.error(`Error processing file change for ${filePath}:`, error);
             }
