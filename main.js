@@ -193,13 +193,15 @@ app.whenReady().then(() => {
   autoUpdater.checkForUpdatesAndNotify();
 
   // --- Auto-retry stuck jobs interval ---
-  const THREE_MINUTES = 3 * 60 * 1000;
+  // CẤU HÌNH THỜI GIAN Ở ĐÂY (Đổi số 4 thành số phút bạn muốn)
+  const STUCK_JOB_TIMEOUT = 4 * 60 * 1000; // 4 minutes
+
   setInterval(() => {
     const now = Date.now();
     for (const [filePath, jobMap] of jobStateTimestamps.entries()) {
         const stuckJobIds = [];
         for (const [jobId, state] of jobMap.entries()) {
-            if ((state.status === 'Processing' || state.status === 'Generating') && (now - state.timestamp > THREE_MINUTES)) {
+            if ((state.status === 'Processing' || state.status === 'Generating') && (now - state.timestamp > STUCK_JOB_TIMEOUT)) {
                 stuckJobIds.push(jobId);
             }
         }
