@@ -1,4 +1,3 @@
-
 import React, {
   useState,
   useCallback,
@@ -723,6 +722,25 @@ const App: React.FC = () => {
         setFormData((prev) => ({ ...prev, [name]: parseInt(value, 10) }));
       } else if (name === 'temperature') {
         setFormData((prev) => ({ ...prev, [name]: parseFloat(value) }));
+      } else if (name === 'songMinutes') {
+        let val = parseInt(value);
+        if (isNaN(val) || val < 0) val = 0;
+        if (val > 5) val = 5;
+        
+        setFormData(prev => {
+            const newSeconds = (val === 5) ? '0' : prev.songSeconds;
+            return { ...prev, songMinutes: val.toString(), songSeconds: newSeconds };
+        });
+      } else if (name === 'songSeconds') {
+         let val = parseInt(value);
+         if (isNaN(val) || val < 0) val = 0;
+         if (val > 59) val = 59;
+         setFormData(prev => {
+             if (parseInt(prev.songMinutes) === 5) {
+                 val = 0;
+             }
+             return { ...prev, songSeconds: val.toString() };
+         });
       }
       else {
         setFormData((prev) => ({ ...prev, [name]: value }));
@@ -1553,7 +1571,7 @@ const App: React.FC = () => {
                     <div>
                       <label className="block text-sm font-medium text-indigo-100 mb-2">Thời lượng bài hát (Tối đa 5 phút)</label>
                       <div className="flex items-center space-x-2">
-                        <input type="number" id="songMinutes" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Phút" min="0" />
+                        <input type="number" id="songMinutes" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Phút" min="0" max="5" />
                         <span className="text-xl">:</span>
                         <input type="number" id="songSeconds" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Giây" min="0" max="59" />
                       </div>
