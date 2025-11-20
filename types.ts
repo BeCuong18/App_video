@@ -1,6 +1,4 @@
 
-
-
 export type MvGenre = 'narrative' | 'cinematic-short-film' | 'performance' | 'dance-choreography' | 'lyrical' | 'conceptual' | 'abstract-visualizer' | 'scenic' | 'animation' | 'one-take' | 'surreal' | 'sci-fi' | 'horror' | 'historical-period' | 'retro-futurism' | 'social-commentary' | 'documentary';
 export type VideoType = 'story' | 'live';
 export type ActiveTab = 'generator' | 'tracker';

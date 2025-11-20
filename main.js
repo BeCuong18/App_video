@@ -1,3 +1,4 @@
+
 // main.js
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Notification } = require('electron');
 const path = require('path');
@@ -193,8 +194,8 @@ app.whenReady().then(() => {
   autoUpdater.checkForUpdatesAndNotify();
 
   // --- Auto-retry stuck jobs interval ---
-  // CẤU HÌNH THỜI GIAN Ở ĐÂY (Đổi số 4 thành số phút bạn muốn)
-  const STUCK_JOB_TIMEOUT = 4 * 60 * 1000; // 4 minutes
+  // 4 MINUTES TIMEOUT
+  const STUCK_JOB_TIMEOUT = 4 * 60 * 1000; 
 
   setInterval(() => {
     const now = Date.now();
@@ -285,9 +286,10 @@ ipcMain.on('start-watching-file', (event, filePath) => {
                 // Update internal map
                 const oldJobMap = jobStateTimestamps.get(filePath) || new Map();
                 const newJobMap = new Map();
-                let fileJustCompleted = false;
+                
+                // Check status transition for notification logic
                 const newJobsAllCompleted = newJobs.every(j => j.status === 'Completed');
-                const oldJobsNotCompleted = Array.from(oldJobMap.values()).some(j => j.status !== 'Completed');
+                const oldJobsNotCompleted = Array.from(oldJobMap.values()).length > 0 && Array.from(oldJobMap.values()).some(j => j.status !== 'Completed');
 
                 newJobs.forEach(newJob => {
                     const oldState = oldJobMap.get(newJob.id);
@@ -302,26 +304,27 @@ ipcMain.on('start-watching-file', (event, filePath) => {
                 // Send content update to UI
                 event.sender.send('file-content-updated', { path: filePath, content });
 
-                // Check for Global Completion (All files in watcher)
+                // 1. Single File Completion Notification (System Notification)
+                if (newJobsAllCompleted && oldJobsNotCompleted) {
+                     if (Notification.isSupported()) {
+                        new Notification({
+                            title: 'File Hoàn Thành!',
+                            body: `File "${path.basename(filePath)}" đã hoàn tất xử lý video.`,
+                            silent: false,
+                            icon: path.join(__dirname, 'assets/icon.png')
+                        }).show();
+                    }
+                }
+
+                // 2. Global Completion Alert (Modal)
                 if (areAllTrackedFilesComplete()) {
-                    // We check if this current update was the "tipping point"
-                    // To avoid spamming the modal, we only send if the *current file* just transitioned to complete
-                    // and that made *everything* complete.
+                    // Only trigger modal if this specific file update was the "tipping point"
                     if (newJobsAllCompleted && oldJobsNotCompleted) {
                         event.sender.send('show-alert-modal', {
                             title: 'Dự án Hoàn Thành Xuất Sắc!',
                             message: 'Tuyệt vời! Tất cả các file bạn đang theo dõi đều đã hoàn thành 100%.',
                             type: 'completion'
                         });
-                        
-                        // Also trigger desktop notification
-                        if (Notification.isSupported()) {
-                            new Notification({
-                                title: 'Tất Cả Đã Xong!',
-                                body: 'Mọi video trong danh sách theo dõi đã hoàn tất.',
-                                icon: path.join(__dirname, 'assets/icon.png')
-                            }).show();
-                        }
                     }
                 }
 

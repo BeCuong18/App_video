@@ -1,3 +1,4 @@
+
 import React, {
   useState,
   useCallback,
@@ -267,7 +268,7 @@ interface AlertModalProps {
 const AlertModal: React.FC<AlertModalProps> = ({ title, message, type, onClose, onConfirm }) => {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-gray-900 border-2 border-yellow-500 rounded-xl max-w-md w-full shadow-2xl transform scale-100 transition-all">
+      <div className="bg-gray-900 border-2 border-yellow-500 rounded-xl max-w-md w-full shadow-2xl transform scale-100 transition-all animate-bounce-small">
         <div className="p-6 text-center">
           <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 mb-4">
              {type === 'update' ? (
@@ -356,19 +357,20 @@ const App: React.FC = () => {
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
+  // Updated labels to be more descriptive and user-friendly
   const mvGenreOptions: { value: MvGenre, label: string }[] = [
-      { value: 'narrative', label: 'Kể chuyện (Có cốt truyện, diễn viên)' },
-      { value: 'cinematic-short-film', label: 'Phim ngắn điện ảnh (Cinematic)' },
-      { value: 'performance', label: 'Trình diễn (Ca sĩ hát/Nhóm nhạc)' },
+      { value: 'narrative', label: 'Kể chuyện (Có cốt truyện)' },
+      { value: 'cinematic-short-film', label: 'Phim ngắn điện ảnh' },
+      { value: 'performance', label: 'Trình diễn (Performance)' },
       { value: 'dance-choreography', label: 'Vũ đạo (Nhảy múa)' },
-      { value: 'lyrical', label: 'Minh hoạ lời bài hát (Lyrical)' },
-      { value: 'conceptual', label: 'Trừu tượng & Ẩn dụ (Conceptual)' },
+      { value: 'lyrical', label: 'Minh hoạ lời bài hát' },
+      { value: 'conceptual', label: 'Trừu tượng & Ẩn dụ' },
       { value: 'abstract-visualizer', label: 'Hiệu ứng thị giác (Visualizer)' },
-      { value: 'scenic', label: 'Phong cảnh & Kiến trúc (Không người)' },
+      { value: 'scenic', label: 'Phong cảnh & Kiến trúc' },
       { value: 'animation', label: 'Hoạt hình (2D/3D)' },
       { value: 'one-take', label: 'Quay một cú máy (One-shot)' },
-      { value: 'surreal', label: 'Siêu thực & Kỳ ảo (Surreal)' },
-      { value: 'sci-fi', label: 'Khoa học viễn tưởng (Sci-Fi)' },
+      { value: 'surreal', label: 'Siêu thực & Kỳ ảo' },
+      { value: 'sci-fi', label: 'Khoa học viễn tưởng' },
       { value: 'horror', label: 'Kinh dị & Rùng rợn' },
       { value: 'historical-period', label: 'Cổ trang & Lịch sử' },
       { value: 'retro-futurism', label: 'Tương lai hoài cổ (Retro)' },
@@ -379,18 +381,18 @@ const App: React.FC = () => {
   const filmingStyleOptions: { value: string, label: string }[] = [
       { value: 'auto', label: 'AI Tự động đề xuất (Khuyên dùng)' },
       { value: 'Vintage 35mm Film', label: 'Phim nhựa cổ điển (35mm)' },
-      { value: 'Sharp & Modern Digital', label: 'Kỹ thuật số sắc nét, hiện đại' },
+      { value: 'Sharp & Modern Digital', label: 'Kỹ thuật số sắc nét' },
       { value: 'Artistic Black & White', label: 'Đen trắng nghệ thuật' },
-      { value: 'Cinematic Neon Noir', label: 'Đêm Neon huyền ảo (Cyberpunk)' },
-      { value: 'Dark & Moody Low-Key', label: 'Ánh sáng tối, tâm trạng (Low-Key)' },
+      { value: 'Cinematic Neon Noir', label: 'Đêm Neon huyền ảo' },
+      { value: 'Dark & Moody Low-Key', label: 'Ánh sáng tối tâm trạng' },
       { value: 'Golden Hour Glow', label: 'Ánh sáng giờ vàng (Ấm áp)' },
       { value: 'Clean & Minimalist', label: 'Tối giản & Tinh tế' },
       { value: 'Surreal & Dreamlike', label: 'Mơ màng & Siêu thực' },
       { value: 'Epic Drone Cinematography', label: 'Quay Flycam hoành tráng' },
       { value: 'High-Speed Slow Motion', label: 'Quay siêu chậm (Slow Motion)' },
       { value: 'Macro & Extreme Close-up', label: 'Quay cận cảnh chi tiết' },
-      { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất (POV/Action)' },
-      { value: 'Found Footage / Handheld', label: 'Máy quay cầm tay (Rung lắc nhẹ)' },
+      { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất (POV)' },
+      { value: 'Found Footage / Handheld', label: 'Cầm tay (Rung lắc nhẹ)' },
       { value: 'Wes Anderson Style', label: 'Màu Pastel đối xứng (Wes Anderson)' },
       { value: '80s VHS Look', label: 'Băng từ thập niên 80 (VHS)' },
       { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình Ghibli (2D)' },
