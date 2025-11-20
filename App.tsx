@@ -768,6 +768,12 @@ const App: React.FC = () => {
       return;
     }
 
+    if (totalSeconds > 300) {
+      setFeedback({ type: 'error', message: 'Thời lượng video tối đa cho phép là 5 phút (300 giây). Vui lòng giảm thời lượng.' });
+      setIsLoading(false);
+      return;
+    }
+
     let sceneCount = Math.max(3, Math.round(totalSeconds / 8));
 
     const systemPrompt = videoType === 'story' ? storySystemPrompt : liveSystemPrompt;
@@ -1545,7 +1551,7 @@ const App: React.FC = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/10">
                     <div>
-                      <label className="block text-sm font-medium text-indigo-100 mb-2">Thời lượng bài hát (để tính số cảnh)</label>
+                      <label className="block text-sm font-medium text-indigo-100 mb-2">Thời lượng bài hát (Tối đa 5 phút)</label>
                       <div className="flex items-center space-x-2">
                         <input type="number" id="songMinutes" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Phút" min="0" />
                         <span className="text-xl">:</span>
