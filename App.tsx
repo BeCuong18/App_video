@@ -1382,12 +1382,12 @@ const App: React.FC = () => {
   };
 
   const renderResultCell = (job: VideoJob, fileIndex: number) => {
-    const containerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center text-center p-2";
+    const containerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center text-center p-2 mx-auto"; // Added mx-auto for centering
     switch(job.status) {
       case 'Completed':
         if (job.videoPath) {
           return (
-            <div className="w-40 h-24 bg-black rounded-md overflow-hidden relative group">
+            <div className="w-40 h-24 bg-black rounded-md overflow-hidden relative group mx-auto">
                 <video src={job.videoPath} className="w-full h-full object-cover" muted loop playsInline onMouseOver={e => e.currentTarget.play().catch(console.error)} onMouseOut={e => e.currentTarget.pause()}></video>
                 <button onClick={() => handlePlayVideo(job.videoPath)} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <PlayIcon className="w-8 h-8 text-white"/>
@@ -1398,7 +1398,7 @@ const App: React.FC = () => {
         return (
           <div className={`${containerClasses} flex-col text-indigo-200`}>
              <VideoIcon className="w-8 h-8 text-gray-400 mb-1" />
-             <p className="text-xs font-semibold mb-1">Không tìm thấy video Bấm tải lại video</p>
+             <p className="text-xs font-semibold mb-1">Không tìm thấy video</p>
              <button onClick={() => handleLinkVideo(job.id, fileIndex)} className="text-xs text-indigo-300 hover:underline">Link thủ công</button>
           </div>
         );
@@ -1837,29 +1837,39 @@ const App: React.FC = () => {
                                       <table className="w-full text-white job-table">
                                           <thead>
                                               <tr>
-                                                  <th>Job ID</th>
-                                                  <th>Trạng Thái</th>
-                                                  <th>Tên Video</th>
-                                                  <th>Kết Quả</th>
-                                                  <th>Thao tác</th>
+                                                  <th className="text-center">Job ID</th>
+                                                  <th className="text-center">Trạng Thái</th>
+                                                  <th className="text-center">Tên Video</th>
+                                                  <th className="text-center">Kết Quả</th>
+                                                  <th className="text-center">Thao tác</th>
                                               </tr>
                                           </thead>
                                           <tbody>
                                               {currentFile.jobs.map(job => (
-                                                  <tr key={job.id}>
-                                                      <td className="font-mono text-sm">{job.id}</td>
-                                                      <td><span className={getStatusBadge(job.status)}>{job.status}</span></td>
-                                                      <td className="font-mono text-sm">{job.videoName}</td>
-                                                      <td>{renderResultCell(job, activeTrackerFileIndex)}</td>
-                                                      <td className="flex gap-2">
-                                                        {job.videoPath && (
-                                                            <>
-                                                                <button onClick={() => handlePlayVideo(job.videoPath)} className="p-2 text-teal-400 hover:bg-white/10 rounded-md transition" title="Phát Video"><PlayIcon className="w-4 h-4"/></button>
-                                                                <button onClick={() => handleShowInFolder(job.videoPath)} className="p-2 text-indigo-400 hover:bg-white/10 rounded-md transition" title="Mở thư mục chứa video"><FolderIcon className="w-4 h-4"/></button>
-                                                                <button onClick={() => handleDeleteVideo(job.id, job.videoPath)} className="p-2 text-red-400 hover:bg-white/10 rounded-md transition" title="Xóa Video"><TrashIcon className="w-4 h-4"/></button>
-                                                            </>
-                                                        )}
-                                                        <button onClick={() => handleRetryJob(job.id)} className="p-2 text-yellow-400 hover:bg-white/10 rounded-md transition" title="Tạo lại video (Reset trạng thái)"><RetryIcon className="w-4 h-4"/></button>
+                                                  <tr key={job.id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
+                                                      <td className="font-mono text-sm align-middle text-center">{job.id}</td>
+                                                      <td className="align-middle text-center"><span className={getStatusBadge(job.status)}>{job.status}</span></td>
+                                                      <td className="font-mono text-sm align-middle text-center">{job.videoName}</td>
+                                                      <td className="align-middle flex justify-center py-2">{renderResultCell(job, activeTrackerFileIndex)}</td>
+                                                      <td className="align-middle">
+                                                        <div className="flex items-center justify-center gap-2 h-full">
+                                                            {job.videoPath && (
+                                                                <>
+                                                                    <button onClick={() => handlePlayVideo(job.videoPath)} className="group bg-teal-500/20 hover:bg-teal-500 border border-teal-500/30 text-teal-300 hover:text-white p-2.5 rounded-lg transition-all duration-200 shadow-lg hover:shadow-teal-500/50" title="Phát Video">
+                                                                        <PlayIcon className="w-5 h-5"/>
+                                                                    </button>
+                                                                    <button onClick={() => handleShowInFolder(job.videoPath)} className="group bg-indigo-500/20 hover:bg-indigo-500 border border-indigo-500/30 text-indigo-300 hover:text-white p-2.5 rounded-lg transition-all duration-200 shadow-lg hover:shadow-indigo-500/50" title="Mở thư mục chứa video">
+                                                                        <FolderIcon className="w-5 h-5"/>
+                                                                    </button>
+                                                                    <button onClick={() => handleDeleteVideo(job.id, job.videoPath)} className="group bg-red-500/20 hover:bg-red-500 border border-red-500/30 text-red-300 hover:text-white p-2.5 rounded-lg transition-all duration-200 shadow-lg hover:shadow-red-500/50" title="Xóa Video">
+                                                                        <TrashIcon className="w-5 h-5"/>
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                            <button onClick={() => handleRetryJob(job.id)} className="group bg-yellow-500/20 hover:bg-yellow-500 border border-yellow-500/30 text-yellow-300 hover:text-white p-2.5 rounded-lg transition-all duration-200 shadow-lg hover:shadow-yellow-500/50" title="Tạo lại video (Reset trạng thái)">
+                                                                <RetryIcon className="w-5 h-5"/>
+                                                            </button>
+                                                        </div>
                                                       </td>
                                                   </tr>
                                               ))}
