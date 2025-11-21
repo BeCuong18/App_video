@@ -723,8 +723,14 @@ const App: React.FC = () => {
       } else if (name === 'temperature') {
         setFormData((prev) => ({ ...prev, [name]: parseFloat(value) }));
       } else if (name === 'songMinutes') {
+         if (value === '') {
+             setFormData(prev => ({ ...prev, songMinutes: '' }));
+             return;
+        }
         let val = parseInt(value);
-        if (isNaN(val) || val < 0) val = 0;
+        if (isNaN(val)) val = 0;
+        if (val < 0) val = 0;
+        
         // Fix cứng: Không thể > 5 phút
         if (val > 5) val = 5;
         

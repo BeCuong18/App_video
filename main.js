@@ -20,7 +20,9 @@ let mainWindow;
 // --- Global Error Handler ---
 process.on('uncaughtException', (error) => {
     console.error('Uncaught Exception:', error);
-    dialog.showErrorBox('Lỗi Hệ Thống (Uncaught Exception)', error.stack || error.message);
+    if (mainWindow) {
+        dialog.showErrorBox('Lỗi Hệ Thống', error.stack || error.message);
+    }
 });
 
 // --- Helper functions ---
@@ -161,10 +163,14 @@ function createWindow() {
     icon: path.join(__dirname, 'assets/icon.png')
   });
   
-  // Load app
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  // FIX: Load correct path for index.html based on packaging state
+  const startUrl = app.isPackaged 
+    ? path.join(__dirname, 'dist', 'index.html') 
+    : path.join(__dirname, 'index.html');
+
+  mainWindow.loadFile(startUrl);
   
-  // Enable DevTools in production for debugging white screen issues if needed via shortcut
+  // Enable DevTools shortcut even in production for debugging if needed
   // mainWindow.webContents.openDevTools(); 
 
   autoUpdater.on('update-downloaded', () => {
@@ -189,7 +195,11 @@ app.whenReady().then(() => {
           label: 'Hướng dẫn sử dụng',
           click: () => {
             const guideWindow = new BrowserWindow({ width: 900, height: 700, title: 'Hướng dẫn sử dụng - Prompt Generator Pro', icon: path.join(__dirname, 'assets/icon.png') });
-            guideWindow.loadFile(path.join(__dirname, 'guide.html'));
+            // FIX: Load correct path for guide.html
+            const guideUrl = app.isPackaged
+                ? path.join(__dirname, 'dist', 'guide.html')
+                : path.join(__dirname, 'guide.html');
+            guideWindow.loadFile(guideUrl);
             guideWindow.setMenu(null);
           }
         },
@@ -208,7 +218,7 @@ app.whenReady().then(() => {
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
   createWindow();
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.checkForUpdatesAndNotify().catch(err => console.log('Updater error:', err));
 
   // --- Auto-retry stuck jobs interval ---
   const STUCK_JOB_TIMEOUT = 4 * 60 * 1000; // 4 minutes
@@ -476,11 +486,49 @@ ipcMain.handle('execute-ffmpeg-combine', async (event, { jobs, targetDuration, m
 });
 
 ipcMain.handle('execute-ffmpeg-combine-all', async (event, filesToProcess) => {
-    // Bulk combine not fully implemented in this snippet context but structure provided
-    // Simulating sequence processing
-    const results = { successes: [], failures: [] };
-    // ... implementation would iterate filesToProcess and reuse logic
-    return { canceled: false, successes: [], failures: [] };
+    const ffmpegPath = getFfmpegPath();
+    if (!fs.existsSync(ffmpegPath)) return { canceled: false, successes: [], failures: ["FFmpeg not found"] };
+
+    const win = BrowserWindow.getFocusedWindow();
+    const folderResult = await dialog.showOpenDialog(win, {
+        title: 'Chọn thư mục lưu các video đã ghép',
+        properties: ['openDirectory']
+    });
+
+    if (folderResult.canceled || folderResult.filePaths.length === 0) return { canceled: true, successes: [], failures: [] };
+    
+    const outputDir = folderResult.filePaths[0];
+    const successes = [];
+    const failures = [];
+
+    for (const file of filesToProcess) {
+        const safeName = file.name.replace('.xlsx', '');
+        const outputPath = path.join(outputDir, `Combined_${safeName}.mp4`);
+        const listPath = path.join(outputDir, `concat_list_${safeName}_${Date.now()}.txt`);
+
+        try {
+            const fileContent = file.jobs.map(j => `file '${j.videoPath.replace(/'/g, "'\\''")}'`).join('\n');
+            fs.writeFileSync(listPath, fileContent);
+
+            const args = ['-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', '-y', outputPath];
+            
+            await new Promise((resolve) => {
+                execFile(ffmpegPath, args, (error, stdout, stderr) => {
+                    try { fs.unlinkSync(listPath); } catch (e) {}
+                    if (error) {
+                        console.error(`Failed to combine ${file.name}:`, stderr);
+                        failures.push(file.name);
+                    } else {
+                        successes.push(file.name);
+                    }
+                    resolve();
+                });
+            });
+        } catch (err) {
+            failures.push(file.name);
+        }
+    }
+    return { canceled: false, successes, failures };
 });
 
 ipcMain.on('open-folder', (event, dirPath) => {
