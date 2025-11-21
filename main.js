@@ -371,8 +371,6 @@ ipcMain.on('stop-watching-file', (event, filePath) => {
 ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) => {
     try {
         const projectDir = path.dirname(excelFilePath);
-        // Typically users keep videos in a subfolder or the same folder
-        // We will scan recursively but limit depth to avoid performance issues
         const files = await findFilesRecursively(projectDir);
         
         // Filter for video files
@@ -385,8 +383,6 @@ ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) =>
             if (job.status !== 'Completed') return job;
 
             // Heuristic matching: Look for video file containing the job's videoName
-            // ToolFlows typically names files like: ProjectName_SceneNumber.mp4
-            // job.videoName usually follows this pattern
             if (job.videoName) {
                 const matchedFile = videoFiles.find(f => {
                     const fileName = path.basename(f, path.extname(f));
@@ -448,8 +444,6 @@ ipcMain.handle('execute-ffmpeg-combine', async (event, { jobs, targetDuration, m
         const args = ['-f', 'concat', '-safe', '0', '-i', listPath];
         
         if (mode === 'timed' && targetDuration) {
-             // Basic timed implementation: concat then trim
-             // For complex stretching, re-encoding is required which is slow and complex
              args.push('-t', String(targetDuration));
         }
 
@@ -530,8 +524,6 @@ ipcMain.handle('retry-job', async (event, { filePath, jobId }) => {
 });
 
 ipcMain.handle('retry-stuck-jobs', async (event, { filePath }) => {
-    // We need to find jobs that are Processing/Generating
-    // Since we don't have the jobs list here passed directly, we rely on client updating or we read file
     try {
         const buffer = fs.readFileSync(filePath);
         const jobs = parseExcelData(buffer);
