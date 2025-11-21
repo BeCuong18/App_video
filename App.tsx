@@ -725,20 +725,24 @@ const App: React.FC = () => {
       } else if (name === 'songMinutes') {
         let val = parseInt(value);
         if (isNaN(val) || val < 0) val = 0;
+        // Fix cứng: Không thể > 5 phút
         if (val > 5) val = 5;
         
         setFormData(prev => {
+            // Nếu chọn 5 phút, giây tự động về 0
             const newSeconds = (val === 5) ? '0' : prev.songSeconds;
             return { ...prev, songMinutes: val.toString(), songSeconds: newSeconds };
         });
       } else if (name === 'songSeconds') {
          let val = parseInt(value);
          if (isNaN(val) || val < 0) val = 0;
-         if (val > 59) val = 59;
+         
          setFormData(prev => {
-             if (parseInt(prev.songMinutes) === 5) {
-                 val = 0;
+             // Nếu phút đang là 5, giây bắt buộc phải là 0
+             if (parseInt(prev.songMinutes) >= 5) {
+                 return { ...prev, songSeconds: '0' }; 
              }
+             if (val > 59) val = 59;
              return { ...prev, songSeconds: val.toString() };
          });
       }

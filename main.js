@@ -1,4 +1,3 @@
-
 // main.js
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Notification } = require('electron');
 const path = require('path');
@@ -335,12 +334,13 @@ ipcMain.on('start-watching-file', (event, filePath) => {
 
                             event.sender.send('file-content-updated', { path: filePath, content: buffer });
 
-                            // FIX: Check if jobs list is NOT empty before declaring completion
+                            // FIXED LOGIC: Only notify if list is not empty AND all are completed.
                             if (newJobs.length > 0) {
-                                const pendingJobs = newJobs.filter(j => j.status === 'Pending' || j.status === 'Processing' || j.status === 'Generating');
-                                const completedJobs = newJobs.filter(j => j.status === 'Completed');
+                                // Check strict completion: Every single job must be 'Completed'
+                                // This prevents triggering if pending jobs drop to 0 because they became 'Processing'
+                                const allCompleted = newJobs.every(j => j.status === 'Completed');
 
-                                if (pendingJobs.length === 0 && completedJobs.length === newJobs.length) {
+                                if (allCompleted) {
                                     new Notification({
                                         title: 'Hoàn thành!',
                                         body: `File "${path.basename(filePath)}" đã hoàn thành 100%.`
