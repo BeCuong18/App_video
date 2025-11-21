@@ -397,18 +397,41 @@ ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) =>
             if (job.status !== 'Completed') return job;
 
             if (job.videoName) {
-                // Normalize job video name: remove leading/trailing spaces
                 const cleanJobVideoName = job.videoName.trim();
-                const escapedName = cleanJobVideoName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                let regex;
+
+                // IMPROVED MATCHING LOGIC FOR ZERO-PADDING
+                // Assume format like: ProjectName_1, ProjectName_10, Project_Name_1
+                // We want ProjectName_1 to match ProjectName_01, ProjectName_001
+                // But NOT ProjectName_10
                 
-                // STRICT MATCHING REGEX:
-                // 1. Starts with the video name (Case Insensitive)
-                // 2. Followed STRICTLY by a separator (_, ., -, space) OR End of String
-                // This prevents "Job_1" from matching "Job_10" (because '0' is not a separator)
-                // Example: 'Job_1' matches 'Job_1_final.mp4'
-                // Example: 'Job_1' matches 'Job_1.mp4'
-                // Example: 'Job_1' does NOT match 'Job_10.mp4'
-                const regex = new RegExp(`^${escapedName}(?:[_\\.\\-\\s]|$)`, 'i');
+                const lastUnderscoreIndex = cleanJobVideoName.lastIndexOf('_');
+                
+                if (lastUnderscoreIndex !== -1) {
+                    const prefix = cleanJobVideoName.substring(0, lastUnderscoreIndex);
+                    const suffixNumber = cleanJobVideoName.substring(lastUnderscoreIndex + 1);
+
+                    // Only apply special zero-padding logic if the suffix is purely numeric
+                    if (!isNaN(suffixNumber) && suffixNumber.length > 0) {
+                        const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                        
+                        // Regex Explanation:
+                        // ^${escapedPrefix}_   : Starts with "Prefix_"
+                        // 0*                   : Allows any number of leading zeros
+                        // ${suffixNumber}      : The exact number (e.g., "1")
+                        // (?:[_\.\-\s]|$)      : Followed by a separator or End of String. 
+                        //                        This prevents "1" from matching "10".
+                        regex = new RegExp(`^${escapedPrefix}_0*${suffixNumber}(?:[_\\.\\-\\s]|$)`, 'i');
+                    } else {
+                        // Fallback for non-numeric suffix
+                         const escapedName = cleanJobVideoName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                         regex = new RegExp(`^${escapedName}(?:[_\\.\\-\\s]|$)`, 'i');
+                    }
+                } else {
+                    // No underscore in name
+                    const escapedName = cleanJobVideoName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    regex = new RegExp(`^${escapedName}(?:[_\\.\\-\\s]|$)`, 'i');
+                }
 
                 const matchedFile = videoFiles.find(f => {
                     const fileName = path.basename(f, path.extname(f)); // Filename without extension
