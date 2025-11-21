@@ -960,7 +960,7 @@ const App: React.FC = () => {
     setFeedback(null);
   
     try {
-      const projectName = formData.projectName.trim() || 'MV';
+      const safeProjectName = (formData.projectName.trim() || 'MV').replace(/[^a-zA-Z0-9_]/g, '_');
       const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
       const fullFileName = `${safeFileName}.xlsx`;
   
@@ -969,7 +969,7 @@ const App: React.FC = () => {
           prompt: p.prompt_text,
           imagePath: '', imagePath2: '', imagePath3: '',
           status: 'Pending',
-          videoName: `${projectName}_${index + 1}`,
+          videoName: `${safeProjectName}_${index + 1}`,
           typeVideo: '',
       }));
   

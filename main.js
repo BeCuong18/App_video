@@ -216,7 +216,7 @@ app.whenReady().then(() => {
   autoUpdater.checkForUpdatesAndNotify().catch(err => console.log('Updater error:', err));
 
   // --- Auto-retry stuck jobs interval ---
-  // UPDATED: Increased to 5 minutes as requested by user
+  // UPDATED: Increased to 5 minutes as requested
   const STUCK_JOB_TIMEOUT = 5 * 60 * 1000; 
 
   setInterval(() => {
@@ -391,22 +391,26 @@ ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) =>
         const videoFiles = files.filter(f => videoExtensions.includes(path.extname(f).toLowerCase()));
         
         const updatedJobs = jobs.map(job => {
-            // If already has a valid video path, keep it
+            // If already has a valid video path, check if it still exists
             if (job.videoPath && fs.existsSync(job.videoPath)) return job;
             if (job.status !== 'Completed') return job;
 
             if (job.videoName) {
+                // Normalize job video name: remove leading/trailing spaces
+                const cleanJobVideoName = job.videoName.trim();
+                const escapedName = cleanJobVideoName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                
+                // STRICT MATCHING REGEX:
+                // 1. Starts with the video name (Case Insensitive)
+                // 2. Followed STRICTLY by a separator (_, ., -, space) OR End of String
+                // This prevents "Job_1" from matching "Job_10" (because '0' is not a separator)
+                // Example: 'Job_1' matches 'Job_1_final.mp4'
+                // Example: 'Job_1' matches 'Job_1.mp4'
+                // Example: 'Job_1' does NOT match 'Job_10.mp4'
+                const regex = new RegExp(`^${escapedName}(?:[_\\.\\-\\s]|$)`, 'i');
+
                 const matchedFile = videoFiles.find(f => {
-                    const fileName = path.basename(f, path.extname(f));
-                    
-                    // UPDATED: Strict matching to prevent '1' matching '10'
-                    // The regex ensures the matched name is followed by a non-digit char OR end of string.
-                    // Example: 'Job_1' matches 'Job_1.mp4' ($ matches)
-                    // Example: 'Job_1' matches 'Job_1_final.mp4' (_ matches \D)
-                    // Example: 'Job_1' does NOT match 'Job_10.mp4' (0 is digit)
-                    const escapedName = job.videoName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    const regex = new RegExp(`^${escapedName}(?:\\D|$)`);
-                    
+                    const fileName = path.basename(f, path.extname(f)); // Filename without extension
                     return regex.test(fileName);
                 });
                 
