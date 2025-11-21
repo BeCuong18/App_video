@@ -333,7 +333,6 @@ const App: React.FC = () => {
   
   const [isActivated, setIsActivated] = useState<boolean>(false);
   const [machineId, setMachineId] = useState<string>('');
-  const [appVersion, setAppVersion] = useState<string>('');
   const [configLoaded, setConfigLoaded] = useState<boolean>(false);
   
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
@@ -357,46 +356,46 @@ const App: React.FC = () => {
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
-  // Updated labels to be more descriptive and user-friendly (Vietnamese)
+  // Simplified and localized options
   const mvGenreOptions: { value: MvGenre, label: string }[] = [
-      { value: 'narrative', label: 'Kể chuyện (Story)' },
-      { value: 'cinematic-short-film', label: 'Phim điện ảnh ngắn' },
-      { value: 'performance', label: 'Trình diễn (Ca sĩ hát)' },
-      { value: 'dance-choreography', label: 'Vũ đạo / Nhảy' },
-      { value: 'lyrical', label: 'Video Lời bài hát (Lyric)' },
-      { value: 'conceptual', label: 'Trừu tượng / Nghệ thuật' },
-      { value: 'abstract-visualizer', label: 'Hiệu ứng thị giác (Visualizer)' },
-      { value: 'scenic', label: 'Phong cảnh & Chill (Không người)' },
+      { value: 'narrative', label: 'Kể chuyện / Phim ngắn' },
+      { value: 'cinematic-short-film', label: 'Điện ảnh (Cinematic)' },
+      { value: 'performance', label: 'Trình diễn / Biểu diễn' },
+      { value: 'dance-choreography', label: 'Nhảy / Vũ đạo' },
+      { value: 'lyrical', label: 'Video lời bài hát (Lyric)' },
+      { value: 'conceptual', label: 'Nghệ thuật / Trừu tượng' },
+      { value: 'abstract-visualizer', label: 'Hiệu ứng hình ảnh (Visualizer)' },
+      { value: 'scenic', label: 'Cảnh đẹp / Chill (Không người)' },
       { value: 'animation', label: 'Hoạt hình (2D/3D)' },
-      { value: 'one-take', label: 'Quay một cú máy (One-shot)' },
-      { value: 'surreal', label: 'Kỳ ảo / Mộng mơ' },
+      { value: 'one-take', label: 'Một cú máy (One-shot)' },
+      { value: 'surreal', label: 'Mộng mơ / Kỳ ảo' },
       { value: 'sci-fi', label: 'Khoa học viễn tưởng' },
       { value: 'horror', label: 'Kinh dị / Rùng rợn' },
       { value: 'historical-period', label: 'Cổ trang / Lịch sử' },
-      { value: 'retro-futurism', label: 'Tương lai hoài cổ (Retro)' },
-      { value: 'social-commentary', label: 'Phản ánh xã hội' },
-      { value: 'documentary', label: 'Tài liệu / Đời thực' },
+      { value: 'retro-futurism', label: 'Phong cách Retro / Cổ điển' },
+      { value: 'social-commentary', label: 'Phóng sự / Đời sống' },
+      { value: 'documentary', label: 'Tài liệu' },
   ];
 
   const filmingStyleOptions: { value: string, label: string }[] = [
-      { value: 'auto', label: 'AI Tự động chọn (Khuyên dùng)' },
-      { value: 'Vintage 35mm Film', label: 'Màu Film Cổ Điển' },
-      { value: 'Sharp & Modern Digital', label: 'Hiện đại & Sắc nét (4K)' },
-      { value: 'Artistic Black & White', label: 'Đen Trắng Nghệ Thuật' },
-      { value: 'Cinematic Neon Noir', label: 'Ánh sáng Neon (Cyberpunk)' },
-      { value: 'Dark & Moody Low-Key', label: 'Tông màu tối & Tâm trạng' },
-      { value: 'Golden Hour Glow', label: 'Nắng vàng ấm áp' },
-      { value: 'Clean & Minimalist', label: 'Tối giản & Sạch sẽ' },
-      { value: 'Surreal & Dreamlike', label: 'Mộng mơ & Ảo diệu' },
-      { value: 'Epic Drone Cinematography', label: 'Quay Flycam từ trên cao' },
+      { value: 'auto', label: 'AI tự chọn (Đẹp nhất)' },
+      { value: 'Vintage 35mm Film', label: 'Màu phim cũ (Vintage)' },
+      { value: 'Sharp & Modern Digital', label: 'Hiện đại & Sắc nét' },
+      { value: 'Artistic Black & White', label: 'Đen trắng nghệ thuật' },
+      { value: 'Cinematic Neon Noir', label: 'Neon (Cyberpunk)' },
+      { value: 'Dark & Moody Low-Key', label: 'Tông tối / Tâm trạng' },
+      { value: 'Golden Hour Glow', label: 'Nắng vàng (Golden Hour)' },
+      { value: 'Clean & Minimalist', label: 'Tối giản (Minimalist)' },
+      { value: 'Surreal & Dreamlike', label: 'Mộng mơ (Dreamy)' },
+      { value: 'Epic Drone Cinematography', label: 'Quay Flycam' },
       { value: 'High-Speed Slow Motion', label: 'Quay chậm (Slow Motion)' },
-      { value: 'Macro & Extreme Close-up', label: 'Quay cận cảnh chi tiết' },
+      { value: 'Macro & Extreme Close-up', label: 'Cận cảnh chi tiết' },
       { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất (POV)' },
-      { value: 'Found Footage / Handheld', label: 'Cầm tay rung nhẹ (Thực tế)' },
-      { value: 'Wes Anderson Style', label: 'Màu Pastel đối xứng' },
-      { value: '80s VHS Look', label: 'Băng từ ngày xưa (VHS)' },
-      { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình 2D (Ghibli)' },
-      { value: '3D Animation (Pixar Style)', label: 'Hoạt hình 3D (Pixar)' },
+      { value: 'Found Footage / Handheld', label: 'Cầm tay (Rung nhẹ)' },
+      { value: 'Wes Anderson Style', label: 'Màu Pastel / Đối xứng' },
+      { value: '80s VHS Look', label: 'Băng từ (VHS)' },
+      { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình Ghibli' },
+      { value: '3D Animation (Pixar Style)', label: 'Hoạt hình Pixar' },
   ];
   
   const countryOptions: { value: string, label: string }[] = [
@@ -493,8 +492,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (isElectron && ipcRenderer) {
-      ipcRenderer.invoke('get-app-version').then(setAppVersion);
-  
       ipcRenderer.invoke('get-app-config').then(async (config: AppConfig) => {
         let currentMachineId = config.machineId || '';
         let finalConfig = { ...config };
@@ -686,7 +683,6 @@ const App: React.FC = () => {
                         excelFilePath: file.path
                     });
                     if (result.success) {
-                         // Deep compare to prevent unnecessary re-renders
                          if (JSON.stringify(result.jobs) !== JSON.stringify(file.jobs)) {
                              hasChanges = true;
                              return { ...file, jobs: result.jobs };
