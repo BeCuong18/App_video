@@ -163,16 +163,12 @@ function createWindow() {
     icon: path.join(__dirname, 'assets/icon.png')
   });
   
-  // FIX: Load correct path for index.html based on packaging state
   const startUrl = app.isPackaged 
     ? path.join(__dirname, 'dist', 'index.html') 
     : path.join(__dirname, 'index.html');
 
   mainWindow.loadFile(startUrl);
   
-  // Enable DevTools shortcut even in production for debugging if needed
-  // mainWindow.webContents.openDevTools(); 
-
   autoUpdater.on('update-downloaded', () => {
       mainWindow.webContents.send('show-alert-modal', {
           title: 'Có bản cập nhật mới!',
@@ -195,7 +191,6 @@ app.whenReady().then(() => {
           label: 'Hướng dẫn sử dụng',
           click: () => {
             const guideWindow = new BrowserWindow({ width: 900, height: 700, title: 'Hướng dẫn sử dụng - Prompt Generator Pro', icon: path.join(__dirname, 'assets/icon.png') });
-            // FIX: Load correct path for guide.html
             const guideUrl = app.isPackaged
                 ? path.join(__dirname, 'dist', 'guide.html')
                 : path.join(__dirname, 'guide.html');
@@ -221,7 +216,8 @@ app.whenReady().then(() => {
   autoUpdater.checkForUpdatesAndNotify().catch(err => console.log('Updater error:', err));
 
   // --- Auto-retry stuck jobs interval ---
-  const STUCK_JOB_TIMEOUT = 4 * 60 * 1000; // 4 minutes
+  // UPDATED: Increased to 5 minutes as requested by user
+  const STUCK_JOB_TIMEOUT = 5 * 60 * 1000; 
 
   setInterval(() => {
     const now = Date.now();
@@ -399,11 +395,19 @@ ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) =>
             if (job.videoPath && fs.existsSync(job.videoPath)) return job;
             if (job.status !== 'Completed') return job;
 
-            // Heuristic matching: Look for video file containing the job's videoName
             if (job.videoName) {
                 const matchedFile = videoFiles.find(f => {
                     const fileName = path.basename(f, path.extname(f));
-                    return fileName.includes(job.videoName) || fileName === job.videoName;
+                    
+                    // UPDATED: Strict matching to prevent '1' matching '10'
+                    // The regex ensures the matched name is followed by a non-digit char OR end of string.
+                    // Example: 'Job_1' matches 'Job_1.mp4' ($ matches)
+                    // Example: 'Job_1' matches 'Job_1_final.mp4' (_ matches \D)
+                    // Example: 'Job_1' does NOT match 'Job_10.mp4' (0 is digit)
+                    const escapedName = job.videoName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regex = new RegExp(`^${escapedName}(?:\\D|$)`);
+                    
+                    return regex.test(fileName);
                 });
                 
                 if (matchedFile) {

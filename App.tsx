@@ -356,46 +356,46 @@ const App: React.FC = () => {
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
-  // Updated labels to be more descriptive and user-friendly
+  // Updated labels to be more descriptive and user-friendly (Vietnamese)
   const mvGenreOptions: { value: MvGenre, label: string }[] = [
-      { value: 'narrative', label: 'Kể chuyện (Có cốt truyện)' },
-      { value: 'cinematic-short-film', label: 'Phim ngắn điện ảnh' },
-      { value: 'performance', label: 'Trình diễn (Performance)' },
-      { value: 'dance-choreography', label: 'Vũ đạo (Nhảy múa)' },
-      { value: 'lyrical', label: 'Minh hoạ lời bài hát' },
-      { value: 'conceptual', label: 'Trừu tượng & Ẩn dụ' },
+      { value: 'narrative', label: 'Kể chuyện (Story)' },
+      { value: 'cinematic-short-film', label: 'Phim điện ảnh ngắn' },
+      { value: 'performance', label: 'Trình diễn (Ca sĩ hát)' },
+      { value: 'dance-choreography', label: 'Vũ đạo / Nhảy' },
+      { value: 'lyrical', label: 'Video Lời bài hát (Lyric)' },
+      { value: 'conceptual', label: 'Trừu tượng / Nghệ thuật' },
       { value: 'abstract-visualizer', label: 'Hiệu ứng thị giác (Visualizer)' },
-      { value: 'scenic', label: 'Phong cảnh & Kiến trúc' },
+      { value: 'scenic', label: 'Phong cảnh & Chill (Không người)' },
       { value: 'animation', label: 'Hoạt hình (2D/3D)' },
       { value: 'one-take', label: 'Quay một cú máy (One-shot)' },
-      { value: 'surreal', label: 'Siêu thực & Kỳ ảo' },
+      { value: 'surreal', label: 'Kỳ ảo / Mộng mơ' },
       { value: 'sci-fi', label: 'Khoa học viễn tưởng' },
-      { value: 'horror', label: 'Kinh dị & Rùng rợn' },
-      { value: 'historical-period', label: 'Cổ trang & Lịch sử' },
+      { value: 'horror', label: 'Kinh dị / Rùng rợn' },
+      { value: 'historical-period', label: 'Cổ trang / Lịch sử' },
       { value: 'retro-futurism', label: 'Tương lai hoài cổ (Retro)' },
-      { value: 'social-commentary', label: 'Phim tài liệu xã hội' },
-      { value: 'documentary', label: 'Phim tài liệu chân thực' },
+      { value: 'social-commentary', label: 'Phản ánh xã hội' },
+      { value: 'documentary', label: 'Tài liệu / Đời thực' },
   ];
 
   const filmingStyleOptions: { value: string, label: string }[] = [
-      { value: 'auto', label: 'AI Tự động đề xuất (Khuyên dùng)' },
-      { value: 'Vintage 35mm Film', label: 'Phim nhựa cổ điển (35mm)' },
-      { value: 'Sharp & Modern Digital', label: 'Kỹ thuật số sắc nét' },
-      { value: 'Artistic Black & White', label: 'Đen trắng nghệ thuật' },
-      { value: 'Cinematic Neon Noir', label: 'Đêm Neon huyền ảo' },
-      { value: 'Dark & Moody Low-Key', label: 'Ánh sáng tối tâm trạng' },
-      { value: 'Golden Hour Glow', label: 'Ánh sáng giờ vàng (Ấm áp)' },
-      { value: 'Clean & Minimalist', label: 'Tối giản & Tinh tế' },
-      { value: 'Surreal & Dreamlike', label: 'Mơ màng & Siêu thực' },
-      { value: 'Epic Drone Cinematography', label: 'Quay Flycam hoành tráng' },
-      { value: 'High-Speed Slow Motion', label: 'Quay siêu chậm (Slow Motion)' },
+      { value: 'auto', label: 'AI Tự động chọn (Khuyên dùng)' },
+      { value: 'Vintage 35mm Film', label: 'Màu Film Cổ Điển' },
+      { value: 'Sharp & Modern Digital', label: 'Hiện đại & Sắc nét (4K)' },
+      { value: 'Artistic Black & White', label: 'Đen Trắng Nghệ Thuật' },
+      { value: 'Cinematic Neon Noir', label: 'Ánh sáng Neon (Cyberpunk)' },
+      { value: 'Dark & Moody Low-Key', label: 'Tông màu tối & Tâm trạng' },
+      { value: 'Golden Hour Glow', label: 'Nắng vàng ấm áp' },
+      { value: 'Clean & Minimalist', label: 'Tối giản & Sạch sẽ' },
+      { value: 'Surreal & Dreamlike', label: 'Mộng mơ & Ảo diệu' },
+      { value: 'Epic Drone Cinematography', label: 'Quay Flycam từ trên cao' },
+      { value: 'High-Speed Slow Motion', label: 'Quay chậm (Slow Motion)' },
       { value: 'Macro & Extreme Close-up', label: 'Quay cận cảnh chi tiết' },
       { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất (POV)' },
-      { value: 'Found Footage / Handheld', label: 'Cầm tay (Rung lắc nhẹ)' },
-      { value: 'Wes Anderson Style', label: 'Màu Pastel đối xứng (Wes Anderson)' },
-      { value: '80s VHS Look', label: 'Băng từ thập niên 80 (VHS)' },
-      { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình Ghibli (2D)' },
-      { value: '3D Animation (Pixar Style)', label: 'Hoạt hình Pixar (3D)' },
+      { value: 'Found Footage / Handheld', label: 'Cầm tay rung nhẹ (Thực tế)' },
+      { value: 'Wes Anderson Style', label: 'Màu Pastel đối xứng' },
+      { value: '80s VHS Look', label: 'Băng từ ngày xưa (VHS)' },
+      { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình 2D (Ghibli)' },
+      { value: '3D Animation (Pixar Style)', label: 'Hoạt hình 3D (Pixar)' },
   ];
   
   const countryOptions: { value: string, label: string }[] = [
@@ -1816,20 +1816,17 @@ const App: React.FC = () => {
                                                   <tr key={job.id}>
                                                       <td className="font-mono text-sm">{job.id}</td>
                                                       <td><span className={getStatusBadge(job.status)}>{job.status}</span></td>
-                                                      <td className="font-medium">{job.videoName}</td>
+                                                      <td className="font-mono text-sm">{job.videoName}</td>
                                                       <td>{renderResultCell(job, activeTrackerFileIndex)}</td>
-                                                      <td>
-                                                        <div className="flex items-center gap-1.5">
-                                                            <button onClick={() => handleRetryJob(job.id)} title="Tạo lại video (Xóa Status)" className="p-2 rounded-full bg-yellow-500/20 hover:bg-yellow-500/40 transition">
-                                                                <RetryIcon className="w-4 h-4 text-yellow-300"/>
-                                                            </button>
-                                                            <button onClick={() => handleShowInFolder(job.videoPath)} title="Mở thư mục chứa video" disabled={!job.videoPath} className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                                                                <FolderIcon className="w-4 h-4 text-white" />
-                                                            </button>
-                                                            <button onClick={() => handleDeleteVideo(job.id, job.videoPath)} title="Xóa video" disabled={!job.videoPath} className="p-2 rounded-full bg-red-500/20 hover:bg-red-500/40 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                                                                <TrashIcon className="w-4 h-4 text-red-300" />
-                                                            </button>
-                                                        </div>
+                                                      <td className="flex gap-2">
+                                                        {job.videoPath && (
+                                                            <>
+                                                                <button onClick={() => handlePlayVideo(job.videoPath)} className="p-2 text-teal-400 hover:bg-white/10 rounded-md transition" title="Phát Video"><PlayIcon className="w-4 h-4"/></button>
+                                                                <button onClick={() => handleShowInFolder(job.videoPath)} className="p-2 text-indigo-400 hover:bg-white/10 rounded-md transition" title="Mở thư mục chứa video"><FolderIcon className="w-4 h-4"/></button>
+                                                                <button onClick={() => handleDeleteVideo(job.id, job.videoPath)} className="p-2 text-red-400 hover:bg-white/10 rounded-md transition" title="Xóa Video"><TrashIcon className="w-4 h-4"/></button>
+                                                            </>
+                                                        )}
+                                                        <button onClick={() => handleRetryJob(job.id)} className="p-2 text-yellow-400 hover:bg-white/10 rounded-md transition" title="Tạo lại video (Reset trạng thái)"><RetryIcon className="w-4 h-4"/></button>
                                                       </td>
                                                   </tr>
                                               ))}
@@ -1846,21 +1843,15 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
-      {appVersion && isActivated && (
-        <div className="absolute bottom-2 right-4 text-xs text-indigo-300/50 font-mono z-50">
-          v{appVersion}
-        </div>
-      )}
-      
-      {/* Global Alert Modal */}
+
       {alertModal && (
-        <AlertModal 
-          title={alertModal.title} 
-          message={alertModal.message} 
-          type={alertModal.type} 
-          onClose={() => setAlertModal(null)}
-          onConfirm={alertModal.onConfirm}
-        />
+         <AlertModal
+            title={alertModal.title}
+            message={alertModal.message}
+            type={alertModal.type}
+            onClose={() => setAlertModal(null)}
+            onConfirm={alertModal.onConfirm}
+         />
       )}
     </div>
   );
