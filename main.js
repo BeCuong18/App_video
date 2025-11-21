@@ -17,6 +17,12 @@ const userDataPath = app.getPath('userData');
 const configPath = path.join(userDataPath, 'app-config.json');
 let mainWindow;
 
+// --- Global Error Handler ---
+process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    dialog.showErrorBox('Lỗi Hệ Thống (Uncaught Exception)', error.stack || error.message);
+});
+
 // --- Helper functions ---
 function readConfig() {
   try {
@@ -157,6 +163,9 @@ function createWindow() {
   
   // Load app
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  
+  // Enable DevTools in production for debugging white screen issues if needed via shortcut
+  // mainWindow.webContents.openDevTools(); 
 
   autoUpdater.on('update-downloaded', () => {
       mainWindow.webContents.send('show-alert-modal', {
@@ -312,9 +321,9 @@ ipcMain.on('start-watching-file', (event, filePath) => {
         if (eventType === 'change') {
             if (debounceTimer) clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
-                try {
-                     // Wait a bit more to ensure file write is complete
-                     setTimeout(() => {
+                // Wait a bit more to ensure file write is complete by external process
+                setTimeout(() => {
+                    try {
                         if (fs.existsSync(filePath)) {
                             const buffer = fs.readFileSync(filePath);
                             const newJobs = parseExcelData(buffer);
@@ -334,10 +343,8 @@ ipcMain.on('start-watching-file', (event, filePath) => {
 
                             event.sender.send('file-content-updated', { path: filePath, content: buffer });
 
-                            // FIXED LOGIC: Only notify if list is not empty AND all are completed.
+                            // LOGIC: Only notify if list is not empty AND all are strictly 'Completed'
                             if (newJobs.length > 0) {
-                                // Check strict completion: Every single job must be 'Completed'
-                                // This prevents triggering if pending jobs drop to 0 because they became 'Processing'
                                 const allCompleted = newJobs.every(j => j.status === 'Completed');
 
                                 if (allCompleted) {
@@ -348,10 +355,10 @@ ipcMain.on('start-watching-file', (event, filePath) => {
                                 }
                             }
                         }
-                     }, 500);
-                } catch (err) {
-                    console.error(`Error reading watched file ${filePath}:`, err);
-                }
+                    } catch (err) {
+                        console.error(`Error reading watched file ${filePath}:`, err);
+                    }
+                }, 500);
             }, 100); 
         }
     });
