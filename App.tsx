@@ -1,3 +1,4 @@
+
 import React, {
   useState,
   useCallback,
@@ -670,6 +671,42 @@ const App: React.FC = () => {
       
       sessionStorage.setItem('watchedPaths', JSON.stringify(Array.from(watchedPaths)));
     }, [trackedFiles]);
+
+    // --- NEW: Auto-Reload Videos every 10s ---
+    useEffect(() => {
+        if (!ipcRenderer || activeTab !== 'tracker' || trackedFiles.length === 0) return;
+
+        const intervalId = setInterval(async () => {
+            let hasChanges = false;
+            const updatedFilesPromises = trackedFiles.map(async (file) => {
+                if (!file.path) return file;
+                try {
+                    const result = await ipcRenderer.invoke('find-videos-for-jobs', {
+                        jobs: file.jobs,
+                        excelFilePath: file.path
+                    });
+                    if (result.success) {
+                         // Deep compare to prevent unnecessary re-renders
+                         if (JSON.stringify(result.jobs) !== JSON.stringify(file.jobs)) {
+                             hasChanges = true;
+                             return { ...file, jobs: result.jobs };
+                         }
+                    }
+                    return file;
+                } catch (e) {
+                    return file;
+                }
+            });
+
+            const resolvedFiles = await Promise.all(updatedFilesPromises);
+
+            if (hasChanges) {
+                setTrackedFiles(resolvedFiles);
+            }
+        }, 10000); // 10 seconds
+
+        return () => clearInterval(intervalId);
+    }, [activeTab, trackedFiles]);
   
   const getFolderPath = (filePath: string | undefined): string => {
     if (!filePath) return '';
