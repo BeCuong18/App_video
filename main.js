@@ -53,14 +53,25 @@ function writeConfig(config) {
   }
 }
 
-async function findFilesRecursively(dir) {
-    if (!fs.existsSync(dir)) return [];
-    const dirents = await fs.promises.readdir(dir, { withFileTypes: true });
-    const files = await Promise.all(dirents.map((dirent) => {
-        const res = path.resolve(dir, dirent.name);
-        return dirent.isDirectory() ? findFilesRecursively(res) : res;
-    }));
-    return Array.prototype.concat(...files);
+// UPDATED: Helper to get files strictly from specific directories (Non-recursive)
+function getFilesFromDirectories(dirs) {
+    let files = [];
+    const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+    
+    dirs.forEach(dir => {
+        try {
+            if (fs.existsSync(dir)) {
+                const dirents = fs.readdirSync(dir, { withFileTypes: true });
+                const videoFiles = dirents
+                    .filter(dirent => dirent.isFile() && videoExtensions.includes(path.extname(dirent.name).toLowerCase()))
+                    .map(dirent => path.join(dir, dirent.name));
+                files = [...files, ...videoFiles];
+            }
+        } catch (e) {
+            console.error(`Error reading directory ${dir}:`, e);
+        }
+    });
+    return files;
 }
 
 const isPackaged = app.isPackaged;
@@ -217,7 +228,6 @@ app.whenReady().then(() => {
   autoUpdater.checkForUpdatesAndNotify().catch(err => console.log('Updater error:', err));
 
   // --- Auto-retry stuck jobs interval ---
-  // UPDATED: Increased to 5 minutes as requested
   const STUCK_JOB_TIMEOUT = 5 * 60 * 1000; 
 
   setInterval(() => {
@@ -384,64 +394,65 @@ ipcMain.on('stop-watching-file', (event, filePath) => {
 
 ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) => {
     try {
-        const projectDir = path.dirname(excelFilePath);
-        const files = await findFilesRecursively(projectDir);
+        // UPDATED LOGIC: Search only in Excel directory and Subdirectory with same name
+        const rootDir = path.dirname(excelFilePath);
+        const excelNameNoExt = path.basename(excelFilePath, '.xlsx');
+        const subDir = path.join(rootDir, excelNameNoExt);
         
-        // Filter for video files
-        const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
-        const videoFiles = files.filter(f => videoExtensions.includes(path.extname(f).toLowerCase()));
+        const targetDirs = [rootDir, subDir];
+        const videoFiles = getFilesFromDirectories(targetDirs);
         
         const updatedJobs = jobs.map(job => {
             // If already has a valid video path, check if it still exists
             if (job.videoPath && fs.existsSync(job.videoPath)) return job;
             if (job.status !== 'Completed') return job;
 
-            if (job.videoName) {
-                const cleanJobVideoName = job.videoName.trim();
-                let regex;
-
-                // IMPROVED MATCHING LOGIC FOR ZERO-PADDING
-                // Assume format like: ProjectName_1, ProjectName_10, Project_Name_1
-                // We want ProjectName_1 to match ProjectName_01, ProjectName_001
-                // But NOT ProjectName_10
+            const jobId = job.id; // Expected format "Job_1"
+            
+            if (jobId) {
+                // STRICT MATCHING LOGIC
+                // Extract the number part of the ID (e.g., 1 from Job_1)
+                const idNumber = jobId.replace(/[^0-9]/g, '');
                 
-                const lastUnderscoreIndex = cleanJobVideoName.lastIndexOf('_');
-                
-                if (lastUnderscoreIndex !== -1) {
-                    const prefix = cleanJobVideoName.substring(0, lastUnderscoreIndex);
-                    const suffixNumber = cleanJobVideoName.substring(lastUnderscoreIndex + 1);
+                if (idNumber) {
+                   // Regex to find file containing "Job_" followed by the ID number
+                   // Rules:
+                   // 1. "Job_" literal
+                   // 2. "0*" allows for zero padding (Job_01 matches Job_1)
+                   // 3. idNumber is the specific ID
+                   // 4. (?:[^0-9]|$) ensures the character AFTER the ID is NOT a number.
+                   //    This prevents Job_1 from matching Job_10.
+                   const regex = new RegExp(`Job_0*${idNumber}(?:[^0-9]|$)`, 'i');
+                   
+                   const matchedFile = videoFiles.find(f => {
+                        const fileName = path.basename(f);
+                        return regex.test(fileName);
+                   });
 
-                    // Only apply special zero-padding logic if the suffix is purely numeric
-                    if (!isNaN(suffixNumber) && suffixNumber.length > 0) {
-                        const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        
-                        // Regex Explanation:
-                        // ^${escapedPrefix}_   : Starts with "Prefix_"
-                        // 0*                   : Allows any number of leading zeros
-                        // ${suffixNumber}      : The exact number (e.g., "1")
-                        // (?:[_\.\-\s]|$)      : Followed by a separator or End of String. 
-                        //                        This prevents "1" from matching "10".
-                        regex = new RegExp(`^${escapedPrefix}_0*${suffixNumber}(?:[_\\.\\-\\s]|$)`, 'i');
-                    } else {
-                        // Fallback for non-numeric suffix
-                         const escapedName = cleanJobVideoName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                         regex = new RegExp(`^${escapedName}(?:[_\\.\\-\\s]|$)`, 'i');
-                    }
-                } else {
-                    // No underscore in name
-                    const escapedName = cleanJobVideoName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    regex = new RegExp(`^${escapedName}(?:[_\\.\\-\\s]|$)`, 'i');
-                }
-
-                const matchedFile = videoFiles.find(f => {
-                    const fileName = path.basename(f, path.extname(f)); // Filename without extension
-                    return regex.test(fileName);
-                });
-                
-                if (matchedFile) {
-                    return { ...job, videoPath: matchedFile };
+                   if (matchedFile) {
+                        return { ...job, videoPath: matchedFile };
+                   }
                 }
             }
+            
+            // Fallback: Try matching by videoName if Job ID match fails (keeping strict boundary)
+            if (job.videoName) {
+                 const cleanName = job.videoName.trim();
+                 // Escape regex characters in name
+                 const escapedName = cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                 // Look for exact name match followed by boundary
+                 const nameRegex = new RegExp(`${escapedName}(?:[^0-9]|$)`, 'i');
+                 
+                 const matchedFileByName = videoFiles.find(f => {
+                     const fileName = path.basename(f, path.extname(f));
+                     return nameRegex.test(fileName);
+                 });
+                 
+                 if (matchedFileByName) {
+                     return { ...job, videoPath: matchedFileByName };
+                 }
+            }
+
             return job;
         });
         
