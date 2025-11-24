@@ -16,6 +16,7 @@ const fileWatchers = new Map();
 const jobStateTimestamps = new Map(); // Map<filePath, Map<jobId, { status, timestamp }>>
 const userDataPath = app.getPath('userData');
 const configPath = path.join(userDataPath, 'app-config.json');
+const statsPath = path.join(userDataPath, 'stats.json'); // Path for statistics file
 let mainWindow;
 
 // --- Global Error Handler ---
@@ -51,6 +52,45 @@ function writeConfig(config) {
   } catch (error) {
     console.error('Error writing config file:', error);
   }
+}
+
+// --- Stats Helpers ---
+function readStats() {
+    try {
+        if (fs.existsSync(statsPath)) {
+            return JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
+        }
+    } catch (e) {
+        console.error("Error reading stats:", e);
+    }
+    return { history: {} }; // Structure: { history: { "YYYY-MM-DD": { count: 0, files: ["path1", ...] } } }
+}
+
+function writeStats(stats) {
+    try {
+        fs.writeFileSync(statsPath, JSON.stringify(stats, null, 2));
+    } catch (e) {
+        console.error("Error writing stats:", e);
+    }
+}
+
+function saveVideoStats(videoPath) {
+    if (!videoPath) return;
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const stats = readStats();
+
+    if (!stats.history) stats.history = {};
+    if (!stats.history[today]) {
+        stats.history[today] = { count: 0, files: [] };
+    }
+
+    // Check if file already counted for today to prevent double counting
+    // We use the full path as a unique identifier
+    if (!stats.history[today].files.includes(videoPath)) {
+        stats.history[today].files.push(videoPath);
+        stats.history[today].count += 1;
+        writeStats(stats);
+    }
 }
 
 // UPDATED: Helper to get files strictly from specific directories (Non-recursive)
@@ -277,6 +317,25 @@ ipcMain.handle('save-app-config', async (event, configToSave) => {
     }
 });
 
+// New IPC to get stats
+ipcMain.handle('get-stats', async () => {
+    const stats = readStats();
+    const config = readConfig();
+    
+    const historyArray = Object.entries(stats.history || {}).map(([date, data]) => ({
+        date,
+        count: data.count
+    })).sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort newest first
+
+    const total = historyArray.reduce((sum, item) => sum + item.count, 0);
+
+    return {
+        machineId: config.machineId || 'Unknown',
+        history: historyArray,
+        total
+    };
+});
+
 ipcMain.handle('save-file-dialog', async (event, { defaultPath, fileContent }) => {
     const win = BrowserWindow.getFocusedWindow();
     if (!win) return { success: false, error: 'No active window' };
@@ -411,17 +470,9 @@ ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) =>
             
             if (jobId) {
                 // STRICT MATCHING LOGIC
-                // Extract the number part of the ID (e.g., 1 from Job_1)
                 const idNumber = jobId.replace(/[^0-9]/g, '');
                 
                 if (idNumber) {
-                   // Regex to find file containing "Job_" followed by the ID number
-                   // Rules:
-                   // 1. "Job_" literal
-                   // 2. "0*" allows for zero padding (Job_01 matches Job_1)
-                   // 3. idNumber is the specific ID
-                   // 4. (?:[^0-9]|$) ensures the character AFTER the ID is NOT a number.
-                   //    This prevents Job_1 from matching Job_10.
                    const regex = new RegExp(`Job_0*${idNumber}(?:[^0-9]|$)`, 'i');
                    
                    const matchedFile = videoFiles.find(f => {
@@ -430,6 +481,8 @@ ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) =>
                    });
 
                    if (matchedFile) {
+                        // *** STATS LOGIC: Save stats when video found ***
+                        saveVideoStats(matchedFile); 
                         return { ...job, videoPath: matchedFile };
                    }
                 }
@@ -438,9 +491,7 @@ ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) =>
             // Fallback: Try matching by videoName if Job ID match fails (keeping strict boundary)
             if (job.videoName) {
                  const cleanName = job.videoName.trim();
-                 // Escape regex characters in name
                  const escapedName = cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                 // Look for exact name match followed by boundary
                  const nameRegex = new RegExp(`${escapedName}(?:[^0-9]|$)`, 'i');
                  
                  const matchedFileByName = videoFiles.find(f => {
@@ -449,6 +500,8 @@ ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) =>
                  });
                  
                  if (matchedFileByName) {
+                     // *** STATS LOGIC: Save stats when video found ***
+                     saveVideoStats(matchedFileByName);
                      return { ...job, videoPath: matchedFileByName };
                  }
             }

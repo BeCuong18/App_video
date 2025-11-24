@@ -9,10 +9,10 @@ import React, {
 import { GoogleGenAI, Type } from '@google/genai';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre, AppConfig, Preset } from './types';
+import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre, AppConfig, Preset, StatsData } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon, RetryIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon, RetryIcon, ChartIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 // Safely get ipcRenderer only if in Electron
@@ -256,6 +256,98 @@ const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onKeySelec
     );
 };
 
+// --- Stats Modal Component ---
+interface StatsModalProps {
+    onClose: () => void;
+}
+
+const StatsModal: React.FC<StatsModalProps> = ({ onClose }) => {
+    const [stats, setStats] = useState<StatsData | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (ipcRenderer) {
+            ipcRenderer.invoke('get-stats').then((data: StatsData) => {
+                setStats(data);
+                setLoading(false);
+            }).catch((err: any) => {
+                console.error("Failed to load stats", err);
+                setLoading(false);
+            });
+        } else {
+            setLoading(false);
+        }
+    }, []);
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="glass-card border border-white/20 rounded-xl max-w-2xl w-full shadow-2xl max-h-[80vh] overflow-hidden flex flex-col">
+                <div className="p-6 border-b border-white/10 flex justify-between items-center">
+                    <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <ChartIcon className="w-6 h-6 text-indigo-400" />
+                        Thống kê Sản Xuất
+                    </h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">&times;</button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto flex-1">
+                    {loading ? (
+                        <div className="flex justify-center py-10"><LoaderIcon /></div>
+                    ) : !stats ? (
+                        <p className="text-center text-gray-400">Không có dữ liệu thống kê.</p>
+                    ) : (
+                        <div>
+                            <div className="grid grid-cols-2 gap-4 mb-6">
+                                <div className="bg-white/5 p-4 rounded-lg text-center border border-white/10">
+                                    <p className="text-indigo-300 text-sm uppercase tracking-wider font-semibold">Tổng Video Hoàn Thành</p>
+                                    <p className="text-4xl font-bold text-white mt-1">{stats.total}</p>
+                                </div>
+                                <div className="bg-white/5 p-4 rounded-lg text-center border border-white/10">
+                                    <p className="text-indigo-300 text-sm uppercase tracking-wider font-semibold">Mã Máy</p>
+                                    <p className="text-sm font-mono text-gray-300 mt-2 bg-black/30 p-2 rounded break-all">{stats.machineId}</p>
+                                </div>
+                            </div>
+
+                            <h4 className="text-lg font-semibold text-white mb-3">Lịch sử theo ngày</h4>
+                            <div className="overflow-hidden rounded-lg border border-white/10">
+                                <table className="w-full text-left text-sm text-gray-300">
+                                    <thead className="bg-white/10 text-white uppercase font-semibold">
+                                        <tr>
+                                            <th className="px-6 py-3">Ngày</th>
+                                            <th className="px-6 py-3 text-right">Số lượng Video</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/10 bg-white/5">
+                                        {stats.history.length === 0 ? (
+                                            <tr><td colSpan={2} className="px-6 py-4 text-center">Chưa có dữ liệu</td></tr>
+                                        ) : (
+                                            stats.history.map((item) => (
+                                                <tr key={item.date} className="hover:bg-white/10 transition">
+                                                    <td className="px-6 py-4 font-medium text-white">{item.date}</td>
+                                                    <td className="px-6 py-4 text-right font-bold text-emerald-400">{item.count}</td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                </div>
+                
+                <div className="p-4 border-t border-white/10 text-right">
+                    <button 
+                        onClick={onClose}
+                        className="px-6 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition shadow-lg"
+                    >
+                        Đóng
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- Modal Alert Component ---
 interface AlertModalProps {
   title: string;
@@ -352,6 +444,7 @@ const App: React.FC = () => {
   const [selectedPresetId, setSelectedPresetId] = useState('');
 
   const [alertModal, setAlertModal] = useState<{title: string, message: string, type: 'completion' | 'update', onConfirm?: () => void} | null>(null);
+  const [showStats, setShowStats] = useState(false);
 
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
@@ -1464,15 +1557,23 @@ const App: React.FC = () => {
           <header className="text-center mb-6 relative">
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">🎬 Prompt Generator Pro</h1>
             <p className="text-lg text-indigo-200 mt-2">Biến ý tưởng thành kịch bản & theo dõi sản xuất video.</p>
-            {activeApiKey && (
-              <div className="absolute top-0 right-0">
-                  <div className="active-key-display">
-                      <KeyIcon className="w-4 h-4 text-emerald-400" />
-                      <span className="text-white font-semibold">{activeApiKey.name}</span>
-                      <button onClick={() => setIsManagingKeys(true)} className="ml-2 text-indigo-300 hover:text-white font-bold text-sm">(Thay đổi)</button>
-                  </div>
-              </div>
-            )}
+            <div className="absolute top-0 right-0 flex flex-col gap-2 items-end">
+                {activeApiKey && (
+                    <div className="active-key-display">
+                        <KeyIcon className="w-4 h-4 text-emerald-400" />
+                        <span className="text-white font-semibold">{activeApiKey.name}</span>
+                        <button onClick={() => setIsManagingKeys(true)} className="ml-2 text-indigo-300 hover:text-white font-bold text-sm">(Thay đổi)</button>
+                    </div>
+                )}
+                <button 
+                    onClick={() => setShowStats(true)} 
+                    className="active-key-display hover:bg-white/20 transition"
+                    title="Thống kê sản xuất"
+                >
+                    <ChartIcon className="w-4 h-4 text-indigo-300" />
+                    <span className="text-white font-semibold">Thống Kê</span>
+                </button>
+            </div>
           </header>
 
           <div className="flex space-x-2">
@@ -1886,6 +1987,10 @@ const App: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {showStats && (
+          <StatsModal onClose={() => setShowStats(false)} />
+      )}
 
       {alertModal && (
          <AlertModal

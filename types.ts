@@ -77,3 +77,14 @@ export interface AppConfig {
   activeApiKeyId?: string;
   presets?: Preset[];
 }
+
+export interface DailyStats {
+    date: string;
+    count: number;
+}
+
+export interface StatsData {
+    machineId: string;
+    history: DailyStats[];
+    total: number;
+}
