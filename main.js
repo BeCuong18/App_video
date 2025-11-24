@@ -27,6 +27,12 @@ process.on('uncaughtException', (error) => {
     }
 });
 
+// --- Admin Credentials ---
+const ADMIN_CREDENTIALS = {
+    username: 'bescuong',
+    password: '285792684'
+};
+
 // --- Helper functions ---
 function readConfig() {
   try {
@@ -314,6 +320,38 @@ ipcMain.handle('save-app-config', async (event, configToSave) => {
     } catch (error) {
         console.error('Error saving config:', error);
         return { success: false, error: error.message };
+    }
+});
+
+// Admin Handlers
+ipcMain.handle('verify-admin', async (event, { username, password }) => {
+    if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
+        return { success: true };
+    }
+    return { success: false, error: 'Tài khoản hoặc mật khẩu không chính xác' };
+});
+
+ipcMain.handle('delete-all-stats', async () => {
+    try {
+        const resetStats = { history: {} };
+        writeStats(resetStats);
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('delete-stat-date', async (event, date) => {
+    try {
+        const stats = readStats();
+        if (stats.history && stats.history[date]) {
+            delete stats.history[date];
+            writeStats(stats);
+            return { success: true };
+        }
+        return { success: false, error: 'Date not found' };
+    } catch (e) {
+        return { success: false, error: e.message };
     }
 });
 

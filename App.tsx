@@ -12,7 +12,7 @@ import CryptoJS from 'crypto-js';
 import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre, AppConfig, Preset, StatsData } from './types';
 import { storySystemPrompt, liveSystemPrompt } from './constants';
 import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon, RetryIcon, ChartIcon } from './components/Icons';
+import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon, RetryIcon, ChartIcon, ShieldIcon, LockIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 // Safely get ipcRenderer only if in Electron
@@ -259,13 +259,16 @@ const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onKeySelec
 // --- Stats Modal Component ---
 interface StatsModalProps {
     onClose: () => void;
+    isAdmin: boolean;
+    onDeleteHistory: (date: string) => void;
+    onDeleteAll: () => void;
 }
 
-const StatsModal: React.FC<StatsModalProps> = ({ onClose }) => {
+const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDeleteHistory, onDeleteAll }) => {
     const [stats, setStats] = useState<StatsData | null>(null);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
+    const loadStats = () => {
         if (ipcRenderer) {
             ipcRenderer.invoke('get-stats').then((data: StatsData) => {
                 setStats(data);
@@ -277,15 +280,29 @@ const StatsModal: React.FC<StatsModalProps> = ({ onClose }) => {
         } else {
             setLoading(false);
         }
+    };
+
+    useEffect(() => {
+        loadStats();
     }, []);
+
+    const handleDelete = async (date: string) => {
+        await onDeleteHistory(date);
+        loadStats(); // Reload after delete
+    };
+    
+    const handleDeleteAll = async () => {
+        await onDeleteAll();
+        loadStats();
+    };
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="glass-card border border-white/20 rounded-xl max-w-2xl w-full shadow-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className={`glass-card border ${isAdmin ? 'border-red-500/50' : 'border-white/20'} rounded-xl max-w-2xl w-full shadow-2xl max-h-[80vh] overflow-hidden flex flex-col`}>
                 <div className="p-6 border-b border-white/10 flex justify-between items-center">
                     <h3 className="text-2xl font-bold text-white flex items-center gap-2">
-                        <ChartIcon className="w-6 h-6 text-indigo-400" />
-                        Thống kê Sản Xuất
+                        {isAdmin ? <ShieldIcon className="w-6 h-6 text-red-500" /> : <ChartIcon className="w-6 h-6 text-indigo-400" />}
+                        {isAdmin ? 'Quản Trị Thống Kê (Admin)' : 'Thống kê Sản Xuất'}
                     </h3>
                     <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">&times;</button>
                 </div>
@@ -307,6 +324,21 @@ const StatsModal: React.FC<StatsModalProps> = ({ onClose }) => {
                                     <p className="text-sm font-mono text-gray-300 mt-2 bg-black/30 p-2 rounded break-all">{stats.machineId}</p>
                                 </div>
                             </div>
+                            
+                            {isAdmin && (
+                                <div className="mb-4 flex justify-end">
+                                    <button 
+                                        onClick={() => {
+                                            if(confirm("Bạn có chắc chắn muốn xóa TOÀN BỘ lịch sử thống kê? Hành động này không thể hoàn tác.")) {
+                                                handleDeleteAll();
+                                            }
+                                        }}
+                                        className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition text-sm flex items-center gap-2"
+                                    >
+                                        <TrashIcon className="w-4 h-4"/> Xóa Tất Cả Dữ Liệu
+                                    </button>
+                                </div>
+                            )}
 
                             <h4 className="text-lg font-semibold text-white mb-3">Lịch sử theo ngày</h4>
                             <div className="overflow-hidden rounded-lg border border-white/10">
@@ -315,16 +347,31 @@ const StatsModal: React.FC<StatsModalProps> = ({ onClose }) => {
                                         <tr>
                                             <th className="px-6 py-3">Ngày</th>
                                             <th className="px-6 py-3 text-right">Số lượng Video</th>
+                                            {isAdmin && <th className="px-6 py-3 text-center">Thao tác</th>}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/10 bg-white/5">
                                         {stats.history.length === 0 ? (
-                                            <tr><td colSpan={2} className="px-6 py-4 text-center">Chưa có dữ liệu</td></tr>
+                                            <tr><td colSpan={isAdmin ? 3 : 2} className="px-6 py-4 text-center">Chưa có dữ liệu</td></tr>
                                         ) : (
                                             stats.history.map((item) => (
                                                 <tr key={item.date} className="hover:bg-white/10 transition">
                                                     <td className="px-6 py-4 font-medium text-white">{item.date}</td>
                                                     <td className="px-6 py-4 text-right font-bold text-emerald-400">{item.count}</td>
+                                                    {isAdmin && (
+                                                        <td className="px-6 py-4 text-center">
+                                                            <button 
+                                                                onClick={() => {
+                                                                    if(confirm(`Xóa thống kê ngày ${item.date}?`)) {
+                                                                        handleDelete(item.date);
+                                                                    }
+                                                                }}
+                                                                className="text-red-400 hover:text-red-300 p-1"
+                                                            >
+                                                                <TrashIcon className="w-4 h-4"/>
+                                                            </button>
+                                                        </td>
+                                                    )}
                                                 </tr>
                                             ))
                                         )}
@@ -343,6 +390,96 @@ const StatsModal: React.FC<StatsModalProps> = ({ onClose }) => {
                         Đóng
                     </button>
                 </div>
+            </div>
+        </div>
+    );
+};
+
+// --- Admin Login Modal ---
+interface AdminLoginModalProps {
+    onClose: () => void;
+    onLoginSuccess: () => void;
+}
+
+const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onLoginSuccess }) => {
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleLogin = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+
+        if (ipcRenderer) {
+            const result = await ipcRenderer.invoke('verify-admin', { username, password });
+            if (result.success) {
+                onLoginSuccess();
+            } else {
+                setError(result.error || 'Đăng nhập thất bại');
+            }
+        } else {
+            // Dev mode bypass or mock
+            if (username === 'bescuong' && password === '285792684') {
+                onLoginSuccess();
+            } else {
+                 setError('Sai thông tin đăng nhập');
+            }
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+            <div className="glass-card border border-indigo-500/30 rounded-xl max-w-sm w-full shadow-2xl p-6">
+                <div className="text-center mb-6">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-indigo-900/50 mb-4">
+                        <LockIcon className="w-6 h-6 text-indigo-300" />
+                    </div>
+                    <h3 className="text-xl font-bold text-white">Đăng Nhập Quản Trị</h3>
+                </div>
+                
+                <form onSubmit={handleLogin} className="space-y-4">
+                    <div>
+                        <input
+                            type="text"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            placeholder="Tên đăng nhập"
+                            className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white focus:border-indigo-500 transition"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <input
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Mật khẩu"
+                            className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white focus:border-indigo-500 transition"
+                            required
+                        />
+                    </div>
+                    {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+                    
+                    <div className="flex gap-3 mt-6">
+                        <button 
+                            type="button" 
+                            onClick={onClose}
+                            className="flex-1 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-semibold transition"
+                        >
+                            Hủy
+                        </button>
+                        <button 
+                            type="submit"
+                            disabled={loading}
+                            className="flex-1 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition disabled:bg-gray-500"
+                        >
+                            {loading ? <LoaderIcon /> : 'Đăng nhập'}
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     );
@@ -444,7 +581,11 @@ const App: React.FC = () => {
   const [selectedPresetId, setSelectedPresetId] = useState('');
 
   const [alertModal, setAlertModal] = useState<{title: string, message: string, type: 'completion' | 'update', onConfirm?: () => void} | null>(null);
+  
+  // --- Admin & Stats State ---
   const [showStats, setShowStats] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
 
   const fileDiscoveryRef = useRef<Set<string>>(new Set());
   const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
@@ -1461,6 +1602,18 @@ const App: React.FC = () => {
       }
   };
 
+  // --- Admin Actions ---
+  const handleDeleteStatHistory = async (date: string) => {
+      if(ipcRenderer) {
+          await ipcRenderer.invoke('delete-stat-date', date);
+      }
+  };
+
+  const handleDeleteAllStats = async () => {
+      if(ipcRenderer) {
+          await ipcRenderer.invoke('delete-all-stats');
+      }
+  };
 
   const getStatusBadge = (status: JobStatus) => {
     const baseClasses = "status-badge";
@@ -1565,14 +1718,23 @@ const App: React.FC = () => {
                         <button onClick={() => setIsManagingKeys(true)} className="ml-2 text-indigo-300 hover:text-white font-bold text-sm">(Thay đổi)</button>
                     </div>
                 )}
-                <button 
-                    onClick={() => setShowStats(true)} 
-                    className="active-key-display hover:bg-white/20 transition"
-                    title="Thống kê sản xuất"
-                >
-                    <ChartIcon className="w-4 h-4 text-indigo-300" />
-                    <span className="text-white font-semibold">Thống Kê</span>
-                </button>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setShowStats(true)} 
+                        className="active-key-display hover:bg-white/20 transition"
+                        title="Thống kê sản xuất"
+                    >
+                        <ChartIcon className="w-4 h-4 text-indigo-300" />
+                        <span className="text-white font-semibold">Thống Kê</span>
+                    </button>
+                    <button
+                        onClick={() => setShowAdminLogin(true)}
+                        className="p-2 rounded-full bg-black/20 hover:bg-white/20 transition text-indigo-300 hover:text-white"
+                        title="Admin Access"
+                    >
+                        <ShieldIcon className="w-4 h-4" />
+                    </button>
+                </div>
             </div>
           </header>
 
@@ -1989,7 +2151,23 @@ const App: React.FC = () => {
       </div>
 
       {showStats && (
-          <StatsModal onClose={() => setShowStats(false)} />
+          <StatsModal 
+            onClose={() => { setShowStats(false); setIsAdminLoggedIn(false); }} 
+            isAdmin={isAdminLoggedIn} 
+            onDeleteAll={handleDeleteAllStats}
+            onDeleteHistory={handleDeleteStatHistory}
+          />
+      )}
+
+      {showAdminLogin && (
+          <AdminLoginModal 
+            onClose={() => setShowAdminLogin(false)}
+            onLoginSuccess={() => {
+                setShowAdminLogin(false);
+                setIsAdminLoggedIn(true);
+                setShowStats(true);
+            }}
+          />
       )}
 
       {alertModal && (
