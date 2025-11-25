@@ -73,7 +73,7 @@ function readStats() {
     } catch (e) {
         console.error("Error reading stats:", e);
     }
-    return { history: {} }; 
+    return { history: {}, promptCount: 0 }; 
 }
 
 function writeStats(stats) {
@@ -96,6 +96,16 @@ function incrementDailyStat() {
     stats.history[today].count += 1;
     writeStats(stats);
     return stats.history[today].count;
+}
+
+function incrementPromptCount() {
+    const stats = readStats();
+    if (typeof stats.promptCount !== 'number') {
+        stats.promptCount = 0;
+    }
+    stats.promptCount += 1;
+    writeStats(stats);
+    return stats.promptCount;
 }
 
 // Helper to get files strictly from specific directories (Non-recursive)
@@ -439,7 +449,7 @@ ipcMain.handle('verify-admin', async (event, { username, password }) => {
 
 ipcMain.handle('delete-all-stats', async () => {
     try {
-        const resetStats = { history: {} };
+        const resetStats = { history: {}, promptCount: 0 };
         writeStats(resetStats);
         return { success: true };
     } catch (e) {
@@ -461,6 +471,15 @@ ipcMain.handle('delete-stat-date', async (event, date) => {
     }
 });
 
+ipcMain.handle('increment-prompt-count', async () => {
+    try {
+        incrementPromptCount();
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
 ipcMain.handle('get-stats', async () => {
     const stats = readStats();
     const config = readConfig();
@@ -471,11 +490,17 @@ ipcMain.handle('get-stats', async () => {
     })).sort((a, b) => new Date(b.date) - new Date(a.date)); 
 
     const total = historyArray.reduce((sum, item) => sum + item.count, 0);
+    const promptCount = stats.promptCount || 0;
+    
+    // Credit calculation: 1 Video = 10 Credits
+    const totalCredits = total * 10;
 
     return {
         machineId: config.machineId || 'Unknown',
         history: historyArray,
-        total
+        total,
+        promptCount,
+        totalCredits
     };
 });
 

@@ -296,9 +296,11 @@ const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDeleteHisto
         loadStats();
     };
 
+    const maxCount = stats?.history.reduce((max, item) => Math.max(max, item.count), 0) || 1;
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className={`glass-card border ${isAdmin ? 'border-red-500/50' : 'border-white/20'} rounded-xl max-w-2xl w-full shadow-2xl max-h-[80vh] overflow-hidden flex flex-col`}>
+            <div className={`glass-card border ${isAdmin ? 'border-red-500/50' : 'border-white/20'} rounded-xl max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-hidden flex flex-col`}>
                 <div className="p-6 border-b border-white/10 flex justify-between items-center">
                     <h3 className="text-2xl font-bold text-white flex items-center gap-2">
                         {isAdmin ? <ShieldIcon className="w-6 h-6 text-red-500" /> : <ChartIcon className="w-6 h-6 text-indigo-400" />}
@@ -314,36 +316,62 @@ const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDeleteHisto
                         <p className="text-center text-gray-400">Không có dữ liệu thống kê.</p>
                     ) : (
                         <div>
-                            <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                                 <div className="bg-white/5 p-4 rounded-lg text-center border border-white/10">
-                                    <p className="text-indigo-300 text-sm uppercase tracking-wider font-semibold">Tổng Video Hoàn Thành</p>
-                                    <p className="text-4xl font-bold text-white mt-1">{stats.total}</p>
+                                    <p className="text-indigo-300 text-xs uppercase tracking-wider font-semibold">Tổng Video Hoàn Thành</p>
+                                    <p className="text-3xl font-bold text-emerald-400 mt-2">{stats.total}</p>
                                 </div>
                                 <div className="bg-white/5 p-4 rounded-lg text-center border border-white/10">
-                                    <p className="text-indigo-300 text-sm uppercase tracking-wider font-semibold">Mã Máy</p>
-                                    <p className="text-sm font-mono text-gray-300 mt-2 bg-black/30 p-2 rounded break-all">{stats.machineId}</p>
+                                    <p className="text-indigo-300 text-xs uppercase tracking-wider font-semibold">Số Lượng Prompt Đã Tạo</p>
+                                    <p className="text-3xl font-bold text-blue-400 mt-2">{stats.promptCount}</p>
+                                </div>
+                                <div className="bg-white/5 p-4 rounded-lg text-center border border-white/10">
+                                    <p className="text-indigo-300 text-xs uppercase tracking-wider font-semibold">Credit Đã Sử Dụng</p>
+                                    <p className="text-3xl font-bold text-yellow-400 mt-2">{stats.totalCredits}</p>
+                                    <p className="text-[10px] text-gray-400">(1 Video = 10 Credits)</p>
+                                </div>
+                                <div className="bg-white/5 p-4 rounded-lg text-center border border-white/10">
+                                    <p className="text-indigo-300 text-xs uppercase tracking-wider font-semibold">Mã Máy</p>
+                                    <p className="text-xs font-mono text-gray-300 mt-2 bg-black/30 p-2 rounded break-all">{stats.machineId}</p>
                                 </div>
                             </div>
-                            
+
                             {isAdmin && (
-                                <div className="mb-4 flex justify-end">
-                                    <button 
-                                        onClick={() => {
-                                            if(confirm("Bạn có chắc chắn muốn xóa TOÀN BỘ lịch sử thống kê? Hành động này không thể hoàn tác.")) {
-                                                handleDeleteAll();
-                                            }
-                                        }}
-                                        className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition text-sm flex items-center gap-2"
-                                    >
-                                        <TrashIcon className="w-4 h-4"/> Xóa Tất Cả Dữ Liệu
-                                    </button>
+                                <div className="mb-8 p-4 bg-black/20 rounded-xl border border-white/10">
+                                    <h4 className="text-white font-semibold mb-4 flex items-center gap-2"><ChartIcon className="w-4 h-4"/> Biểu đồ sản lượng video theo ngày</h4>
+                                    <div className="flex items-end gap-2 h-40 pt-4 pb-2 px-2 overflow-x-auto">
+                                        {stats.history.length === 0 ? <p className="text-gray-500 w-full text-center">Chưa có dữ liệu biểu đồ</p> : 
+                                            stats.history.slice(0, 14).reverse().map((item) => (
+                                                <div key={item.date} className="flex flex-col items-center gap-1 group relative min-w-[40px] flex-1">
+                                                    <div className="text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity absolute -top-6 bg-black/80 px-2 py-1 rounded">{item.count}</div>
+                                                    <div 
+                                                        className="w-full bg-indigo-500/50 hover:bg-indigo-400/80 transition-all rounded-t-sm"
+                                                        style={{ height: `${(item.count / maxCount) * 100}%`, minHeight: '4px' }}
+                                                    ></div>
+                                                    <div className="text-[10px] text-gray-400 rotate-0 truncate w-full text-center">{item.date.split('-').slice(1).join('/')}</div>
+                                                </div>
+                                            ))
+                                        }
+                                    </div>
+                                    <div className="flex justify-end mt-2">
+                                         <button 
+                                            onClick={() => {
+                                                if(confirm("Bạn có chắc chắn muốn xóa TOÀN BỘ lịch sử thống kê? Hành động này không thể hoàn tác.")) {
+                                                    handleDeleteAll();
+                                                }
+                                            }}
+                                            className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded transition text-xs flex items-center gap-2"
+                                        >
+                                            <TrashIcon className="w-3 h-3"/> Reset Dữ Liệu
+                                        </button>
+                                    </div>
                                 </div>
                             )}
 
-                            <h4 className="text-lg font-semibold text-white mb-3">Lịch sử theo ngày</h4>
-                            <div className="overflow-hidden rounded-lg border border-white/10">
+                            <h4 className="text-lg font-semibold text-white mb-3">Chi tiết lịch sử</h4>
+                            <div className="overflow-hidden rounded-lg border border-white/10 max-h-60 overflow-y-auto">
                                 <table className="w-full text-left text-sm text-gray-300">
-                                    <thead className="bg-white/10 text-white uppercase font-semibold">
+                                    <thead className="bg-white/10 text-white uppercase font-semibold sticky top-0 backdrop-blur-md">
                                         <tr>
                                             <th className="px-6 py-3">Ngày</th>
                                             <th className="px-6 py-3 text-right">Số lượng Video</th>
@@ -1158,6 +1186,12 @@ const App: React.FC = () => {
       const parsedData = JSON.parse(responseText);
       if (parsedData.prompts && Array.isArray(parsedData.prompts)) {
         setGeneratedScenes(parsedData.prompts);
+        
+        // Stats: Increment prompt count
+        if (ipcRenderer) {
+            ipcRenderer.invoke('increment-prompt-count').catch(console.error);
+        }
+
       } else {
         throw new Error('AI response did not contain a valid "prompts" array.');
       }

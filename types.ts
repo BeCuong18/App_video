@@ -87,4 +87,6 @@ export interface StatsData {
     machineId: string;
     history: DailyStats[];
     total: number;
+    promptCount: number;
+    totalCredits: number;
 }
