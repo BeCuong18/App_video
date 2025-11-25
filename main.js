@@ -14,6 +14,10 @@ autoUpdater.logger.transports.file.level = 'info';
 
 const fileWatchers = new Map();
 const jobStateTimestamps = new Map(); // Map<filePath, Map<jobId, { status, timestamp }>>
+// STATS ALGORITHM: fileJobStates tracks which jobs currently have videos ON DISK.
+// Structure: Map<filePath, Set<jobId>>
+const fileJobStates = new Map();
+
 const userDataPath = app.getPath('userData');
 const configPath = path.join(userDataPath, 'app-config.json');
 const statsPath = path.join(userDataPath, 'stats.json'); // Path for statistics file
@@ -69,7 +73,7 @@ function readStats() {
     } catch (e) {
         console.error("Error reading stats:", e);
     }
-    return { history: {} }; // Structure: { history: { "YYYY-MM-DD": { count: 0, files: ["path1", ...] } } }
+    return { history: {} }; 
 }
 
 function writeStats(stats) {
@@ -80,26 +84,21 @@ function writeStats(stats) {
     }
 }
 
-function saveVideoStats(videoPath) {
-    if (!videoPath) return;
+function incrementDailyStat() {
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const stats = readStats();
 
     if (!stats.history) stats.history = {};
     if (!stats.history[today]) {
-        stats.history[today] = { count: 0, files: [] };
+        stats.history[today] = { count: 0 };
     }
 
-    // Check if file already counted for today to prevent double counting
-    // We use the full path as a unique identifier
-    if (!stats.history[today].files.includes(videoPath)) {
-        stats.history[today].files.push(videoPath);
-        stats.history[today].count += 1;
-        writeStats(stats);
-    }
+    stats.history[today].count += 1;
+    writeStats(stats);
+    return stats.history[today].count;
 }
 
-// UPDATED: Helper to get files strictly from specific directories (Non-recursive)
+// Helper to get files strictly from specific directories (Non-recursive)
 function getFilesFromDirectories(dirs) {
     let files = [];
     const videoExtensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
@@ -114,10 +113,106 @@ function getFilesFromDirectories(dirs) {
                 files = [...files, ...videoFiles];
             }
         } catch (e) {
-            console.error(`Error reading directory ${dir}:`, e);
+            // Directory might not exist yet, which is fine
         }
     });
     return files;
+}
+
+// Core function to find videos matching jobs
+function scanVideosInternal(jobs, excelFilePath) {
+    const rootDir = path.dirname(excelFilePath);
+    const excelNameNoExt = path.basename(excelFilePath, '.xlsx');
+    const subDir = path.join(rootDir, excelNameNoExt);
+    
+    const targetDirs = [rootDir, subDir];
+    const videoFiles = getFilesFromDirectories(targetDirs);
+    
+    return jobs.map(job => {
+        // If manually linked and exists, keep it
+        if (job.videoPath && fs.existsSync(job.videoPath)) return job;
+        
+        // Strict ID Matching
+        const jobId = job.id; 
+        if (jobId) {
+            const idNumber = jobId.replace(/[^0-9]/g, '');
+            if (idNumber) {
+               // Strict Regex: Job_1 matches Job_01 but NOT Job_10
+               const regex = new RegExp(`Job_0*${idNumber}(?:[^0-9]|$)`, 'i');
+               const matchedFile = videoFiles.find(f => {
+                    const fileName = path.basename(f);
+                    return regex.test(fileName);
+               });
+               if (matchedFile) return { ...job, videoPath: matchedFile, status: 'Completed' };
+            }
+        }
+        
+        // Fallback: Name matching (if Job ID fails)
+        if (job.videoName) {
+             const cleanName = job.videoName.trim();
+             const escapedName = cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+             const nameRegex = new RegExp(`${escapedName}(?:[^0-9]|$)`, 'i');
+             
+             const matchedFileByName = videoFiles.find(f => {
+                 const fileName = path.basename(f, path.extname(f));
+                 return nameRegex.test(fileName);
+             });
+             if (matchedFileByName) return { ...job, videoPath: matchedFileByName, status: 'Completed' };
+        }
+        return job;
+    });
+}
+
+// STATS CORE LOGIC: Syncs finding with memory state
+// explicitInit: Passed as true only when the 'Watcher' starts for the first time.
+function syncStatsAndState(filePath, jobs, explicitInit = false) {
+    let isFirstTimeSeeingFile = false;
+
+    // IMPORTANT: If we have never tracked this file in this session (RAM),
+    // we mark it as "First Encounter".
+    // This implies that ANY video found right now is an "Old Video" (Baseline).
+    // We will show it, but NOT count it.
+    if (!fileJobStates.has(filePath)) {
+        fileJobStates.set(filePath, new Set());
+        isFirstTimeSeeingFile = true;
+    }
+
+    const knownCompletedSet = fileJobStates.get(filePath);
+    const updatedJobs = scanVideosInternal(jobs, filePath);
+
+    let newCompletionCount = 0;
+
+    updatedJobs.forEach(job => {
+        const hasVideo = !!job.videoPath;
+        const jobId = job.id;
+
+        if (hasVideo) {
+            // If the video exists on disk...
+            if (!knownCompletedSet.has(jobId)) {
+                // ...and we didn't know about it in RAM
+                knownCompletedSet.add(jobId);
+                
+                // CRITICAL CONDITION FOR STATS:
+                // We ONLY increment the counter if:
+                // 1. It is NOT an explicit initialization (Watcher start).
+                // 2. AND it is NOT the first time we are seeing this file in this session.
+                // This ensures old videos (found on first load/reload) are ignored by stats,
+                // but strictly new videos (found on subsequent 10s checks or watcher events) are counted.
+                if (!explicitInit && !isFirstTimeSeeingFile) {
+                    incrementDailyStat();
+                    newCompletionCount++;
+                }
+            }
+        } else {
+            // If the video does NOT exist on disk (Deleted or Retry clicked)
+            // We remove it from RAM so that if it appears again later, it counts as +1.
+            if (knownCompletedSet.has(jobId)) {
+                knownCompletedSet.delete(jobId);
+            }
+        }
+    });
+
+    return { updatedJobs, newCompletionCount };
 }
 
 const isPackaged = app.isPackaged;
@@ -210,6 +305,21 @@ async function updateExcelStatus(filePath, jobIdsToUpdate, newStatus = '') {
     }
 }
 
+function showWindowAndNotify(title, message, type = 'completion') {
+    if (mainWindow) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+        mainWindow.setAlwaysOnTop(true);
+        setTimeout(() => mainWindow.setAlwaysOnTop(false), 500); // Flash effect
+        mainWindow.webContents.send('show-alert-modal', {
+            title: title,
+            message: message,
+            type: type
+        });
+    }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -228,11 +338,11 @@ function createWindow() {
   mainWindow.loadFile(startUrl);
   
   autoUpdater.on('update-downloaded', () => {
-      mainWindow.webContents.send('show-alert-modal', {
-          title: 'Có bản cập nhật mới!',
-          message: 'Bản cập nhật mới đã được tải về. Vui lòng khởi động lại ứng dụng để áp dụng các thay đổi.',
-          type: 'update'
-      });
+      showWindowAndNotify(
+          'Có bản cập nhật mới!',
+          'Bản cập nhật mới đã được tải về. Vui lòng nhấn OK để khởi động lại ứng dụng.',
+          'update'
+      );
   });
 }
 
@@ -273,7 +383,6 @@ app.whenReady().then(() => {
   createWindow();
   autoUpdater.checkForUpdatesAndNotify().catch(err => console.log('Updater error:', err));
 
-  // --- Auto-retry stuck jobs interval ---
   const STUCK_JOB_TIMEOUT = 5 * 60 * 1000; 
 
   setInterval(() => {
@@ -286,16 +395,13 @@ app.whenReady().then(() => {
             }
         }
         if (stuckJobIds.length > 0) {
-            console.log(`Found ${stuckJobIds.length} stuck jobs in ${filePath}. Resetting...`);
             updateExcelStatus(filePath, stuckJobIds, '')
                 .then(result => {
-                    if (!result.success) {
-                        console.error(`Failed to reset stuck jobs for ${filePath}:`, result.error);
-                    }
+                    // Log handled elsewhere
                 });
         }
     }
-  }, 60 * 1000); // Check every minute
+  }, 60 * 1000); 
 });
 
 app.on('window-all-closed', () => {
@@ -355,7 +461,6 @@ ipcMain.handle('delete-stat-date', async (event, date) => {
     }
 });
 
-// New IPC to get stats
 ipcMain.handle('get-stats', async () => {
     const stats = readStats();
     const config = readConfig();
@@ -363,7 +468,7 @@ ipcMain.handle('get-stats', async () => {
     const historyArray = Object.entries(stats.history || {}).map(([date, data]) => ({
         date,
         count: data.count
-    })).sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort newest first
+    })).sort((a, b) => new Date(b.date) - new Date(a.date)); 
 
     const total = historyArray.reduce((sum, item) => sum + item.count, 0);
 
@@ -425,9 +530,19 @@ ipcMain.handle('open-file-dialog', async () => {
 ipcMain.on('start-watching-file', (event, filePath) => {
     if (fileWatchers.has(filePath)) return;
 
-    // Initialize timestamp map for this file
     if (!jobStateTimestamps.has(filePath)) {
         jobStateTimestamps.set(filePath, new Map());
+    }
+
+    // INITIALIZATION: Scan once to establish baseline. Pass init=true to SKIP stats counting.
+    try {
+        if (fs.existsSync(filePath)) {
+            const buffer = fs.readFileSync(filePath);
+            const jobs = parseExcelData(buffer);
+            syncStatsAndState(filePath, jobs, true); // init = true
+        }
+    } catch (e) {
+        console.error("Error during initial watch scan:", e);
     }
 
     let debounceTimer;
@@ -435,17 +550,19 @@ ipcMain.on('start-watching-file', (event, filePath) => {
         if (eventType === 'change') {
             if (debounceTimer) clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
-                // Wait a bit more to ensure file write is complete by external process
                 setTimeout(() => {
                     try {
                         if (fs.existsSync(filePath)) {
                             const buffer = fs.readFileSync(filePath);
-                            const newJobs = parseExcelData(buffer);
+                            const rawJobs = parseExcelData(buffer);
                             
-                            // Update Timestamps for stuck detection
+                            // REAL-TIME CHECK: Update stats based on transitions
+                            const { updatedJobs } = syncStatsAndState(filePath, rawJobs, false); // init = false
+
+                            // Timestamp updates for stuck detection
                             const jobMap = jobStateTimestamps.get(filePath);
                             const now = Date.now();
-                            newJobs.forEach(job => {
+                            updatedJobs.forEach(job => {
                                 if (job.status === 'Processing' || job.status === 'Generating') {
                                     if (!jobMap.has(job.id) || jobMap.get(job.id).status !== job.status) {
                                         jobMap.set(job.id, { status: job.status, timestamp: now });
@@ -457,15 +574,18 @@ ipcMain.on('start-watching-file', (event, filePath) => {
 
                             event.sender.send('file-content-updated', { path: filePath, content: buffer });
 
-                            // LOGIC: Only notify if list is not empty AND all are strictly 'Completed'
-                            if (newJobs.length > 0) {
-                                const allCompleted = newJobs.every(j => j.status === 'Completed');
-
-                                if (allCompleted) {
-                                    new Notification({
-                                        title: 'Hoàn thành!',
-                                        body: `File "${path.basename(filePath)}" đã hoàn thành 100%.`
-                                    }).show();
+                            // Check for completion
+                            if (updatedJobs.length > 0) {
+                                // Check if ALL videos are physically present or marked completed
+                                const allDone = updatedJobs.every(j => !!j.videoPath || j.status === 'Completed');
+                                if (allDone) {
+                                    // Use 'unknown' flag to prevent spamming notifications if nothing actually changed status recently?
+                                    // For now, simple check: If all done, show alert.
+                                    showWindowAndNotify(
+                                        'Hoàn tất xử lý!',
+                                        `File "${path.basename(filePath)}" đã hoàn thành 100% video.`,
+                                        'completion'
+                                    );
                                 }
                             }
                         }
@@ -487,66 +607,18 @@ ipcMain.on('stop-watching-file', (event, filePath) => {
     if (jobStateTimestamps.has(filePath)) {
         jobStateTimestamps.delete(filePath);
     }
+    // Optional: Clear session memory? No, keep it in case user re-opens file in same session.
+    // fileJobStates.delete(filePath);
 });
 
 ipcMain.handle('find-videos-for-jobs', async (event, { jobs, excelFilePath }) => {
     try {
-        // UPDATED LOGIC: Search only in Excel directory and Subdirectory with same name
-        const rootDir = path.dirname(excelFilePath);
-        const excelNameNoExt = path.basename(excelFilePath, '.xlsx');
-        const subDir = path.join(rootDir, excelNameNoExt);
-        
-        const targetDirs = [rootDir, subDir];
-        const videoFiles = getFilesFromDirectories(targetDirs);
-        
-        const updatedJobs = jobs.map(job => {
-            // If already has a valid video path, check if it still exists
-            if (job.videoPath && fs.existsSync(job.videoPath)) return job;
-            if (job.status !== 'Completed') return job;
-
-            const jobId = job.id; // Expected format "Job_1"
-            
-            if (jobId) {
-                // STRICT MATCHING LOGIC
-                const idNumber = jobId.replace(/[^0-9]/g, '');
-                
-                if (idNumber) {
-                   const regex = new RegExp(`Job_0*${idNumber}(?:[^0-9]|$)`, 'i');
-                   
-                   const matchedFile = videoFiles.find(f => {
-                        const fileName = path.basename(f);
-                        return regex.test(fileName);
-                   });
-
-                   if (matchedFile) {
-                        // *** STATS LOGIC: Save stats when video found ***
-                        saveVideoStats(matchedFile); 
-                        return { ...job, videoPath: matchedFile };
-                   }
-                }
-            }
-            
-            // Fallback: Try matching by videoName if Job ID match fails (keeping strict boundary)
-            if (job.videoName) {
-                 const cleanName = job.videoName.trim();
-                 const escapedName = cleanName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                 const nameRegex = new RegExp(`${escapedName}(?:[^0-9]|$)`, 'i');
-                 
-                 const matchedFileByName = videoFiles.find(f => {
-                     const fileName = path.basename(f, path.extname(f));
-                     return nameRegex.test(fileName);
-                 });
-                 
-                 if (matchedFileByName) {
-                     // *** STATS LOGIC: Save stats when video found ***
-                     saveVideoStats(matchedFileByName);
-                     return { ...job, videoPath: matchedFileByName };
-                 }
-            }
-
-            return job;
-        });
-        
+        // This is called by the UI manual refresh loop.
+        // It must also perform the differential check to ensure stats are captured 
+        // even if the file watcher didn't trigger (e.g. video created without excel update).
+        // CRITICAL: We pass 'false' for explicitInit, BUT 'syncStatsAndState' will internally
+        // check if it's the first encounter to prevent double counting.
+        const { updatedJobs } = syncStatsAndState(excelFilePath, jobs, false);
         return { success: true, jobs: updatedJobs };
     } catch (error) {
         return { success: false, error: error.message };
@@ -588,25 +660,19 @@ ipcMain.handle('execute-ffmpeg-combine', async (event, { jobs, targetDuration, m
     const listPath = path.join(path.dirname(outputPath), `concat_list_${Date.now()}.txt`);
 
     try {
-        // Create concat list file
         const fileContent = jobs.map(j => `file '${j.videoPath.replace(/'/g, "'\\''")}'`).join('\n');
         fs.writeFileSync(listPath, fileContent);
 
         const args = ['-f', 'concat', '-safe', '0', '-i', listPath];
-        
         if (mode === 'timed' && targetDuration) {
              args.push('-t', String(targetDuration));
         }
-
         args.push('-c', 'copy', '-y', outputPath);
 
         return new Promise((resolve) => {
             execFile(ffmpegPath, args, (error, stdout, stderr) => {
-                // Clean up list file
                 try { fs.unlinkSync(listPath); } catch (e) {}
-
                 if (error) {
-                    console.error('FFmpeg error:', stderr);
                     resolve({ success: false, error: `FFmpeg failed: ${stderr}` });
                 } else {
                     resolve({ success: true, filePath: outputPath });
@@ -643,14 +709,11 @@ ipcMain.handle('execute-ffmpeg-combine-all', async (event, filesToProcess) => {
         try {
             const fileContent = file.jobs.map(j => `file '${j.videoPath.replace(/'/g, "'\\''")}'`).join('\n');
             fs.writeFileSync(listPath, fileContent);
-
             const args = ['-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', '-y', outputPath];
-            
             await new Promise((resolve) => {
                 execFile(ffmpegPath, args, (error, stdout, stderr) => {
                     try { fs.unlinkSync(listPath); } catch (e) {}
                     if (error) {
-                        console.error(`Failed to combine ${file.name}:`, stderr);
                         failures.push(file.name);
                     } else {
                         successes.push(file.name);
