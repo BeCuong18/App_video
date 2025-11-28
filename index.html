@@ -4,154 +4,153 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Prompt Generator Pro</title>
+    <title>Prompt Generator Pro - Christmas Cute Edition</title>
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#14b8a6">
+    <meta name="theme-color" content="#FFFBF0">
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+          theme: {
+            extend: {
+              colors: {
+                'cute-cream': '#FFFBF0',      /* Milky Cream Background */
+                'cute-pink': '#FF8FA3',       /* Peach Red / Macaron Pink */
+                'cute-pink-dark': '#FF4D6D',  /* Deeper Pink for text */
+                'cute-mint': '#80DEEA',       /* Mint Green */
+                'cute-mint-dark': '#26A69A',  /* Teal for contrast */
+                'cute-brown': '#5D4037',      /* Cookie Brown (Text) */
+                'cute-brown-light': '#8D6E63', /* Milk Chocolate */
+                'cute-yellow': '#FFE066',     /* Butter Yellow */
+                'cute-red': '#FF5252',        /* Santa Red */
+              },
+              animation: {
+                'bounce-slow': 'bounce 3s infinite',
+                'fade-in': 'fadeIn 0.5s ease-out',
+                'wiggle': 'wiggle 1s ease-in-out infinite',
+                'spin-slow': 'spin 8s linear infinite',
+              },
+              keyframes: {
+                fadeIn: {
+                  '0%': { opacity: '0', transform: 'translateY(10px)' },
+                  '100%': { opacity: '1', transform: 'translateY(0)' },
+                },
+                wiggle: {
+                  '0%, 100%': { transform: 'rotate(-3deg)' },
+                  '50%': { transform: 'rotate(3deg)' },
+                }
+              }
+            }
+          }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: 'Nunito', sans-serif; /* Rounder font */
+            overflow-x: hidden;
+            background-color: #FFFBF0;
+            color: #5D4037;
         }
-        .gradient-bg {
-            background: linear-gradient(135deg, #4338ca 0%, #14b8a6 100%);
+        
+        /* Cute Christmas Pattern Background */
+        .cute-bg {
+            background-color: #FFFBF0;
+            /* Polka dots + Candy Cane vibe */
+            background-image: 
+                radial-gradient(#FF8FA3 15%, transparent 16%), 
+                radial-gradient(#80DEEA 15%, transparent 16%),
+                repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255, 255, 255, 0.4) 10px, rgba(255, 255, 255, 0.4) 20px);
+            background-size: 60px 60px, 60px 60px, 100% 100%;
+            background-position: 0 0, 30px 30px, 0 0;
+            position: relative;
+            min-height: 100vh;
         }
+
+        /* Soft Snow Effect */
+        .snowflake {
+            position: absolute;
+            top: -10px;
+            background: #fff;
+            border-radius: 50%;
+            opacity: 0.9;
+            pointer-events: none;
+            animation: fall linear infinite;
+            box-shadow: 0 0 5px rgba(255,255,255,0.8);
+        }
+        @keyframes fall {
+            to { transform: translateY(105vh); }
+        }
+
+        /* Glassmorphism - Milky & Soft */
         .glass-card {
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 4px solid #fff;
+            box-shadow: 0 10px 40px rgba(255, 143, 163, 0.2);
+            border-radius: 32px; /* More rounded */
         }
-        select {
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 0.7rem center;
-            background-size: 1em;
-            padding-right: 2.5rem;
+        
+        /* Custom Scrollbar - Candy Cane Style */
+        ::-webkit-scrollbar { width: 12px; height: 12px; }
+        ::-webkit-scrollbar-track { background: #FFFBF0; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { 
+            background: repeating-linear-gradient(45deg, #FFCDD2, #FFCDD2 10px, #FF8FA3 10px, #FF8FA3 20px);
+            border-radius: 10px; 
+            border: 3px solid #FFFBF0; 
         }
-        option {
-            background: #111827;
-            color: white;
+        ::-webkit-scrollbar-thumb:hover { background: #FF8FA3; }
+
+        /* Form Elements - Rounded & Cute */
+        select, input, textarea {
+            background-color: #ffffff !important;
+            border: 3px solid #E0F7FA !important;
+            color: #5D4037 !important;
+            border-radius: 20px !important;
+            transition: all 0.3s ease;
+            font-weight: 700;
         }
+        select:focus, input:focus, textarea:focus {
+            border-color: #FF8FA3 !important;
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(255, 143, 163, 0.2);
+        }
+        ::placeholder { color: #D7CCC8 !important; font-weight: 600; }
+
+        /* Badges - Pill shaped */
         .status-badge {
             display: inline-flex;
             align-items: center;
-            padding: 0.25em 0.6em;
-            font-size: 0.8em;
-            font-weight: 600;
-            border-radius: 9999px;
-            white-space: nowrap;
-        }
-        .status-pending { background-color: #4b5563; color: #f9fafb; }
-        .status-processing { background-color: #3b82f6; color: #f9fafb; }
-        .status-generating { background-color: #f59e0b; color: #f9fafb; }
-        .status-completed { background-color: #10b981; color: #f9fafb; }
-        .status-failed { background-color: #ef4444; color: #f9fafb; }
-
-        .job-table th, .job-table td {
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .job-table th {
-            text-align: left;
-            font-size: 0.8rem;
-            letter-spacing: 0.05em;
+            justify-content: center;
+            padding: 0.5em 1.2em;
+            font-size: 0.75em;
+            font-weight: 800;
+            border-radius: 999px;
             text-transform: uppercase;
-            color: #d1d5db;
+            letter-spacing: 0.05em;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         }
-        .job-table tr:last-child td {
-            border-bottom: none;
-        }
-        /* Tracker Tab Styles */
-        .tracker-tabs-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem; /* Spacing between tabs */
-            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
-            padding-bottom: 0.75rem;
-            margin-bottom: 1.5rem;
-        }
-        .tracker-tab {
-            position: relative;
-            display: flex;
-            align-items: center;
-            padding: 0.5rem 1rem;
-            cursor: pointer;
-            border: 1px solid transparent;
-            border-radius: 0.5rem;
-            background-color: transparent;
-            color: #d1d5db;
-            font-weight: 500;
-            transition: all 0.2s ease-in-out;
-            white-space: nowrap;
-            overflow: hidden; /* Important for progress frame */
-        }
-        .tracker-tab:hover {
-            background-color: rgba(255, 255, 255, 0.05);
-            color: #fff;
-        }
-        .tracker-tab.active {
-            color: #fff;
-            font-weight: 600;
-            background-color: rgba(20, 184, 166, 0.3);
-            border-color: rgba(20, 184, 166, 0.7);
-        }
-        .tab-close-btn {
-            margin-left: 0.75rem;
-            padding: 0.25rem;
-            border-radius: 9999px;
-            line-height: 1;
-            transition: background-color 0.2s;
-            position: relative;
-            z-index: 2;
-        }
-        .tab-close-btn:hover {
-            background-color: rgba(255, 255, 255, 0.2);
-        }
-        .tab-progress-frame {
-            content: '';
-            position: absolute;
-            inset: 0;
-            border: 2px solid #2dd4bf; /* Teal color */
-            border-radius: inherit;
-            transition: clip-path 0.4s ease-in-out;
-            pointer-events: none; /* Allows clicks to go through to the button */
-            z-index: 1;
-        }
-        .tracker-tab > span:not(.tab-close-btn) {
-            position: relative;
-            z-index: 2;
-        }
-        
-        /* API Key Manager Styles */
-        .key-list {
-            max-height: 250px;
-            overflow-y: auto;
-            padding-right: 8px; /* For scrollbar */
-        }
-        .key-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem;
-            background-color: rgba(0,0,0,0.2);
-            border-radius: 0.5rem;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        .active-key-display {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background-color: rgba(0,0,0,0.2);
-            padding: 0.5rem 1rem;
-            border-radius: 9999px;
-            font-size: 0.875rem;
-            border: 1px solid rgba(255,255,255,0.2);
-        }
+        .status-pending { background: #EFEBE9; color: #8D6E63; }
+        .status-processing { background: #E0F7FA; color: #00838F; }
+        .status-generating { background: #FFF9C4; color: #F57F17; animation: bounce-slow 2s infinite; }
+        .status-completed { background: #E8F5E9; color: #2E7D32; border: 2px solid #C8E6C9; }
+        .status-failed { background: #FFEBEE; color: #C62828; }
 
+        .job-table th {
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            color: #5D4037;
+            background: #B2DFDB; /* Soft Mint Header */
+            padding: 1.2rem;
+            font-weight: 900;
+            border-bottom: 4px solid white;
+        }
+        .job-table td { padding: 1rem; border-bottom: 2px dashed #E0F2F1; vertical-align: middle; }
+        .job-table tr:last-child td { border-bottom: none; }
+        .job-table tr:hover td { background: #FFFDE7; } /* Butter yellow hover */
+
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
     </style>
 <script type="importmap">
 {
@@ -159,29 +158,36 @@
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0",
-    "vite": "https://aistudiocdn.com/vite@^7.1.12",
     "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5",
     "crypto-js": "https://aistudiocdn.com/crypto-js@^4.2.0",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
     "path": "https://aistudiocdn.com/path@^0.12.7",
-    "url": "https://aistudiocdn.com/url@^0.11.4"
+    "url": "https://aistudiocdn.com/url@^0.11.4",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
   }
 }
 </script>
 </head>
-<body class="gradient-bg">
+<body class="cute-bg">
+    <div id="snow-container"></div>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').then(registration => {
-            console.log('SW registered: ', registration);
-          }).catch(registrationError => {
-            console.log('SW registration failed: ', registrationError);
-          });
-        });
+      const snowContainer = document.getElementById('snow-container');
+      const snowflakeCount = 40;
+      const colors = ['#FFCDD2', '#B2DFDB', '#FFF9C4', '#FFFFFF'];
+      for (let i = 0; i < snowflakeCount; i++) {
+          const flake = document.createElement('div');
+          flake.classList.add('snowflake');
+          flake.style.left = Math.random() * 100 + 'vw';
+          const size = (Math.random() * 8 + 5) + 'px';
+          flake.style.width = size;
+          flake.style.height = size;
+          flake.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+          flake.style.animationDuration = (Math.random() * 10 + 10) + 's';
+          flake.style.animationDelay = '-' + (Math.random() * 5) + 's';
+          snowContainer.appendChild(flake);
       }
     </script>
 </body>

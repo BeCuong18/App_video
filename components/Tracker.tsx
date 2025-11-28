@@ -1,0 +1,206 @@
+import React from 'react';
+import { TrackedFile, VideoJob, JobStatus } from '../types';
+import { PlayIcon, FolderIcon, TrashIcon, RetryIcon, ExternalLinkIcon, CogIcon, UploadIcon, LoaderIcon, VideoIcon } from './Icons';
+
+interface TrackerProps {
+    trackedFiles: TrackedFile[];
+    activeFileIndex: number;
+    setActiveFileIndex: (index: number) => void;
+    onOpenFile: () => void;
+    onCloseFile: (index: number) => void;
+    stats: any; 
+    ffmpegFound: boolean | null;
+    isCombining: boolean;
+    onPlayVideo: (path: string) => void;
+    onShowFolder: (path: string) => void;
+    onOpenToolFlows: () => void;
+    onReloadVideos: () => void;
+    onRetryStuck: () => void;
+    onRetryJob: (id: string) => void;
+    onDeleteVideo: (id: string, path: string) => void;
+    onCombine: (mode: 'normal' | 'timed') => void;
+    onCombineAll: () => void;
+    onLinkVideo: (id: string, fileIdx: number) => void;
+}
+
+export const Tracker: React.FC<TrackerProps> = (props) => {
+    const { trackedFiles, activeFileIndex, setActiveFileIndex, stats } = props;
+    const currentFile = trackedFiles[activeFileIndex];
+
+    const getStatusBadge = (status: JobStatus) => {
+        const base = "status-badge";
+        switch (status) {
+            case 'Pending': return `${base} status-pending`;
+            case 'Processing': return `${base} status-processing`;
+            case 'Generating': return `${base} status-generating`;
+            case 'Completed': return `${base} status-completed`;
+            case 'Failed': return `${base} status-failed`;
+            default: return base;
+        }
+    };
+
+    const renderResultCell = (job: VideoJob) => {
+        if (job.status === 'Completed') {
+            if (job.videoPath) {
+                return (
+                    <div className="w-full aspect-video bg-cute-brown rounded-2xl overflow-hidden relative group mx-auto border-4 border-white shadow-md hover:border-cute-pink transition-all duration-300 transform hover:scale-105">
+                        <video 
+                            src={job.videoPath} 
+                            className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" 
+                            muted 
+                            loop 
+                            playsInline 
+                            onMouseOver={e => e.currentTarget.play().catch(()=>{})} 
+                            onMouseOut={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                        ></video>
+                        <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                            <span className="text-[9px] font-bold text-cute-brown bg-white px-2 py-1 rounded-full shadow-sm">Preview</span>
+                        </div>
+                        <button 
+                            onClick={() => props.onPlayVideo(job.videoPath!)} 
+                            className="absolute bottom-2 right-2 p-2 bg-cute-yellow text-cute-brown rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110 hover:bg-white"
+                            title="Mở file gốc"
+                        >
+                            <PlayIcon className="w-3 h-3"/>
+                        </button>
+                    </div>
+                );
+            }
+            return (
+                <div className="w-full aspect-video bg-white rounded-2xl flex flex-col items-center justify-center text-center p-2 mx-auto border-2 border-dashed border-cute-mint group hover:border-cute-pink transition-colors">
+                    <VideoIcon className="w-6 h-6 text-cute-mint mb-2 group-hover:text-cute-pink transition-colors" />
+                    <button onClick={() => props.onLinkVideo(job.id, activeFileIndex)} className="text-[10px] font-bold text-cute-mint-dark hover:text-white uppercase tracking-wide border border-cute-mint hover:border-cute-pink px-3 py-1.5 rounded-full transition-colors bg-white hover:bg-cute-pink">Link File</button>
+                </div>
+            );
+        }
+        if (job.status === 'Processing' || job.status === 'Generating') return <div className="w-full aspect-video flex items-center justify-center bg-white rounded-2xl border border-cute-mint/30 shadow-inner"><LoaderIcon /></div>;
+        return <div className="w-full aspect-video flex items-center justify-center bg-white rounded-2xl border border-cute-mint/30"><span className="text-2xl opacity-20 grayscale">🎬</span></div>;
+    };
+
+    if (trackedFiles.length === 0) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[65vh] text-center border-4 border-dashed border-cute-mint rounded-[40px] bg-white/60 animate-fade-in backdrop-blur-sm">
+                <div className="bg-white p-8 rounded-full mb-6 border-4 border-cute-cream shadow-sm">
+                    <UploadIcon className="h-14 w-14 text-cute-mint" />
+                </div>
+                <h3 className="text-3xl font-black text-cute-brown mb-2 tracking-tight drop-shadow-sm">Xưởng phim đang trống</h3>
+                <p className="text-cute-brown-light mb-8 max-w-sm font-medium">Chưa có dự án nào. Thêm chút "gia vị" sáng tạo nào!</p>
+                <button onClick={props.onOpenFile} className="bg-gradient-to-r from-cute-pink to-cute-pink-dark text-white font-extrabold py-4 px-10 rounded-full hover:shadow-lg transition shadow-md shadow-pink-200 uppercase tracking-wide text-sm transform hover:scale-105 border-4 border-white">
+                    Mở File Excel
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex h-[75vh] glass-card rounded-[40px] overflow-hidden border-4 border-white shadow-2xl bg-white/80">
+            {/* Sidebar (Vertical List) - CUTE MINT THEME */}
+            <div className="w-72 bg-cute-mint border-r-4 border-white flex flex-col shrink-0">
+                <div className="p-4 border-b border-white/30">
+                    <button onClick={props.onOpenFile} className="w-full bg-white hover:bg-cute-yellow text-cute-brown font-extrabold py-3.5 px-4 rounded-2xl transition shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-xs uppercase tracking-wider transform hover:rotate-1">
+                        <UploadIcon className="w-4 h-4" /> Mở Dự Án Mới
+                    </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
+                    {trackedFiles.map((file, idx) => {
+                        const isActive = idx === activeFileIndex;
+                        const progress = file.jobs.length > 0 ? (file.jobs.filter(j=>j.status==='Completed').length / file.jobs.length) * 100 : 0;
+                        return (
+                            <div key={idx} onClick={() => setActiveFileIndex(idx)} className={`group relative p-3 rounded-2xl cursor-pointer transition-all border-2 ${isActive ? 'bg-cute-pink border-white shadow-lg transform scale-[1.02]' : 'bg-white/50 border-transparent hover:bg-white hover:border-white'}`}>
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className={`font-bold text-xs truncate w-44 ${isActive ? 'text-white' : 'text-cute-brown group-hover:text-cute-pink-dark'}`}>{file.name}</span>
+                                    <button onClick={(e) => {e.stopPropagation(); props.onCloseFile(idx);}} className={`p-1 w-6 h-6 flex items-center justify-center rounded-full transition leading-none font-bold ${isActive ? 'bg-white text-cute-pink hover:scale-110' : 'text-stone-300 hover:bg-red-100 hover:text-red-400'}`}>&times;</button>
+                                </div>
+                                {/* Progress Bar Background */}
+                                <div className={`w-full h-2 rounded-full overflow-hidden ${isActive ? 'bg-black/10' : 'bg-white'}`}>
+                                    {/* Progress Bar Fill */}
+                                    <div className={`h-full transition-all duration-500 rounded-full ${progress === 100 ? 'bg-cute-yellow' : 'bg-cute-mint-dark'}`} style={{ width: `${progress}%` }}></div>
+                                </div>
+                                <div className="flex justify-between mt-1.5">
+                                    <span className={`text-[9px] uppercase tracking-wider font-bold ${isActive ? 'text-white/80' : 'text-stone-400'}`}>Tiến độ</span>
+                                    <span className={`text-[9px] font-mono font-bold ${isActive ? 'text-white' : 'text-stone-500'}`}>{Math.round(progress)}%</span>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+
+                <div className="p-4 border-t border-white/30 bg-cute-mint-dark/10">
+                    <button onClick={props.onCombineAll} disabled={props.isCombining} className="w-full bg-cute-yellow hover:bg-yellow-300 text-cute-brown font-bold py-3.5 rounded-2xl text-xs uppercase tracking-widest shadow-lg disabled:opacity-50 transition border-4 border-white transform hover:-translate-y-0.5">
+                        {props.isCombining ? 'Đang Xử Lý...' : '⚡ Ghép Tất Cả'}
+                    </button>
+                </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div className="flex-1 flex flex-col bg-cute-cream relative overflow-hidden">
+                
+                {/* Toolbar Header */}
+                <div className="p-4 border-b-2 border-white bg-white/50 flex items-center justify-between flex-wrap gap-4 z-10 shadow-sm">
+                    <div className="flex items-center gap-3">
+                        <div className="text-center px-4 py-1.5 bg-emerald-100 rounded-2xl border border-white shadow-sm min-w-[80px]">
+                            <div className="text-xl font-black text-emerald-600 leading-none">{stats?.completed || 0}/{stats?.total || 0}</div>
+                            <div className="text-[9px] text-emerald-500 uppercase font-bold tracking-widest mt-0.5">Xong</div>
+                        </div>
+                        <div className="text-center px-4 py-1.5 bg-blue-100 rounded-2xl border border-white shadow-sm min-w-[80px]">
+                            <div className="text-xl font-black text-blue-500 leading-none">{stats?.inProgress || 0}</div>
+                            <div className="text-[9px] text-blue-400 uppercase font-bold tracking-widest mt-0.5">Xử lý</div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <button onClick={props.onReloadVideos} className="bg-white hover:bg-blue-50 text-blue-500 p-3 rounded-xl shadow-sm border border-stone-100 transition transform hover:scale-110" title="Tải lại video"><RetryIcon className="w-5 h-5"/></button>
+                        <button onClick={props.onRetryStuck} className="bg-white hover:bg-yellow-50 text-yellow-500 p-3 rounded-xl shadow-sm border border-stone-100 transition transform hover:scale-110" title="Reset job bị kẹt"><ExternalLinkIcon className="w-5 h-5"/></button>
+                        <div className="h-6 w-0.5 bg-stone-200 mx-1 rounded-full"></div>
+                        <button onClick={props.onOpenToolFlows} className="bg-cute-brown hover:bg-cute-brown-light text-white px-4 py-2.5 rounded-xl shadow-md font-bold text-xs flex items-center gap-2 uppercase tracking-wide transform hover:scale-105 border-2 border-stone-300">
+                            <CogIcon className="w-4 h-4"/> ToolFlows
+                        </button>
+                        <button onClick={() => props.onShowFolder(currentFile.path!)} className="bg-stone-200 hover:bg-stone-300 text-stone-600 p-3 rounded-xl shadow-sm transition transform hover:scale-110" title="Mở thư mục"><FolderIcon className="w-5 h-5"/></button>
+                    </div>
+                </div>
+
+                {/* Combine Actions Bar */}
+                {props.ffmpegFound && (
+                    <div className="px-6 py-3 bg-white/40 border-b border-white flex gap-3 z-10">
+                        <button onClick={() => props.onCombine('normal')} disabled={props.isCombining} className="bg-cute-mint-dark hover:bg-teal-500 text-white px-6 py-2 rounded-full text-[10px] font-bold shadow-sm uppercase tracking-widest disabled:opacity-50 transition border-2 border-white">Ghép Thường</button>
+                        <button onClick={() => props.onCombine('timed')} disabled={props.isCombining} className="bg-blue-400 hover:bg-blue-500 text-white px-6 py-2 rounded-full text-[10px] font-bold shadow-sm uppercase tracking-widest disabled:opacity-50 transition border-2 border-white">Ghép Theo Nhạc</button>
+                    </div>
+                )}
+
+                {/* Job Table - Fixed Layout */}
+                <div className="flex-1 overflow-auto custom-scrollbar p-0 z-0 bg-cute-cream">
+                    <table className="w-full text-cute-brown job-table border-collapse table-fixed">
+                        <thead className="sticky top-0 z-20 shadow-sm">
+                            <tr>
+                                <th className="w-20 text-center rounded-tl-2xl">ID</th>
+                                <th className="w-32 text-center">Status</th>
+                                <th className="w-auto text-left pl-6">Video Name</th>
+                                <th className="w-64 text-center">Preview</th>
+                                <th className="w-24 text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {currentFile.jobs.map((job, idx) => (
+                                <tr key={job.id} className="transition-colors group hover:bg-white border-b-2 border-white">
+                                    <td className="font-mono text-xs text-center font-bold text-stone-400 bg-white/40 group-hover:bg-white">{job.id.replace('Job_', '')}</td>
+                                    <td className="text-center bg-white/40 group-hover:bg-white"><span className={getStatusBadge(job.status)}>{job.status}</span></td>
+                                    <td className="pl-6 font-mono text-xs text-cute-brown font-medium truncate bg-white/40 group-hover:bg-white" title={job.videoName}>{job.videoName}</td>
+                                    <td className="py-4 px-2 text-center bg-white/40 group-hover:bg-white">{renderResultCell(job)}</td>
+                                    <td className="bg-white/40 group-hover:bg-white">
+                                        <div className="flex items-center justify-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                                            {job.videoPath && (
+                                                <button onClick={() => props.onDeleteVideo(job.id, job.videoPath!)} className="p-2 bg-red-50 hover:bg-red-100 text-red-400 hover:text-red-500 rounded-full transition" title="Xóa video"><TrashIcon className="w-4 h-4"/></button>
+                                            )}
+                                            <button onClick={() => props.onRetryJob(job.id)} className="p-2 bg-yellow-50 hover:bg-yellow-100 text-yellow-500 hover:text-yellow-600 rounded-full transition" title="Reset trạng thái"><RetryIcon className="w-4 h-4"/></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+};

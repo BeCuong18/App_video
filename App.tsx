@@ -1,2220 +1,343 @@
-
-import React, {
-  useState,
-  useCallback,
-  ChangeEvent,
-  useEffect,
-  useRef,
-} from 'react';
-import { GoogleGenAI, Type } from '@google/genai';
+import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-import { Scene, VideoType, FormData, ActiveTab, VideoJob, JobStatus, TrackedFile, ApiKey, MvGenre, AppConfig, Preset, StatsData } from './types';
-import { storySystemPrompt, liveSystemPrompt } from './constants';
-import Results from './components/Results';
-import { LoaderIcon, CopyIcon, UploadIcon, VideoIcon, KeyIcon, TrashIcon, FolderIcon, ExternalLinkIcon, PlayIcon, CogIcon, RetryIcon, ChartIcon, ShieldIcon, LockIcon } from './components/Icons';
+import { AppConfig, ApiKey, TrackedFile, VideoJob, Preset } from './types';
+import { Activation } from './components/Activation';
+import { ApiKeyManagerScreen } from './components/ApiKeyManager';
+import { StatsModal, AdminLoginModal, AlertModal } from './components/AppModals';
+import { Generator } from './components/Generator';
+import { Tracker } from './components/Tracker';
+import { ChartIcon, ShieldIcon, KeyIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
-// Safely get ipcRenderer only if in Electron
 const ipcRenderer = isElectron && (window as any).require ? (window as any).require('electron').ipcRenderer : null;
-
-
-// --- Activation Component ---
-interface ActivationProps {
-  machineId: string;
-  onActivate: (key: string) => Promise<boolean>;
-}
-
-const Activation: React.FC<ActivationProps> = ({ machineId, onActivate }) => {
-  const [key, setKey] = useState('');
-  const [error, setError] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [isActivating, setIsActivating] = useState(false);
-  const machineIdInputRef = useRef<HTMLInputElement>(null);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setIsActivating(true);
-    if (!(await onActivate(key.trim()))) {
-      setError('Mã kích hoạt không hợp lệ. Vui lòng thử lại.');
-    }
-    setIsActivating(false);
-  };
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(machineId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Failed to copy using navigator.clipboard:', err);
-      if (machineIdInputRef.current) {
-        machineIdInputRef.current.select();
-        machineIdInputRef.current.setSelectionRange(0, 99999);
-        alert('Không thể tự động sao chép. Vui lòng nhấn Ctrl+C để sao chép thủ công.');
-      }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    }
-  };
-
-  return (
-    <div className="text-white min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md mx-auto">
-        <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl text-center">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">
-            Kích hoạt ứng dụng
-          </h1>
-          <p className="text-indigo-200 mb-6">
-            Vui lòng cung cấp mã máy tính cho quản trị viên Cường-VFATS để nhận mã kích hoạt.
-          </p>
-          
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-indigo-100 mb-2">
-              Mã máy tính của bạn
-            </label>
-            <div className="relative">
-              <input
-                ref={machineIdInputRef}
-                type="text"
-                readOnly
-                value={machineId}
-                className="w-full bg-black/30 border-2 border-white/20 rounded-lg p-3 text-white font-mono text-center pr-10"
-                aria-label="Mã máy tính"
-              />
-              <button
-                onClick={handleCopy}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-indigo-300 hover:text-white transition"
-                title="Sao chép mã"
-              >
-                <CopyIcon className="w-5 h-5" />
-              </button>
-            </div>
-            {copied && <p className="text-emerald-400 text-sm mt-2">Đã sao chép!</p>}
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="licenseKey" className="block text-sm font-medium text-indigo-100 mb-2">
-                Nhập mã kích hoạt
-              </label>
-              <textarea
-                id="licenseKey"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                rows={3}
-                className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                placeholder="Dán mã kích hoạt bạn nhận được vào đây..."
-                required
-              />
-            </div>
-            
-            <button
-              type="submit"
-              disabled={isActivating}
-              className="w-full bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
-            >
-              {isActivating ? <LoaderIcon /> : 'Kích hoạt'}
-            </button>
-            
-            {error && (
-              <div className="text-red-300 font-medium bg-red-900/50 p-3 rounded-lg mt-4">
-                {error}
-              </div>
-            )}
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- API Key Manager Component ---
-interface ApiKeyManagerProps {
-  apiKeys: ApiKey[];
-  onKeySelect: (key: ApiKey) => void;
-  onKeyAdd: (key: ApiKey) => void;
-  onKeyDelete: (keyId: string) => void;
-}
-
-const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onKeySelect, onKeyAdd, onKeyDelete }) => {
-    const [newKeyName, setNewKeyName] = useState('');
-    const [newKeyValue, setNewKeyValue] = useState('');
-    const [error, setError] = useState('');
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        setError('');
-        if (!newKeyName.trim() || !newKeyValue.trim()) {
-            setError('Biệt danh và giá trị khóa không được để trống.');
-            return;
-        }
-        if (apiKeys.some(k => k.name === newKeyName.trim())) {
-            setError('Biệt danh này đã tồn tại. Vui lòng chọn một biệt danh khác.');
-            return;
-        }
-        onKeyAdd({
-            id: crypto.randomUUID(),
-            name: newKeyName.trim(),
-            value: newKeyValue.trim(),
-        });
-        setNewKeyName('');
-        setNewKeyValue('');
-    };
-
-    const truncateKey = (key: string) => `${key.slice(0, 5)}...${key.slice(-4)}`;
-
-    return (
-        <div className="text-white min-h-screen flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl mx-auto">
-                <div className="glass-card rounded-2xl p-6 sm:p-8 shadow-2xl">
-                    <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2 text-center">
-                        Quản lý API Keys (Đọc hướng dẫn để lấy khoá API)
-                    </h1>
-                    <p className="text-indigo-200 mb-6 text-center">
-                        Thêm, xóa, hoặc chọn một Google AI API Key để sử dụng.
-                    </p>
-
-                    {apiKeys.length > 0 && (
-                        <div className="mb-8">
-                            <h2 className="text-lg font-semibold text-indigo-100 mb-3">Khóa đã lưu</h2>
-                            <div className="space-y-3 key-list">
-                                {apiKeys.map(key => (
-                                    <div key={key.id} className="key-item">
-                                        <div className="flex items-center gap-3">
-                                            <KeyIcon className="w-5 h-5 text-indigo-300" />
-                                            <div>
-                                                <p className="font-semibold text-white">{key.name}</p>
-                                                <p className="text-sm text-gray-400 font-mono">{truncateKey(key.value)}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <button
-                                                onClick={() => onKeySelect(key)}
-                                                className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition text-sm"
-                                            >
-                                                Sử dụng
-                                            </button>
-                                            <button
-                                                onClick={() => onKeyDelete(key.id)}
-                                                className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition"
-                                                title="Xóa khóa"
-                                            >
-                                                <TrashIcon className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="pt-6 border-t border-white/20">
-                        <h2 className="text-lg font-semibold text-indigo-100 mb-4">Thêm khóa mới</h2>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label htmlFor="keyName" className="block text-sm font-medium text-indigo-100 mb-2">
-                                    Biệt danh (Nickname)
-                                </label>
-                                <input
-                                    id="keyName"
-                                    type="text"
-                                    value={newKeyName}
-                                    onChange={(e) => setNewKeyName(e.target.value)}
-                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                                    placeholder="Ví dụ: Key cá nhân, Key công ty"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label htmlFor="keyValue" className="block text-sm font-medium text-indigo-100 mb-2">
-                                    Giá trị API Key
-                                </label>
-                                <input
-                                    id="keyValue"
-                                    type="password"
-                                    value={newKeyValue}
-                                    onChange={(e) => setNewKeyValue(e.target.value)}
-                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                                    placeholder="Dán API Key của bạn vào đây"
-                                    required
-                                />
-                            </div>
-                            {error && <p className="text-red-300 text-sm">{error}</p>}
-                            <button
-                                type="submit"
-                                className="w-full bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300"
-                            >
-                                Thêm và Lưu khóa
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- Stats Modal Component ---
-interface StatsModalProps {
-    onClose: () => void;
-    isAdmin: boolean;
-    onDeleteHistory: (date: string) => void;
-    onDeleteAll: () => void;
-}
-
-const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDeleteHistory, onDeleteAll }) => {
-    const [stats, setStats] = useState<StatsData | null>(null);
-    const [loading, setLoading] = useState(true);
-
-    const loadStats = () => {
-        if (ipcRenderer) {
-            ipcRenderer.invoke('get-stats').then((data: StatsData) => {
-                setStats(data);
-                setLoading(false);
-            }).catch((err: any) => {
-                console.error("Failed to load stats", err);
-                setLoading(false);
-            });
-        } else {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        loadStats();
-    }, []);
-
-    const handleDelete = async (date: string) => {
-        await onDeleteHistory(date);
-        loadStats(); // Reload after delete
-    };
-    
-    const handleDeleteAll = async () => {
-        await onDeleteAll();
-        loadStats();
-    };
-
-    const maxCount = stats?.history.reduce((max, item) => Math.max(max, item.count), 0) || 1;
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className={`glass-card border ${isAdmin ? 'border-red-500/50' : 'border-white/20'} rounded-xl max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-hidden flex flex-col`}>
-                <div className="p-6 border-b border-white/10 flex justify-between items-center">
-                    <h3 className="text-2xl font-bold text-white flex items-center gap-2">
-                        {isAdmin ? <ShieldIcon className="w-6 h-6 text-red-500" /> : <ChartIcon className="w-6 h-6 text-indigo-400" />}
-                        {isAdmin ? 'Quản Trị Thống Kê (Admin)' : 'Thống kê Sản Xuất'}
-                    </h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">&times;</button>
-                </div>
-                
-                <div className="p-6 overflow-y-auto flex-1">
-                    {loading ? (
-                        <div className="flex justify-center py-10"><LoaderIcon /></div>
-                    ) : !stats ? (
-                        <p className="text-center text-gray-400">Không có dữ liệu thống kê.</p>
-                    ) : (
-                        <div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                                <div className="bg-white/5 p-4 rounded-lg text-center border border-white/10">
-                                    <p className="text-indigo-300 text-xs uppercase tracking-wider font-semibold">Tổng Video Hoàn Thành</p>
-                                    <p className="text-3xl font-bold text-emerald-400 mt-2">{stats.total}</p>
-                                </div>
-                                <div className="bg-white/5 p-4 rounded-lg text-center border border-white/10">
-                                    <p className="text-indigo-300 text-xs uppercase tracking-wider font-semibold">Số Lượng Prompt Đã Tạo</p>
-                                    <p className="text-3xl font-bold text-blue-400 mt-2">{stats.promptCount}</p>
-                                </div>
-                                <div className="bg-white/5 p-4 rounded-lg text-center border border-white/10">
-                                    <p className="text-indigo-300 text-xs uppercase tracking-wider font-semibold">Credit Đã Sử Dụng</p>
-                                    <p className="text-3xl font-bold text-yellow-400 mt-2">{stats.totalCredits}</p>
-                                    <p className="text-[10px] text-gray-400">(1 Video = 10 Credits)</p>
-                                </div>
-                                <div className="bg-white/5 p-4 rounded-lg text-center border border-white/10">
-                                    <p className="text-indigo-300 text-xs uppercase tracking-wider font-semibold">Mã Máy</p>
-                                    <p className="text-xs font-mono text-gray-300 mt-2 bg-black/30 p-2 rounded break-all">{stats.machineId}</p>
-                                </div>
-                            </div>
-
-                            {isAdmin && (
-                                <div className="mb-8 p-4 bg-black/20 rounded-xl border border-white/10">
-                                    <h4 className="text-white font-semibold mb-4 flex items-center gap-2"><ChartIcon className="w-4 h-4"/> Biểu đồ sản lượng video theo ngày</h4>
-                                    <div className="flex items-end gap-2 h-40 pt-4 pb-2 px-2 overflow-x-auto">
-                                        {stats.history.length === 0 ? <p className="text-gray-500 w-full text-center">Chưa có dữ liệu biểu đồ</p> : 
-                                            stats.history.slice(0, 14).reverse().map((item) => (
-                                                <div key={item.date} className="flex flex-col items-center gap-1 group relative min-w-[40px] flex-1">
-                                                    <div className="text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity absolute -top-6 bg-black/80 px-2 py-1 rounded">{item.count}</div>
-                                                    <div 
-                                                        className="w-full bg-indigo-500/50 hover:bg-indigo-400/80 transition-all rounded-t-sm"
-                                                        style={{ height: `${(item.count / maxCount) * 100}%`, minHeight: '4px' }}
-                                                    ></div>
-                                                    <div className="text-[10px] text-gray-400 rotate-0 truncate w-full text-center">{item.date.split('-').slice(1).join('/')}</div>
-                                                </div>
-                                            ))
-                                        }
-                                    </div>
-                                    <div className="flex justify-end mt-2">
-                                         <button 
-                                            onClick={() => {
-                                                if(confirm("Bạn có chắc chắn muốn xóa TOÀN BỘ lịch sử thống kê? Hành động này không thể hoàn tác.")) {
-                                                    handleDeleteAll();
-                                                }
-                                            }}
-                                            className="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded transition text-xs flex items-center gap-2"
-                                        >
-                                            <TrashIcon className="w-3 h-3"/> Reset Dữ Liệu
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            <h4 className="text-lg font-semibold text-white mb-3">Chi tiết lịch sử</h4>
-                            <div className="overflow-hidden rounded-lg border border-white/10 max-h-60 overflow-y-auto">
-                                <table className="w-full text-left text-sm text-gray-300">
-                                    <thead className="bg-white/10 text-white uppercase font-semibold sticky top-0 backdrop-blur-md">
-                                        <tr>
-                                            <th className="px-6 py-3">Ngày</th>
-                                            <th className="px-6 py-3 text-right">Số lượng Video</th>
-                                            {isAdmin && <th className="px-6 py-3 text-center">Thao tác</th>}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/10 bg-white/5">
-                                        {stats.history.length === 0 ? (
-                                            <tr><td colSpan={isAdmin ? 3 : 2} className="px-6 py-4 text-center">Chưa có dữ liệu</td></tr>
-                                        ) : (
-                                            stats.history.map((item) => (
-                                                <tr key={item.date} className="hover:bg-white/10 transition">
-                                                    <td className="px-6 py-4 font-medium text-white">{item.date}</td>
-                                                    <td className="px-6 py-4 text-right font-bold text-emerald-400">{item.count}</td>
-                                                    {isAdmin && (
-                                                        <td className="px-6 py-4 text-center">
-                                                            <button 
-                                                                onClick={() => {
-                                                                    if(confirm(`Xóa thống kê ngày ${item.date}?`)) {
-                                                                        handleDelete(item.date);
-                                                                    }
-                                                                }}
-                                                                className="text-red-400 hover:text-red-300 p-1"
-                                                            >
-                                                                <TrashIcon className="w-4 h-4"/>
-                                                            </button>
-                                                        </td>
-                                                    )}
-                                                </tr>
-                                            ))
-                                        )}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
-                </div>
-                
-                <div className="p-4 border-t border-white/10 text-right">
-                    <button 
-                        onClick={onClose}
-                        className="px-6 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition shadow-lg"
-                    >
-                        Đóng
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- Admin Login Modal ---
-interface AdminLoginModalProps {
-    onClose: () => void;
-    onLoginSuccess: () => void;
-}
-
-const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onLoginSuccess }) => {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const handleLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
-
-        if (ipcRenderer) {
-            const result = await ipcRenderer.invoke('verify-admin', { username, password });
-            if (result.success) {
-                onLoginSuccess();
-            } else {
-                setError(result.error || 'Đăng nhập thất bại');
-            }
-        } else {
-            // Dev mode bypass or mock
-            if (username === 'bescuong' && password === '285792684') {
-                onLoginSuccess();
-            } else {
-                 setError('Sai thông tin đăng nhập');
-            }
-        }
-        setLoading(false);
-    };
-
-    return (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
-            <div className="glass-card border border-indigo-500/30 rounded-xl max-w-sm w-full shadow-2xl p-6">
-                <div className="text-center mb-6">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-indigo-900/50 mb-4">
-                        <LockIcon className="w-6 h-6 text-indigo-300" />
-                    </div>
-                    <h3 className="text-xl font-bold text-white">Đăng Nhập Quản Trị</h3>
-                </div>
-                
-                <form onSubmit={handleLogin} className="space-y-4">
-                    <div>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            placeholder="Tên đăng nhập"
-                            className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white focus:border-indigo-500 transition"
-                            required
-                        />
-                    </div>
-                    <div>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder="Mật khẩu"
-                            className="w-full bg-black/30 border border-white/10 rounded-lg p-3 text-white focus:border-indigo-500 transition"
-                            required
-                        />
-                    </div>
-                    {error && <p className="text-red-400 text-sm text-center">{error}</p>}
-                    
-                    <div className="flex gap-3 mt-6">
-                        <button 
-                            type="button" 
-                            onClick={onClose}
-                            className="flex-1 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-semibold transition"
-                        >
-                            Hủy
-                        </button>
-                        <button 
-                            type="submit"
-                            disabled={loading}
-                            className="flex-1 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition disabled:bg-gray-500"
-                        >
-                            {loading ? <LoaderIcon /> : 'Đăng nhập'}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-// --- Modal Alert Component ---
-interface AlertModalProps {
-  title: string;
-  message: string;
-  type: 'completion' | 'update';
-  onClose: () => void;
-  onConfirm?: () => void;
-}
-
-const AlertModal: React.FC<AlertModalProps> = ({ title, message, type, onClose, onConfirm }) => {
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-gray-900 border-2 border-yellow-500 rounded-xl max-w-md w-full shadow-2xl transform scale-100 transition-all animate-bounce-small">
-        <div className="p-6 text-center">
-          <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 mb-4">
-             {type === 'update' ? (
-                <svg className="h-10 w-10 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-             ) : (
-                <svg className="h-10 w-10 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-             )}
-          </div>
-          <h3 className="text-2xl font-bold text-white mb-2">{title}</h3>
-          <p className="text-gray-300 mb-6">{message}</p>
-          <div className="flex justify-center gap-4">
-            <button 
-              onClick={onClose}
-              className="px-6 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white font-semibold transition"
-            >
-              Đóng
-            </button>
-            {onConfirm && (
-              <button 
-                onClick={onConfirm}
-                className="px-6 py-2 rounded-lg bg-yellow-500 hover:bg-yellow-600 text-gray-900 font-bold transition"
-              >
-                {type === 'update' ? 'Cập nhật ngay' : 'OK'}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('generator');
-  const [videoType, setVideoType] = useState<VideoType>('story');
-  const [formData, setFormData] = useState<FormData>({
-    idea: '',
-    liveAtmosphere: '',
-    liveArtistImage: null,
-    liveArtistName: '',
-    liveArtist: '',
-    songMinutes: '3',
-    songSeconds: '30',
-    projectName: '',
-    model: 'gemini-flash-lite-latest',
-    mvGenre: 'narrative',
-    filmingStyle: 'auto',
-    country: 'Vietnamese',
-    musicGenre: 'v-pop',
-    customMusicGenre: '',
-    characterConsistency: true,
-    characterCount: 1,
-    temperature: 0.3,
-  });
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
-  const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
-  
-  const [isActivated, setIsActivated] = useState<boolean>(false);
-  const [machineId, setMachineId] = useState<string>('');
-  const [configLoaded, setConfigLoaded] = useState<boolean>(false);
-  
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [activeApiKey, setActiveApiKey] = useState<ApiKey | null>(null);
-  const [isManagingKeys, setIsManagingKeys] = useState(false);
+    // --- Global State ---
+    const [activeTab, setActiveTab] = useState<'generator' | 'tracker'>('generator');
+    const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
+    const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState(0);
+    const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
+    
+    // --- Auth & Config State ---
+    const [isActivated, setIsActivated] = useState(false);
+    const [machineId, setMachineId] = useState('');
+    const [configLoaded, setConfigLoaded] = useState(false);
+    const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+    const [activeApiKey, setActiveApiKey] = useState<ApiKey | null>(null);
+    const [isManagingKeys, setIsManagingKeys] = useState(false);
+    const [presets, setPresets] = useState<Preset[]>([]);
 
-  const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
-  const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState<number>(0);
+    // --- Modal State ---
+    const [showStats, setShowStats] = useState(false);
+    const [showAdminLogin, setShowAdminLogin] = useState(false);
+    const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
+    const [alertModal, setAlertModal] = useState<{title: string, message: string, type: 'completion' | 'update', onConfirm?: () => void} | null>(null);
 
-  const [ffmpegFound, setFfmpegFound] = useState<boolean | null>(null);
-  const [isCombiningVideo, setIsCombiningVideo] = useState(false);
-  const [isCombiningAll, setIsCombiningAll] = useState(false);
-  const [lastCombinedVideoPath, setLastCombinedVideoPath] = useState<string | null>(null);
+    // --- Process State ---
+    const [ffmpegFound, setFfmpegFound] = useState<boolean | null>(null);
+    const [isCombining, setIsCombining] = useState(false);
 
-  const [presets, setPresets] = useState<Preset[]>([]);
-  const [newPresetName, setNewPresetName] = useState('');
-  const [selectedPresetId, setSelectedPresetId] = useState('');
-
-  const [alertModal, setAlertModal] = useState<{title: string, message: string, type: 'completion' | 'update', onConfirm?: () => void} | null>(null);
-  
-  // --- Admin & Stats State ---
-  const [showStats, setShowStats] = useState(false);
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
-
-  const fileDiscoveryRef = useRef<Set<string>>(new Set());
-  const SECRET_KEY = 'your-super-secret-key-for-mv-prompt-generator-pro-2024';
-
-  // Simplified and localized options
-  const mvGenreOptions: { value: MvGenre, label: string }[] = [
-      { value: 'narrative', label: 'Kể chuyện / Phim ngắn' },
-      { value: 'cinematic-short-film', label: 'Điện ảnh (Cinematic)' },
-      { value: 'performance', label: 'Trình diễn / Biểu diễn' },
-      { value: 'dance-choreography', label: 'Nhảy / Vũ đạo' },
-      { value: 'lyrical', label: 'Video lời bài hát (Lyric)' },
-      { value: 'conceptual', label: 'Nghệ thuật / Trừu tượng' },
-      { value: 'abstract-visualizer', label: 'Hiệu ứng hình ảnh (Visualizer)' },
-      { value: 'scenic', label: 'Cảnh đẹp / Chill (Không người)' },
-      { value: 'animation', label: 'Hoạt hình (2D/3D)' },
-      { value: 'one-take', label: 'Một cú máy (One-shot)' },
-      { value: 'surreal', label: 'Mộng mơ / Kỳ ảo' },
-      { value: 'sci-fi', label: 'Khoa học viễn tưởng' },
-      { value: 'horror', label: 'Kinh dị / Rùng rợn' },
-      { value: 'historical-period', label: 'Cổ trang / Lịch sử' },
-      { value: 'retro-futurism', label: 'Phong cách Retro / Cổ điển' },
-      { value: 'social-commentary', label: 'Phóng sự / Đời sống' },
-      { value: 'documentary', label: 'Tài liệu' },
-  ];
-
-  const filmingStyleOptions: { value: string, label: string }[] = [
-      { value: 'auto', label: 'AI tự chọn (Đẹp nhất)' },
-      { value: 'Vintage 35mm Film', label: 'Màu phim cũ (Vintage)' },
-      { value: 'Sharp & Modern Digital', label: 'Hiện đại & Sắc nét' },
-      { value: 'Artistic Black & White', label: 'Đen trắng nghệ thuật' },
-      { value: 'Cinematic Neon Noir', label: 'Neon (Cyberpunk)' },
-      { value: 'Dark & Moody Low-Key', label: 'Tông tối / Tâm trạng' },
-      { value: 'Golden Hour Glow', label: 'Nắng vàng (Golden Hour)' },
-      { value: 'Clean & Minimalist', label: 'Tối giản (Minimalist)' },
-      { value: 'Surreal & Dreamlike', label: 'Mộng mơ (Dreamy)' },
-      { value: 'Epic Drone Cinematography', label: 'Quay Flycam' },
-      { value: 'High-Speed Slow Motion', label: 'Quay chậm (Slow Motion)' },
-      { value: 'Macro & Extreme Close-up', label: 'Cận cảnh chi tiết' },
-      { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất (POV)' },
-      { value: 'Found Footage / Handheld', label: 'Cầm tay (Rung nhẹ)' },
-      { value: 'Wes Anderson Style', label: 'Màu Pastel / Đối xứng' },
-      { value: '80s VHS Look', label: 'Băng từ (VHS)' },
-      { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình Ghibli' },
-      { value: '3D Animation (Pixar Style)', label: 'Hoạt hình Pixar' },
-  ];
-  
-  const countryOptions: { value: string, label: string }[] = [
-    { value: 'Vietnamese', label: 'Việt Nam' },
-    { value: 'American', label: 'Mỹ (American)' },
-    { value: 'British', label: 'Anh (British)' },
-    { value: 'South Korean', label: 'Hàn Quốc (South Korean)' },
-    { value: 'Japanese', label: 'Nhật Bản (Japanese)' },
-    { value: 'Chinese', label: 'Trung Quốc (Chinese)' },
-    { value: 'French', label: 'Pháp (French)' },
-    { value: 'Brazilian', label: 'Brazil' },
-    { value: 'Spanish', label: 'Tây Ban Nha (Spanish)' },
-    { value: 'Generic/International', label: 'Quốc tế / Không xác định' },
-  ];
-
-  const musicGenreOptions: { value: string, label: string }[] = [
-    { value: 'v-pop', label: 'V-Pop' },
-    { value: 'k-pop', label: 'K-Pop' },
-    { value: 'us-uk-pop', label: 'US-UK Pop' },
-    { value: 'jazz-bossa-nova', label: 'Jazz Bossa Nova' },
-    { value: 'smooth-jazz', label: 'Smooth Jazz' },
-    { value: 'edm', label: 'EDM (Electronic Dance Music)' },
-    { value: 'worship', label: 'Nhạc Thờ Phụng (Worship)' },
-    { value: 'country', label: 'Nhạc Country' },
-    { value: 'other', label: 'Khác (Nhập thủ công)' }
-  ];
-
-  const getEncryptionKey = useCallback((mid: string) => CryptoJS.SHA256(mid + SECRET_KEY).toString(), []);
-
-  const encrypt = useCallback((text: string) => {
-    if (!machineId) return '';
-    return CryptoJS.AES.encrypt(text, getEncryptionKey(machineId)).toString();
-  }, [machineId, getEncryptionKey]);
-
-  const validateLicenseKey = useCallback(async (key: string): Promise<boolean> => {
-    if (!machineId) return false;
-    try {
-      const parts = key.trim().split('.');
-      if (parts.length !== 2) return false;
-      const [receivedMachineId, receivedSignature] = parts;
-      if (receivedMachineId !== machineId) return false;
-      const expectedSignature = CryptoJS.HmacSHA256(machineId, SECRET_KEY).toString(CryptoJS.enc.Hex);
-      return receivedSignature === expectedSignature;
-    } catch (e) {
-      return false;
-    }
-  }, [machineId]);
-
-  const handleActivate = useCallback(async (key: string): Promise<boolean> => {
-      const isValid = await validateLicenseKey(key);
-      if (isValid) {
-          if (isElectron && ipcRenderer) {
-              await ipcRenderer.invoke('save-app-config', { licenseKey: key, machineId: machineId });
-          }
-          setIsActivated(true);
-          return true;
-      }
-      return false;
-  }, [validateLicenseKey, machineId]);
-  
-  const handleKeyAdd = (newKey: ApiKey) => {
-    const updatedKeys = [...apiKeys, newKey];
-    setApiKeys(updatedKeys);
-    if (isElectron && ipcRenderer) {
-        ipcRenderer.invoke('save-app-config', { apiKeysEncrypted: encrypt(JSON.stringify(updatedKeys)) });
-    }
-  };
-
-  const handleKeyDelete = (keyId: string) => {
-    const updatedKeys = apiKeys.filter(k => k.id !== keyId);
-    setApiKeys(updatedKeys);
-
-    const configUpdate: { apiKeysEncrypted: string, activeApiKeyId?: string | null } = {
-        apiKeysEncrypted: encrypt(JSON.stringify(updatedKeys))
+    // --- Helpers ---
+    const getEncryptionKey = (mid: string) => CryptoJS.SHA256(mid + SECRET_KEY).toString();
+    const encrypt = (text: string) => machineId ? CryptoJS.AES.encrypt(text, getEncryptionKey(machineId)).toString() : '';
+    const decrypt = (text: string, mid: string) => {
+        try { return CryptoJS.AES.decrypt(text, CryptoJS.SHA256(mid + SECRET_KEY).toString()).toString(CryptoJS.enc.Utf8); } catch { return ''; }
     };
 
-    if(activeApiKey?.id === keyId) {
-      setActiveApiKey(null);
-      configUpdate.activeApiKeyId = null;
-    }
-
-    if (isElectron && ipcRenderer) {
-        ipcRenderer.invoke('save-app-config', configUpdate);
-    }
-  };
-
-  const handleKeySelect = (key: ApiKey) => {
-    setActiveApiKey(key);
-    if (isElectron && ipcRenderer) {
-        ipcRenderer.invoke('save-app-config', { activeApiKeyId: key.id });
-    }
-    setIsManagingKeys(false);
-  };
-
-  useEffect(() => {
-    if (isElectron && ipcRenderer) {
-      ipcRenderer.invoke('get-app-config').then(async (config: AppConfig) => {
-        let currentMachineId = config.machineId || '';
-        let finalConfig = { ...config };
-        let isActivatedResult = false;
-        
-        const localValidateLicenseKey = (key: string, mid: string): boolean => {
-          if (!key || !mid) return false;
-          try {
-            const parts = key.trim().split('.');
-            if (parts.length !== 2) return false;
-            const [receivedMachineId, receivedSignature] = parts;
-            if (receivedMachineId !== mid) return false;
-            const expectedSignature = CryptoJS.HmacSHA256(mid, SECRET_KEY).toString(CryptoJS.enc.Hex);
-            return receivedSignature === expectedSignature;
-          } catch (e) { return false; }
-        };
-  
-        if (finalConfig.licenseKey && currentMachineId && localValidateLicenseKey(finalConfig.licenseKey, currentMachineId)) {
-          isActivatedResult = true;
-        } else {
-          const oldLicenseKey = localStorage.getItem('licenseKey');
-          if (oldLicenseKey) {
-            const parts = oldLicenseKey.trim().split('.');
-            if (parts.length === 2) {
-              const oldMachineId = parts[0];
-              if (localValidateLicenseKey(oldLicenseKey, oldMachineId)) {
-                isActivatedResult = true;
-                finalConfig.licenseKey = oldLicenseKey;
-                finalConfig.machineId = oldMachineId;
-                currentMachineId = oldMachineId;
-                
-                await ipcRenderer.invoke('save-app-config', { licenseKey: oldLicenseKey, machineId: oldMachineId });
-                localStorage.removeItem('licenseKey'); 
-              }
-            }
-          }
-        }
-        
-        setMachineId(currentMachineId);
-        setIsActivated(isActivatedResult);
-  
-        const decryptLocal = (ciphertext: string, mid: string) => {
-          if (!mid || !ciphertext) return '';
-          try {
-            const getEncryptionKeyLocal = () => CryptoJS.SHA256(mid + SECRET_KEY).toString();
-            const bytes = CryptoJS.AES.decrypt(ciphertext, getEncryptionKeyLocal());
-            return bytes.toString(CryptoJS.enc.Utf8);
-          } catch { return ''; }
-        };
-  
-        const decryptedKeysStr = decryptLocal(finalConfig.apiKeysEncrypted || '', currentMachineId);
-        let loadedKeys: ApiKey[] = [];
-        if (decryptedKeysStr) {
-          try {
-            loadedKeys = JSON.parse(decryptedKeysStr);
-          } catch { /* ignore parsing errors */ }
-        }
-        setApiKeys(loadedKeys);
-  
-        const activeKeyId = finalConfig.activeApiKeyId;
-        if (activeKeyId) {
-          const keyToActivate = loadedKeys.find(k => k.id === activeKeyId);
-          if (keyToActivate) setActiveApiKey(keyToActivate);
-        }
-        
-        if (finalConfig.presets) {
-          setPresets(finalConfig.presets);
-        }
-        
-        setConfigLoaded(true);
-      });
-    } else {
-      setIsActivated(true);
-      setConfigLoaded(true);
-    }
-  }, []);
-
-    const parseExcelData = (data: Uint8Array): VideoJob[] => {
-        const workbook = XLSX.read(data, { type: 'buffer' });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        
-        const dataAsArrays: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false });
-
-        if (dataAsArrays.length < 2) return [];
-
-        const headers: string[] = dataAsArrays[0].map(h => String(h).trim());
-        const headerMap: { [key: string]: number } = {};
-        headers.forEach((h, i) => { headerMap[h] = i; });
-        
-        const dataRows = dataAsArrays.slice(1);
-        const validStatuses: JobStatus[] = ['Pending', 'Processing', 'Generating', 'Completed', 'Failed'];
-
-        return dataRows.map((rowArray, index) => {
-            const get = (headerName: string) => rowArray[headerMap[headerName]] || '';
-            let statusStr = String(get('STATUS')).trim();
-            let status: JobStatus = 'Pending';
-            if (statusStr && validStatuses.includes(statusStr as JobStatus)) {
-                status = statusStr as JobStatus;
-            }
-
-            return {
-                id: get('JOB_ID') || `job_${index + 1}`,
-                prompt: get('PROMPT') || '',
-                imagePath: get('IMAGE_PATH') || '',
-                imagePath2: get('IMAGE_PATH_2') || '',
-                imagePath3: get('IMAGE_PATH_3') || '',
-                status: status,
-                videoName: get('VIDEO_NAME') || '',
-                typeVideo: get('TYPE_VIDEO') || '',
-                videoPath: get('VIDEO_PATH') || undefined,
-            };
-        }).filter(job => job.id && String(job.id).trim());
-    };
-
-    // Effect for IPC listener setup
+    // --- Initialization Effect ---
     useEffect(() => {
-      if (!ipcRenderer) return;
-  
-      const handleFileUpdate = (_event: any, { path, content }: { path: string, content: Uint8Array }) => {
-          const newJobs = parseExcelData(content);
-          setTrackedFiles(prevFiles => 
-              prevFiles.map(file => 
-                  file.path === path ? { ...file, jobs: newJobs } : file
-              )
-          );
-      };
-  
-      const handleCombineAllProgress = (_event: any, { message }: { message: string }) => {
-          setFeedback({ type: 'info', message });
-      };
+        if (!ipcRenderer) { setIsActivated(true); setConfigLoaded(true); return; }
+        ipcRenderer.invoke('get-app-config').then((config: AppConfig) => {
+            const mid = config.machineId || '';
+            setMachineId(mid);
+            
+            // Check License
+            let valid = false;
+            try {
+                if (config.licenseKey && mid) {
+                    const [rid, sig] = config.licenseKey.split('.');
+                    if (rid === mid && sig === CryptoJS.HmacSHA256(mid, SECRET_KEY).toString(CryptoJS.enc.Hex)) valid = true;
+                }
+            } catch {}
+            setIsActivated(valid);
 
-      const handleShowAlertModal = (_event: any, data: { title: string, message: string, type: 'completion' | 'update', onConfirm?: () => void }) => {
-        // If type is update, we bind the confirm to restart logic (sent back to main)
-        if (data.type === 'update') {
-            setAlertModal({
-                ...data,
-                onConfirm: () => ipcRenderer.send('restart_app')
-            });
-        } else {
+            // Load Keys
+            try {
+                const keysStr = decrypt(config.apiKeysEncrypted || '', mid);
+                const keys = keysStr ? JSON.parse(keysStr) : [];
+                setApiKeys(keys);
+                if (config.activeApiKeyId) setActiveApiKey(keys.find((k:ApiKey) => k.id === config.activeApiKeyId) || null);
+            } catch {}
+
+            // Load Presets
+            if (config.presets) setPresets(config.presets);
+            setConfigLoaded(true);
+        });
+        
+        // Listeners
+        ipcRenderer.on('file-content-updated', (_:any, {path, content}:any) => {
+             const wb = XLSX.read(content, {type:'buffer'});
+             const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, blankrows:false}).slice(1) as any[][];
+             const jobs: VideoJob[] = data.map((r,i) => ({
+                 id: r[0]||`job_${i}`, prompt: r[1]||'', imagePath:'', imagePath2:'', imagePath3:'',
+                 status: (['Pending','Processing','Generating','Completed','Failed'].includes(r[5])?r[5]:'Pending') as any,
+                 videoName: r[6]||'', typeVideo: r[7]||'', videoPath: r[8]||undefined
+             })).filter(j => j.id);
+             
+             setTrackedFiles(prev => prev.map(f => f.path === path ? { ...f, jobs } : f));
+        });
+        
+        ipcRenderer.on('show-alert-modal', (_:any, data:any) => {
+            if (data.type === 'update') data.onConfirm = () => ipcRenderer.send('restart_app');
             setAlertModal(data);
+        });
+
+        // Check FFmpeg
+        ipcRenderer.invoke('check-ffmpeg').then((res:any) => setFfmpegFound(res.found));
+
+        // Auto Reload
+        const interval = setInterval(async () => {
+             if (activeTab === 'tracker') handleReloadVideos(); 
+        }, 10000);
+
+        return () => clearInterval(interval);
+    }, [activeTab]); 
+
+    // --- Actions ---
+    const handleActivate = async (key: string) => {
+        try {
+            const [rid, sig] = key.split('.');
+            if (rid === machineId && sig === CryptoJS.HmacSHA256(machineId, SECRET_KEY).toString(CryptoJS.enc.Hex)) {
+                if (ipcRenderer) ipcRenderer.invoke('save-app-config', { licenseKey: key, machineId });
+                setIsActivated(true);
+                return true;
+            }
+        } catch {}
+        return false;
+    };
+
+    const handleKeyUpdate = (keys: ApiKey[], activeId: string | null) => {
+        setApiKeys(keys);
+        if (activeId) setActiveApiKey(keys.find(k => k.id === activeId) || null);
+        else setActiveApiKey(null);
+        if (ipcRenderer) ipcRenderer.invoke('save-app-config', { apiKeysEncrypted: encrypt(JSON.stringify(keys)), activeApiKeyId: activeId });
+    };
+
+    const handleGenerateSuccess = async (scenes: any[], formData: any) => {
+        const safeName = (formData.projectName || 'MV').replace(/[^a-z0-9_]/gi, '_');
+        const jobs: VideoJob[] = scenes.map((p:any,i:number) => ({
+            id: `Job_${i+1}`, prompt: p.prompt_text, status: 'Pending', videoName: `${safeName}_${i+1}`, typeVideo: '', imagePath:'', imagePath2:'', imagePath3:''
+        }));
+        
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(jobs.map(j=>({JOB_ID:j.id, PROMPT:j.prompt, IMAGE_PATH:'', IMAGE_PATH_2:'', IMAGE_PATH_3:'', STATUS:'', VIDEO_NAME:j.videoName, TYPE_VIDEO:''})));
+        XLSX.utils.book_append_sheet(wb, ws, 'Prompts');
+        const content = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+        
+        if (ipcRenderer) {
+            const res = await ipcRenderer.invoke('save-file-dialog', { defaultPath: `${safeName}.xlsx`, fileContent: content });
+            if (res.success) {
+                const totalSec = (parseInt(formData.songMinutes)||0)*60 + (parseInt(formData.songSeconds)||0);
+                setTrackedFiles(p => [...p, { name: `${safeName}.xlsx`, jobs, path: res.filePath, targetDurationSeconds: totalSec }]);
+                setActiveTrackerFileIndex(trackedFiles.length); 
+                setActiveTab('tracker');
+                setFeedback({type:'success', message:'Đã lưu và bắt đầu theo dõi!'});
+                ipcRenderer.send('start-watching-file', res.filePath);
+            }
         }
-      };
-  
-      ipcRenderer.on('file-content-updated', handleFileUpdate);
-      ipcRenderer.on('combine-all-progress', handleCombineAllProgress);
-      ipcRenderer.on('show-alert-modal', handleShowAlertModal);
-  
-      return () => {
-          ipcRenderer.removeListener('file-content-updated', handleFileUpdate);
-          ipcRenderer.removeListener('combine-all-progress', handleCombineAllProgress);
-          ipcRenderer.removeListener('show-alert-modal', handleShowAlertModal);
-      };
-    }, []);
+    };
 
-    // Effect for managing file watchers
-    useEffect(() => {
-      if (!ipcRenderer) return;
-  
-      const watchedPaths = new Set(trackedFiles.map(f => f.path).filter((path): path is string => !!path));
-      const previousWatchedPaths = new Set<string>(JSON.parse(sessionStorage.getItem('watchedPaths') || '[]') as string[]);
-  
-      watchedPaths.forEach(path => {
-          if (!previousWatchedPaths.has(path)) {
-              ipcRenderer.send('start-watching-file', path);
-          }
-      });
-  
-      previousWatchedPaths.forEach(path => {
-          if (!watchedPaths.has(path)) {
-              ipcRenderer.send('stop-watching-file', path);
-          }
-      });
-      
-      sessionStorage.setItem('watchedPaths', JSON.stringify(Array.from(watchedPaths)));
-    }, [trackedFiles]);
-
-    // --- NEW: Auto-Reload Videos every 10s ---
-    useEffect(() => {
-        if (!ipcRenderer || activeTab !== 'tracker' || trackedFiles.length === 0) return;
-
-        const intervalId = setInterval(async () => {
-            let hasChanges = false;
-            const updatedFilesPromises = trackedFiles.map(async (file) => {
-                if (!file.path) return file;
-                try {
-                    const result = await ipcRenderer.invoke('find-videos-for-jobs', {
-                        jobs: file.jobs,
-                        excelFilePath: file.path
-                    });
-                    if (result.success) {
-                         if (JSON.stringify(result.jobs) !== JSON.stringify(file.jobs)) {
-                             hasChanges = true;
-                             return { ...file, jobs: result.jobs };
-                         }
-                    }
-                    return file;
-                } catch (e) {
-                    return file;
+    const handleReloadVideos = async () => {
+        if (!ipcRenderer) return;
+        setTrackedFiles(prev => {
+            prev.forEach(file => {
+                if (file.path) {
+                    ipcRenderer.invoke('find-videos-for-jobs', { jobs: file.jobs, excelFilePath: file.path })
+                        .then((res:any) => {
+                             if(res.success && JSON.stringify(res.jobs) !== JSON.stringify(file.jobs)) {
+                                 setTrackedFiles(curr => curr.map(f => f.path === file.path ? {...f, jobs: res.jobs} : f));
+                             }
+                        });
                 }
             });
-
-            const resolvedFiles = await Promise.all(updatedFilesPromises);
-
-            if (hasChanges) {
-                setTrackedFiles(resolvedFiles);
-            }
-        }, 10000); // 10 seconds
-
-        return () => clearInterval(intervalId);
-    }, [activeTab, trackedFiles]);
-  
-  const getFolderPath = (filePath: string | undefined): string => {
-    if (!filePath) return '';
-    const isWindows = navigator.userAgent.includes("Windows");
-    const separator = isWindows ? '\\' : '/';
-    return filePath.substring(0, filePath.lastIndexOf(separator));
-  };
-  
-  useEffect(() => {
-    setLastCombinedVideoPath(null);
-
-    const currentFile = trackedFiles.length > 0 ? trackedFiles[activeTrackerFileIndex] : null;
-    if (isElectron && ipcRenderer && currentFile?.path) {
-        const hasIncompleteJobs = currentFile.jobs.some(j => j.status === 'Completed' && !j.videoPath);
-        const discoveryKey = `${currentFile.path}-${currentFile.jobs.map(j => j.status).join(',')}`;
-        
-        if (hasIncompleteJobs && !fileDiscoveryRef.current.has(discoveryKey)) {
-            const filePath = currentFile.path;
-            
-            ipcRenderer.invoke('find-videos-for-jobs', { jobs: currentFile.jobs, excelFilePath: filePath })
-                .then((result: { success: boolean; jobs: VideoJob[]; error?: string; }) => {
-                    if (result.success) {
-                        setTrackedFiles(prevFiles =>
-                            prevFiles.map(file =>
-                                file.path === filePath ? { ...file, jobs: result.jobs } : file
-                            )
-                        );
-                        fileDiscoveryRef.current.add(discoveryKey);
-                    }
-                });
-        }
-    }
-  }, [trackedFiles, activeTrackerFileIndex]);
-
-  useEffect(() => {
-    if (activeTab === 'tracker' && isElectron && ipcRenderer) {
-      setFfmpegFound(null);
-      ipcRenderer.invoke('check-ffmpeg').then((result: { found: boolean }) => {
-        setFfmpegFound(result.found);
-      });
-    }
-  }, [activeTab]);
-
-  const handleInputChange = useCallback((e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-      const { name, value, type } = e.target;
-      if (type === 'checkbox') {
-        const checked = (e.target as HTMLInputElement).checked;
-        setFormData((prev) => ({ ...prev, [name]: checked }));
-      } else if (name === 'characterCount') {
-        setFormData((prev) => ({ ...prev, [name]: parseInt(value, 10) }));
-      } else if (name === 'temperature') {
-        setFormData((prev) => ({ ...prev, [name]: parseFloat(value) }));
-      } else if (name === 'songMinutes') {
-         if (value === '') {
-             setFormData(prev => ({ ...prev, songMinutes: '' }));
-             return;
-        }
-        let val = parseInt(value);
-        if (isNaN(val)) val = 0;
-        if (val < 0) val = 0;
-        
-        // Fix cứng: Không thể > 5 phút
-        if (val > 5) val = 5;
-        
-        setFormData(prev => {
-            // Nếu chọn 5 phút, giây tự động về 0
-            const newSeconds = (val === 5) ? '0' : prev.songSeconds;
-            return { ...prev, songMinutes: val.toString(), songSeconds: newSeconds };
+            return prev;
         });
-      } else if (name === 'songSeconds') {
-         let val = parseInt(value);
-         if (isNaN(val) || val < 0) val = 0;
-         
-         setFormData(prev => {
-             // Nếu phút đang là 5, giây bắt buộc phải là 0
-             if (parseInt(prev.songMinutes) >= 5) {
-                 return { ...prev, songSeconds: '0' }; 
-             }
-             if (val > 59) val = 59;
-             return { ...prev, songSeconds: val.toString() };
-         });
-      }
-      else {
-        setFormData((prev) => ({ ...prev, [name]: value }));
-      }
-    },[],
-  );
-
-  const handleImageUpload = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) {
-      setFormData((prev) => ({ ...prev, liveArtistImage: null }));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (reader.result && typeof reader.result === 'string') {
-        const base64Data = reader.result.split(',')[1];
-        if (base64Data) {
-          setFormData((prev) => ({
-            ...prev,
-            liveArtistImage: { base64: base64Data, mimeType: file.type },
-          }));
-        }
-      }
     };
-    reader.readAsDataURL(file);
-  }, []);
 
-  const generatePrompts = async () => {
-    if (!activeApiKey) {
-      setFeedback({ type: 'error', message: 'Vui lòng chọn một API Key đang hoạt động.' });
-      setIsManagingKeys(true);
-      return;
-    }
-    setIsLoading(true);
-    setFeedback(null);
-    setGeneratedScenes([]);
-
-    const totalSeconds = (parseInt(formData.songMinutes) || 0) * 60 + (parseInt(formData.songSeconds) || 0);
-    if (totalSeconds <= 0) {
-      setFeedback({ type: 'error', message: 'Vui lòng nhập thời lượng bài hát hợp lệ.' });
-      setIsLoading(false);
-      return;
-    }
-
-    if (totalSeconds > 300) {
-      setFeedback({ type: 'error', message: 'Thời lượng video tối đa cho phép là 5 phút (300 giây). Vui lòng giảm thời lượng.' });
-      setIsLoading(false);
-      return;
-    }
-
-    let sceneCount = Math.max(3, Math.round(totalSeconds / 8));
-
-    const systemPrompt = videoType === 'story' ? storySystemPrompt : liveSystemPrompt;
-    let userPrompt = `Generate prompts for a music video.`;
-
-    if (videoType === 'story') {
-      if (!formData.idea.trim()) {
-        setFeedback({ type: 'error', message: 'Vui lòng nhập Lời bài hát hoặc Ý tưởng.' });
-        setIsLoading(false);
-        return;
-      }
-      const selectedGenre = mvGenreOptions.find(o => o.value === formData.mvGenre)?.label || formData.mvGenre;
-      const selectedFilmingStyle = filmingStyleOptions.find(o => o.value === formData.filmingStyle)?.label || formData.filmingStyle;
-      const musicGenre = formData.musicGenre === 'other' 
-        ? formData.customMusicGenre.trim() 
-        : musicGenreOptions.find(o => o.value === formData.musicGenre)?.label || formData.musicGenre;
-
-      userPrompt += ` The creative input (lyrics or a detailed idea) is: "${formData.idea.trim()}".`;
-      userPrompt += `\n**User Specifications:**`;
-      userPrompt += `\n- **Nationality:** ${formData.country}`;
-      if (musicGenre) {
-        userPrompt += `\n- **Music Genre:** "${musicGenre}"`;
-      }
-      userPrompt += `\n- **Enforce Character Consistency:** ${formData.characterConsistency ? 'Yes' : 'No'}`;
-      if (formData.characterConsistency) {
-        userPrompt += `\n- **Number of Consistent Characters:** ${formData.characterCount}`;
-      }
-      userPrompt += `\n- **Music Video Genre:** "${selectedGenre}"`;
-      userPrompt += `\n- **Filming Style:** "${selectedFilmingStyle}"`;
-
-    } else {
-      if (!formData.liveAtmosphere.trim() && !formData.liveArtistName.trim() && !formData.liveArtist.trim() && !formData.liveArtistImage) {
-        setFeedback({ type: 'error', message: 'Vui lòng nhập ít nhất một thông tin cho Video Trình Diễn Live.' });
-        setIsLoading(false);
-        return;
-      }
-      if (formData.liveAtmosphere.trim()) userPrompt += ` The Stage & Atmosphere is: "${formData.liveAtmosphere.trim()}".`;
-      if (formData.liveArtistName.trim()) userPrompt += ` The Artist Name is: "${formData.liveArtistName.trim()}".`;
-      if (formData.liveArtist.trim()) userPrompt += ` The Artist & Performance Style is: "${formData.liveArtist.trim()}".`;
-    }
-
-    userPrompt += `\n**Task:** The video should have exactly ${sceneCount} scenes, structured with a clear visual arc and adhering to all specifications.`;
-
-
-    const parts: any[] = [{ text: userPrompt }];
-    if (videoType === 'live' && formData.liveArtistImage) {
-      parts.push({
-        inlineData: { mimeType: formData.liveArtistImage.mimeType, data: formData.liveArtistImage.base64 },
-      });
-    }
-
-    try {
-      const ai = new GoogleGenAI({ apiKey: activeApiKey.value });
-      const response = await ai.models.generateContent({
-        model: formData.model,
-        contents: { parts: parts },
-        config: {
-          systemInstruction: systemPrompt,
-          temperature: formData.temperature,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              prompts: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    scene_number: { type: Type.INTEGER },
-                    scene_title: { type: Type.STRING },
-                    prompt_text: { type: Type.STRING },
-                  },
-                  required: ['scene_number', 'scene_title', 'prompt_text'],
-                },
-              },
-            },
-            required: ['prompts'],
-          },
-        },
-      });
-
-      const responseText = response.text;
-      if (!responseText) {
-        throw new Error('AI response was empty.');
-      }
-
-      const parsedData = JSON.parse(responseText);
-      if (parsedData.prompts && Array.isArray(parsedData.prompts)) {
-        setGeneratedScenes(parsedData.prompts);
+    const handleCombine = async (mode: 'normal' | 'timed') => {
+        const file = trackedFiles[activeTrackerFileIndex];
+        if (!file || !file.path || !ipcRenderer) return;
+        setIsCombining(true);
+        setFeedback({type:'info', message:'Đang ghép video...'});
+        const completed = file.jobs.filter(j => j.status === 'Completed' && j.videoPath);
+        if (completed.length === 0) { setIsCombining(false); setFeedback({type:'error', message:'Chưa có video nào hoàn thành'}); return; }
         
-        // Stats: Increment prompt count
-        if (ipcRenderer) {
-            ipcRenderer.invoke('increment-prompt-count').catch(console.error);
-        }
-
-      } else {
-        throw new Error('AI response did not contain a valid "prompts" array.');
-      }
-    } catch (err: any) {
-      console.error('Error generating prompts:', err);
-      const errorMessage = String(err?.message || err || 'An unknown error occurred.');
-      let displayMessage = errorMessage;
-
-      if (errorMessage.includes('API key not valid')) {
-        displayMessage = 'Lỗi xác thực. API key đang sử dụng không hợp lệ hoặc đã hết hạn. Vui lòng chọn hoặc thêm khóa khác.';
-        setIsManagingKeys(true);
-      } else if (errorMessage.includes('quota')) {
-        displayMessage = 'Bạn đã vượt quá hạn ngạch sử dụng cho Khóa API này.';
-      } else if (errorMessage.includes('Requested entity was not found')) {
-        displayMessage = `Model "${formData.model}" không tồn tại hoặc bạn không có quyền truy cập. Vui lòng chọn model khác.`;
-      } else if (errorMessage.includes('overloaded')) {
-        displayMessage = 'Model AI đang bị quá tải. Vui lòng thử lại sau vài phút.';
-      }
-      setFeedback({ type: 'error', message: `Đã có lỗi xảy ra: ${displayMessage}` });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
-  const startProcess = async () => {
-    if (generatedScenes.length === 0) {
-      setFeedback({ type: 'error', message: 'Chưa có dữ liệu prompt để bắt đầu quá trình!' });
-      return;
-    }
-    setFeedback(null);
-  
-    try {
-      const safeProjectName = (formData.projectName.trim() || 'MV').replace(/[^a-zA-Z0-9_]/g, '_');
-      const safeFileName = (formData.projectName.trim() || 'Prompt_Script').replace(/[^a-z0-9_]/gi, '_').toLowerCase();
-      const fullFileName = `${safeFileName}.xlsx`;
-  
-      const dataForTracker: VideoJob[] = generatedScenes.map((p, index) => ({
-          id: `Job_${index + 1}`,
-          prompt: p.prompt_text,
-          imagePath: '', imagePath2: '', imagePath3: '',
-          status: 'Pending',
-          videoName: `${safeProjectName}_${index + 1}`,
-          typeVideo: '',
-      }));
-  
-      const dataForExcel = dataForTracker.map(job => ({ ...job, status: '' }));
-
-      const headers = [['JOB_ID', 'PROMPT', 'IMAGE_PATH', 'IMAGE_PATH_2', 'IMAGE_PATH_3', 'STATUS', 'VIDEO_NAME', 'TYPE_VIDEO']];
-      const worksheet = XLSX.utils.aoa_to_sheet(headers);
-      
-      XLSX.utils.sheet_add_json(worksheet, dataForExcel, {
-        header: ['id', 'prompt', 'imagePath', 'imagePath2', 'imagePath3', 'status', 'videoName', 'typeVideo'],
-        skipHeader: true,
-        origin: 'A2', 
-      });
-
-      worksheet['!cols'] = [
-        { wch: 15 }, { wch: 150 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 15 }, { wch: 30 }, { wch: 15 },
-      ];
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'Prompts');
-  
-      let filePath: string | undefined;
-      if (isElectron && ipcRenderer) {
-        const fileContent = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-        const result = await ipcRenderer.invoke('save-file-dialog', { defaultPath: fullFileName, fileContent: fileContent });
-  
-        if (result.success) {
-            setFeedback({ type: 'success', message: `Thành công! File đã được lưu tại: ${result.filePath}` });
-            filePath = result.filePath;
-        } else if (result.error && result.error !== 'Save dialog canceled') {
-            throw new Error(result.error);
-        }
-      } else {
-        XLSX.writeFile(workbook, fullFileName);
-        setFeedback({ type: 'success', message: 'Thành công! File kịch bản của bạn đang được tải xuống.' });
-      }
-
-      const totalSeconds = (parseInt(formData.songMinutes) || 0) * 60 + (parseInt(formData.songSeconds) || 0);
-      const newTrackedFile: TrackedFile = {
-        name: fullFileName,
-        jobs: dataForTracker,
-        path: filePath,
-        targetDurationSeconds: totalSeconds,
-      };
-      setTrackedFiles(prevFiles => [...prevFiles, newTrackedFile]);
-      setActiveTrackerFileIndex(trackedFiles.length);
-      setActiveTab('tracker');
-
-    } catch (err: any) {
-        console.error('Error exporting file:', err);
-        setFeedback({ type: 'error', message: 'Đã có lỗi xảy ra khi xuất file Excel.' });
-    }
-  };
-
-  const handleOpenNewFile = async () => {
-    if (!ipcRenderer) return;
-    setFeedback(null);
-    const result = await ipcRenderer.invoke('open-file-dialog');
-    if (result.success && result.files.length > 0) {
         try {
-            const newFiles: TrackedFile[] = [];
-            for (const file of result.files) {
-                const loadedJobs = parseExcelData(file.content);
-                newFiles.push({
-                    name: file.name,
-                    jobs: loadedJobs,
-                    path: file.path,
-                });
-            }
-            setTrackedFiles(prev => [...prev, ...newFiles]);
-            setActiveTrackerFileIndex(trackedFiles.length + newFiles.length - 1);
-        } catch (error) {
-            console.error("Error parsing Excel file(s):", error);
-            setFeedback({ type: 'error', message: 'Không thể đọc một hoặc nhiều file. File không đúng định dạng hoặc đã bị lỗi.' });
-        }
-    } else if (result.error) {
-        setFeedback({ type: 'error', message: `Lỗi mở file: ${result.error}` });
-    }
-  };
+            const res = await ipcRenderer.invoke('execute-ffmpeg-combine', {
+                jobs: completed, targetDuration: file.targetDurationSeconds, mode, excelFileName: file.name
+            });
+            if (res.success) setFeedback({type:'success', message:'Ghép video thành công!'});
+            else if (res.error) setFeedback({type:'error', message: res.error});
+            else setFeedback(null);
+        } catch (e:any) { setFeedback({type:'error', message:e.message}); }
+        setIsCombining(false);
+    };
 
-  const handleCloseTrackerTab = (indexToClose: number) => {
-    setTrackedFiles(prev => prev.filter((_, index) => index !== indexToClose));
-    if (activeTrackerFileIndex >= indexToClose) {
-        setActiveTrackerFileIndex(prevIndex => Math.max(0, prevIndex - 1));
-    }
-  };
-  
-  const handleLinkVideo = async (jobId: string, fileIndex: number) => {
-    if (!ipcRenderer) return;
-    const result = await ipcRenderer.invoke('open-video-file-dialog');
-    if (result.success && result.path) {
-        setTrackedFiles(prevFiles => {
-            const newFiles = [...prevFiles];
-            const fileToUpdate = { ...newFiles[fileIndex] };
-            fileToUpdate.jobs = fileToUpdate.jobs.map(job =>
-                job.id === jobId ? { ...job, videoPath: result.path } : job
-            );
-            newFiles[fileIndex] = fileToUpdate;
-            return newFiles;
-        });
-    }
-  };
-  
-  const executeCombineForFile = async (file: TrackedFile, mode: 'normal' | 'timed') => {
-      if (!ipcRenderer || !ffmpegFound) return false;
-
-      const completedJobs = file.jobs.filter(j => j.status === 'Completed' && j.videoPath);
-      if (completedJobs.length < 1) {
-          setFeedback({ type: 'error', message: `File "${file.name}" không có video hoàn thành nào để ghép.` });
-          return false;
-      }
-
-      if (mode === 'timed') {
-          const targetDuration = file.targetDurationSeconds;
-          if (!targetDuration || targetDuration <= 0) {
-              setFeedback({ type: 'error', message: `File "${file.name}" không có thời lượng mục tiêu.` });
-              return false;
-          }
-      }
-
-      try {
-          const result = await ipcRenderer.invoke('execute-ffmpeg-combine', {
-              jobs: completedJobs,
-              targetDuration: file.targetDurationSeconds,
-              mode: mode,
-              excelFileName: file.name,
-          });
-
-          if (result.success) {
-              setLastCombinedVideoPath(result.filePath);
-              return true;
-          } else if (result.error && result.error !== 'Save dialog canceled') {
-              throw new Error(result.error);
-          } else {
-              // Canceled by user
-              return false;
-          }
-      } catch (err: any) {
-          throw err; // Propagate error up
-      }
-  };
-  
-  const handleExecuteCombine = async (mode: 'normal' | 'timed') => {
-      const currentFile = trackedFiles[activeTrackerFileIndex];
-      if (!currentFile) return;
-
-      setIsCombiningVideo(true);
-      setLastCombinedVideoPath(null);
-      setFeedback({ type: 'info', message: `Bắt đầu quá trình ghép video cho "${currentFile.name}"...` });
-      
-      try {
-          const success = await executeCombineForFile(currentFile, mode);
-          if (success) {
-              setFeedback({ type: 'success', message: `Ghép video thành công cho "${currentFile.name}"!` });
-          } else {
-              setFeedback(null); // Canceled by user
-          }
-      } catch (err: any) {
-          setFeedback({ type: 'error', message: `Lỗi ghép video: ${err.message}` });
-      } finally {
-          setIsCombiningVideo(false);
-      }
-  };
-
-  const handleCombineAllFiles = async () => {
-    if (trackedFiles.length === 0 || !ipcRenderer || !ffmpegFound) return;
-
-    setIsCombiningAll(true);
-    setLastCombinedVideoPath(null);
-    setFeedback({ type: 'info', message: 'Chuẩn bị ghép hàng loạt...' });
-
-    const filesToProcess = trackedFiles
-      .map(file => ({
-        name: file.name,
-        jobs: file.jobs.filter(j => j.status === 'Completed' && j.videoPath),
-      }))
-      .filter(file => file.jobs.length > 0);
-
-    if (filesToProcess.length === 0) {
-      setFeedback({ type: 'error', message: 'Không có file nào có video đã hoàn thành để ghép.' });
-      setIsCombiningAll(false);
-      return;
-    }
-
-    try {
-      const result = await ipcRenderer.invoke('execute-ffmpeg-combine-all', filesToProcess);
-
-      if (result.canceled) {
-        setFeedback({ type: 'info', message: 'Đã hủy thao tác ghép hàng loạt.' });
-      } else {
-        const { successes, failures } = result;
-        const finalMessage = `Hoàn tất ghép hàng loạt. Thành công: ${successes.length}. Thất bại: ${failures.length}.`;
+    const handleCombineAll = async () => {
+        if (!ipcRenderer) return;
+        setIsCombining(true);
+        const filesToProcess = trackedFiles.filter(f => f.jobs.some(j => j.status === 'Completed' && j.videoPath))
+            .map(f => ({ name: f.name, jobs: f.jobs.filter(j=>j.status==='Completed' && j.videoPath) }));
         
-        let feedbackType: 'success' | 'error' | 'info' = 'success';
-        if (failures.length > 0 && successes.length === 0) {
-            feedbackType = 'error';
-        } else if (failures.length > 0) {
-            feedbackType = 'info'; // Partial success
-        }
-        
-        setFeedback({ type: feedbackType, message: finalMessage });
-      }
-    } catch (err: any) {
-      console.error('Fatal error during combine all:', err);
-      setFeedback({ type: 'error', message: `Lỗi nghiêm trọng khi ghép hàng loạt: ${err.message}` });
-    } finally {
-      setIsCombiningAll(false);
-    }
-  };
-  
-  const handleCopyPath = async (path: string | undefined) => {
-    if (!path) return;
-    try {
-        await navigator.clipboard.writeText(path);
-        setFeedback({ type: 'info', message: 'Đã sao chép đường dẫn!' });
-    } catch (err) {
-        setFeedback({ type: 'error', message: 'Không thể sao chép đường dẫn.' });
-    }
-    setTimeout(() => setFeedback(null), 2000);
-  };
-  
-  const handleOpenFolder = (filePath: string | undefined) => {
-    if (!ipcRenderer || !filePath) return;
-    ipcRenderer.send('open-folder', getFolderPath(filePath));
-  };
+        const res = await ipcRenderer.invoke('execute-ffmpeg-combine-all', filesToProcess);
+        if (!res.canceled) {
+            setFeedback({ type: res.failures.length ? 'error' : 'success', message: `Đã ghép xong. Thành công: ${res.successes.length}, Lỗi: ${res.failures.length}` });
+        } else setFeedback({type:'info', message:'Đã hủy'});
+        setIsCombining(false);
+    };
 
-  const handleOpenToolFlows = async () => {
-    if (!ipcRenderer) {
-        setFeedback({ type: 'error', message: 'Chức năng này chỉ có trên ứng dụng desktop.' });
-        return;
-    }
-    setFeedback({ type: 'info', message: 'Đang mở ToolFlows...' });
-    const result = await ipcRenderer.invoke('open-tool-flow');
-    if (!result.success && result.error !== 'User canceled selection.') {
-        setFeedback({ type: 'error', message: `Lỗi: ${result.error}` });
-    } else {
-        setFeedback(null);
-    }
-  };
-  
-  const handleSetToolFlowsPath = async () => {
-    if (!ipcRenderer) {
-        setFeedback({ type: 'error', message: 'Chức năng này chỉ có trên ứng dụng desktop.' });
-        return;
-    }
-    setFeedback({ type: 'info', message: 'Vui lòng chọn file thực thi của ToolFlows...' });
-    const result = await ipcRenderer.invoke('set-tool-flow-path');
-    if (result.success) {
-        setFeedback({ type: 'success', message: `Đã cập nhật đường dẫn ToolFlows: ${result.path}` });
-    } else if (result.error && result.error !== 'User canceled selection.') {
-        setFeedback({ type: 'error', message: `Lỗi: ${result.error}` });
-    } else {
-        setFeedback(null);
-    }
-  };
-
-  const handlePlayVideo = (videoPath: string | undefined) => {
-    if (!ipcRenderer || !videoPath) return;
-    ipcRenderer.send('open-video-path', videoPath);
-  };
-
-  const handleShowInFolder = (videoPath: string | undefined) => {
-      if (!ipcRenderer || !videoPath) return;
-      ipcRenderer.send('show-video-in-folder', videoPath);
-  };
-
-  const handleDeleteVideo = async (jobId: string, videoPath: string | undefined) => {
-      if (!ipcRenderer || !videoPath) return;
-      const result = await ipcRenderer.invoke('delete-video-file', videoPath);
-      if (result.success) {
-          setTrackedFiles(prevFiles => {
-              const newFiles = [...prevFiles];
-              if (newFiles[activeTrackerFileIndex]) {
-                  const fileToUpdate = { ...newFiles[activeTrackerFileIndex] };
-                  fileToUpdate.jobs = fileToUpdate.jobs.map(job =>
-                      job.id === jobId ? { ...job, videoPath: undefined } : job
-                  );
-                  newFiles[activeTrackerFileIndex] = fileToUpdate;
-              }
-              return newFiles;
-          });
-          setFeedback({ type: 'success', message: 'Đã xóa video thành công.' });
-      } else if (result.error && result.error !== 'User canceled deletion.') {
-          setFeedback({ type: 'error', message: `Lỗi khi xóa video: ${result.error}` });
-      }
-  };
-
-  const handleRetryJob = async (jobId: string) => {
-    const currentFile = trackedFiles[activeTrackerFileIndex];
-    if (!ipcRenderer || !currentFile?.path) return;
-
-    setFeedback({ type: 'info', message: `Đang yêu cầu tạo lại video cho job: ${jobId}...` });
-
-    const result = await ipcRenderer.invoke('retry-job', { 
-        filePath: currentFile.path, 
-        jobId: jobId 
-    });
-
-    if (result.success) {
-        setFeedback({ type: 'success', message: `Đã xóa trạng thái cho job ${jobId}. Video sẽ được tạo lại. Fact: Rồi nó sẽ lỗi tiếp thôi` });
-    } else {
-        setFeedback({ type: 'error', message: `Lỗi khi tạo lại video: ${result.error}` });
-    }
-  };
-
-  const handleRetryStuckJobs = async () => {
-    const currentFile = trackedFiles[activeTrackerFileIndex];
-    if (!ipcRenderer || !currentFile?.path) return;
-
-    setFeedback({ type: 'info', message: `Đang yêu cầu tạo lại các video đang xử lý cho file: ${currentFile.name}...` });
-
-    const result = await ipcRenderer.invoke('retry-stuck-jobs', {
-        filePath: currentFile.path,
-    });
-
-    if (result.success) {
-        setFeedback({ type: 'success', message: `Đã xóa trạng thái các video đang xử lý. Chúng sẽ được tạo lại. Fact: Kiểu gì cũng có video lỗi` });
-    } else {
-        setFeedback({ type: 'error', message: `Lỗi khi tạo lại video: ${result.error}` });
-    }
-  };
-
-  const handleReloadVideos = async () => {
-    const currentFile = trackedFiles[activeTrackerFileIndex];
-    if (!ipcRenderer || !currentFile?.path) return;
-
-    setFeedback({ type: 'info', message: `Đang quét lại thư mục để tìm video cho file: ${currentFile.name}...` });
+    // --- Render ---
+    if (!configLoaded) return <div className="min-h-screen bg-cute-cream flex items-center justify-center text-cute-brown"><ShieldIcon className="animate-spin w-16 h-16 text-cute-pink"/></div>;
     
-    const filePath = currentFile.path;
+    if (!isActivated && machineId) return <Activation machineId={machineId} onActivate={handleActivate} />;
+    
+    if (isActivated && (!activeApiKey || isManagingKeys)) return <ApiKeyManagerScreen apiKeys={apiKeys} onKeyAdd={k => handleKeyUpdate([...apiKeys, k], activeApiKey?.id||null)} onKeyDelete={id => handleKeyUpdate(apiKeys.filter(k=>k.id!==id), activeApiKey?.id===id?null:activeApiKey?.id||null)} onKeySelect={k => {handleKeyUpdate(apiKeys, k.id); setIsManagingKeys(false);}} />;
 
-    try {
-        const result: { success: boolean; jobs: VideoJob[]; error?: string; } = await ipcRenderer.invoke('find-videos-for-jobs', { 
-            jobs: currentFile.jobs, 
-            excelFilePath: filePath 
-        });
+    const currentFile = trackedFiles[activeTrackerFileIndex];
+    const stats = currentFile ? {
+        completed: currentFile.jobs.filter(j => j.status === 'Completed').length,
+        inProgress: currentFile.jobs.filter(j => ['Processing','Generating'].includes(j.status)).length,
+        total: currentFile.jobs.length
+    } : null;
 
-        if (result.success) {
-            setTrackedFiles(prevFiles =>
-                prevFiles.map(file =>
-                    file.path === filePath ? { ...file, jobs: result.jobs } : file
-                )
-            );
-            const discoveryKey = `${filePath}-${result.jobs.map(j => j.status).join(',')}`;
-            fileDiscoveryRef.current.delete(discoveryKey);
-            setFeedback({ type: 'success', message: 'Tải lại danh sách video thành công.' });
-        } else {
-             throw new Error(result.error || 'Lỗi không xác định.');
-        }
-    } catch (err: any) {
-        setFeedback({ type: 'error', message: `Lỗi khi tải lại video: ${err.message}` });
-    }
-  };
+    return (
+        <div className="relative min-h-screen flex flex-col font-sans text-cute-brown">
+            {/* Header - Cute Christmas Theme */}
+            <header className="px-8 py-4 bg-white/80 backdrop-blur-xl border-b-4 border-cute-pink/20 flex justify-between items-center sticky top-0 z-50 shadow-sm transition-all duration-300 rounded-b-[40px] mx-4 mt-2">
+                <div className="flex items-center gap-4">
+                    <span className="text-5xl filter drop-shadow-md animate-wiggle cursor-default">🎅</span>
+                    <div>
+                        <h1 className="text-2xl font-black tracking-tight leading-none text-cute-mint-dark drop-shadow-sm flex items-center gap-2">
+                            Prompt Generator <span className="text-cute-pink-dark">Pro</span>
+                        </h1>
+                        <span className="text-[10px] font-bold text-cute-brown bg-cute-yellow px-3 py-1 rounded-full border-2 border-white tracking-widest uppercase ml-0.5 shadow-sm inline-flex items-center gap-1 mt-1">
+                            Christmas Cute Edition 🎄
+                        </span>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
+                    {activeApiKey && (
+                        <div onClick={() => setIsManagingKeys(true)} className="flex items-center gap-2 bg-white hover:bg-cute-mint/20 px-4 py-2 rounded-full cursor-pointer transition border-2 border-cute-mint/50 hover:border-cute-mint shadow-sm group">
+                            <KeyIcon className="w-4 h-4 text-cute-mint-dark group-hover:text-cute-pink transition-colors" />
+                            <span className="text-xs font-bold text-cute-brown group-hover:text-cute-pink-dark uppercase tracking-wide">{activeApiKey.name}</span>
+                        </div>
+                    )}
+                    <button onClick={() => setShowStats(true)} className="p-3 bg-white border-2 border-cute-yellow hover:bg-cute-yellow text-cute-brown rounded-full transition shadow-sm hover:shadow-md transform hover:rotate-12" title="Thống Kê"><ChartIcon className="w-5 h-5"/></button>
+                    <button onClick={() => setShowAdminLogin(true)} className="p-3 bg-white border-2 border-cute-pink hover:bg-cute-pink text-cute-pink-dark hover:text-white rounded-full transition shadow-sm hover:shadow-md transform hover:rotate-12" title="Admin"><ShieldIcon className="w-5 h-5"/></button>
+                </div>
+            </header>
 
-  const handleSavePreset = () => {
-      if (!newPresetName.trim()) {
-          setFeedback({ type: 'error', message: 'Vui lòng nhập tên cho cài đặt sẵn.' });
-          return;
-      }
-
-      const { model, mvGenre, filmingStyle, country, musicGenre, customMusicGenre, characterConsistency, characterCount, temperature } = formData;
-      const settingsToSave: Partial<FormData> = { model, mvGenre, filmingStyle, country, musicGenre, customMusicGenre, characterConsistency, characterCount, temperature };
-
-      const newPreset: Preset = {
-          id: crypto.randomUUID(),
-          name: newPresetName.trim(),
-          settings: settingsToSave,
-      };
-
-      const updatedPresets = [...presets, newPreset];
-      setPresets(updatedPresets);
-      setNewPresetName('');
-      if (isElectron && ipcRenderer) {
-          ipcRenderer.invoke('save-app-config', { presets: updatedPresets });
-      }
-      setFeedback({ type: 'success', message: 'Đã lưu cài đặt!' });
-  };
-
-  const handlePresetSelect = (presetId: string) => {
-      setSelectedPresetId(presetId);
-      if (!presetId) return;
-
-      const presetToLoad = presets.find(p => p.id === presetId);
-      if (presetToLoad) {
-          setFormData(prev => ({ ...prev, ...presetToLoad.settings }));
-          // Instant feedback instead of waiting for a button click
-          setFeedback({ type: 'info', message: `Đã tải cài đặt "${presetToLoad.name}".` });
-      }
-  };
-
-  const handleDeletePreset = () => {
-      if (!selectedPresetId) return;
-      const presetToDelete = presets.find(p => p.id === selectedPresetId);
-      const updatedPresets = presets.filter(p => p.id !== selectedPresetId);
-      setPresets(updatedPresets);
-      setSelectedPresetId('');
-      if (isElectron && ipcRenderer) {
-          ipcRenderer.invoke('save-app-config', { presets: updatedPresets });
-      }
-      if (presetToDelete) {
-        setFeedback({ type: 'info', message: `Đã xóa cài đặt "${presetToDelete.name}".` });
-      }
-  };
-
-  // --- Admin Actions ---
-  const handleDeleteStatHistory = async (date: string) => {
-      if(ipcRenderer) {
-          await ipcRenderer.invoke('delete-stat-date', date);
-      }
-  };
-
-  const handleDeleteAllStats = async () => {
-      if(ipcRenderer) {
-          await ipcRenderer.invoke('delete-all-stats');
-      }
-  };
-
-  const getStatusBadge = (status: JobStatus) => {
-    const baseClasses = "status-badge";
-    switch (status) {
-      case 'Pending': return `${baseClasses} status-pending`;
-      case 'Processing': return `${baseClasses} status-processing`;
-      case 'Generating': return `${baseClasses} status-generating`;
-      case 'Completed': return `${baseClasses} status-completed`;
-      case 'Failed': return `${baseClasses} status-failed`;
-      default: return baseClasses;
-    }
-  };
-
-  const renderResultCell = (job: VideoJob, fileIndex: number) => {
-    const containerClasses = "w-40 h-24 bg-black/30 rounded-md flex items-center justify-center text-center p-2 mx-auto"; // Added mx-auto for centering
-    switch(job.status) {
-      case 'Completed':
-        if (job.videoPath) {
-          return (
-            <div className="w-40 h-24 bg-black rounded-md overflow-hidden relative group mx-auto">
-                <video src={job.videoPath} className="w-full h-full object-cover" muted loop playsInline onMouseOver={e => e.currentTarget.play().catch(console.error)} onMouseOut={e => e.currentTarget.pause()}></video>
-                <button onClick={() => handlePlayVideo(job.videoPath)} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <PlayIcon className="w-8 h-8 text-white"/>
+            {/* Navigation Tabs - Pills */}
+            <div className="flex justify-center gap-4 py-6">
+                <button 
+                    onClick={() => setActiveTab('generator')} 
+                    className={`px-8 py-3 rounded-full font-extrabold uppercase tracking-wider text-xs transition-all shadow-md transform hover:-translate-y-1 flex items-center gap-2 ${activeTab === 'generator' ? 'bg-cute-pink text-white ring-4 ring-cute-pink/20' : 'bg-white text-cute-brown hover:bg-cute-pink/10'}`}
+                >
+                    ✨ Tạo Kịch Bản
+                </button>
+                <button 
+                    onClick={() => setActiveTab('tracker')} 
+                    className={`px-8 py-3 rounded-full font-extrabold uppercase tracking-wider text-xs transition-all shadow-md transform hover:-translate-y-1 flex items-center gap-2 ${activeTab === 'tracker' ? 'bg-cute-mint text-cute-brown ring-4 ring-cute-mint/20' : 'bg-white text-cute-brown hover:bg-cute-mint/10'}`}
+                >
+                    🎬 Theo Dõi <span className="bg-white text-cute-mint-dark px-2 py-0.5 rounded-full text-[10px] shadow-sm border border-cute-mint/20">{trackedFiles.length}</span>
                 </button>
             </div>
-          );
-        }
-        return (
-          <div className={`${containerClasses} flex-col text-indigo-200`}>
-             <VideoIcon className="w-8 h-8 text-gray-400 mb-1" />
-             <p className="text-xs font-semibold mb-1">Không tìm thấy video</p>
-             <button onClick={() => handleLinkVideo(job.id, fileIndex)} className="text-xs text-indigo-300 hover:underline">Link thủ công</button>
-          </div>
-        );
-      case 'Processing':
-      case 'Generating': return <div className={containerClasses}><LoaderIcon /></div>;
-      default: return <div className={containerClasses}><VideoIcon className="w-8 h-8 text-gray-400" /></div>;
-    }
-  }
 
-  const TabButton: React.FC<{ tabName: ActiveTab; children: React.ReactNode; }> = ({ tabName, children }) => (
-    <button
-        onClick={() => setActiveTab(tabName)}
-        className={`px-6 py-3 font-semibold rounded-t-lg transition-colors duration-300 focus:outline-none ${ activeTab === tabName ? 'bg-white/20 text-white' : 'bg-black/20 text-indigo-200 hover:bg-white/10' }`}
-    >
-        {children}
-    </button>
-  );
-
-  const RadioLabel: React.FC<{ name: string; value: string; checked: boolean; onChange: (value: any) => void; children: React.ReactNode; }> = ({ name, value, checked, onChange, children }) => (
-    <label className="relative flex items-center space-x-2 cursor-pointer p-2 rounded-md flex-1 justify-center text-center transition-colors">
-      <input type="radio" name={name} value={value} className="absolute opacity-0 w-full h-full" checked={checked} onChange={() => onChange(value)} />
-      <span className={`relative z-10 ${checked ? 'font-bold text-white' : ''}`}>{children}</span>
-      <div className={`absolute top-0 left-0 w-full h-full rounded-md transition-colors ${ checked ? 'bg-indigo-500/50' : '' }`}></div>
-    </label>
-  );
-
-  const getTemperatureLabel = (temp: number): { text: string; color: string } => {
-    if (temp <= 0.3) return { text: 'An toàn & Logic', color: 'text-blue-300' };
-    if (temp <= 0.6) return { text: 'Cân bằng & Sáng tạo', color: 'text-teal-300' };
-    return { text: 'Đột phá & Bất ngờ', color: 'text-indigo-300' };
-  };
-  const tempLabel = getTemperatureLabel(formData.temperature);
-
-  if (!configLoaded) {
-    return <div className="text-white min-h-screen flex items-center justify-center p-4"><LoaderIcon /></div>;
-  }
-  if (!isActivated && machineId) {
-    return <Activation machineId={machineId} onActivate={handleActivate} />;
-  }
-  if (isActivated && (!activeApiKey || isManagingKeys)) {
-    return <ApiKeyManagerScreen apiKeys={apiKeys} onKeyAdd={handleKeyAdd} onKeyDelete={handleKeyDelete} onKeySelect={handleKeySelect} />;
-  }
-  
-  const currentFile = trackedFiles.length > 0 ? trackedFiles[activeTrackerFileIndex] : null;
-  const stats = currentFile ? {
-    completed: currentFile.jobs.filter(j => j.status === 'Completed').length,
-    inProgress: currentFile.jobs.filter(j => j.status === 'Processing' || j.status === 'Generating').length,
-    failed: currentFile.jobs.filter(j => j.status === 'Failed').length,
-    total: currentFile.jobs.length,
-  } : null;
-
-  const formatDuration = (totalSeconds?: number) => {
-    if (totalSeconds === undefined || totalSeconds === null) return '--:--';
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-  };
-  
-  return (
-    <div className="relative w-full h-full">
-      <div className="text-white min-h-screen p-4">
-        <div className="w-full max-w-7xl mx-auto">
-          <header className="text-center mb-6 relative">
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">🎬 Prompt Generator Pro</h1>
-            <p className="text-lg text-indigo-200 mt-2">Biến ý tưởng thành kịch bản & theo dõi sản xuất video.</p>
-            <div className="absolute top-0 right-0 flex flex-col gap-2 items-end">
-                {activeApiKey && (
-                    <div className="active-key-display">
-                        <KeyIcon className="w-4 h-4 text-emerald-400" />
-                        <span className="text-white font-semibold">{activeApiKey.name}</span>
-                        <button onClick={() => setIsManagingKeys(true)} className="ml-2 text-indigo-300 hover:text-white font-bold text-sm">(Thay đổi)</button>
-                    </div>
-                )}
-                <div className="flex gap-2">
-                    <button 
-                        onClick={() => setShowStats(true)} 
-                        className="active-key-display hover:bg-white/20 transition"
-                        title="Thống kê sản xuất"
-                    >
-                        <ChartIcon className="w-4 h-4 text-indigo-300" />
-                        <span className="text-white font-semibold">Thống Kê</span>
-                    </button>
-                    <button
-                        onClick={() => setShowAdminLogin(true)}
-                        className="p-2 rounded-full bg-black/20 hover:bg-white/20 transition text-indigo-300 hover:text-white"
-                        title="Admin Access"
-                    >
-                        <ShieldIcon className="w-4 h-4" />
-                    </button>
-                </div>
-            </div>
-          </header>
-
-          <div className="flex space-x-2">
-            <TabButton tabName="generator">Tạo Kịch Bản</TabButton>
-            <TabButton tabName="tracker">Theo Dõi Sản Xuất</TabButton>
-          </div>
-
-          <div className="glass-card rounded-b-2xl rounded-tr-2xl p-6 sm:p-8 shadow-2xl">
-            {activeTab === 'generator' && (
-              <main>
-                <div className="space-y-6 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium text-indigo-100 mb-2">1. Chọn loại Video</label>
-                    <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
-                      <RadioLabel name="videoType" value="story" checked={videoType === 'story'} onChange={setVideoType}>MV Kể Chuyện</RadioLabel>
-                      <RadioLabel name="videoType" value="live" checked={videoType === 'live'} onChange={setVideoType}>Live Acoustic</RadioLabel>
-                    </div>
-                  </div>
-
-                 <div className="space-y-4 pt-4 border-t border-white/10">
-                    <h3 className="text-base font-semibold text-indigo-100">Cài đặt sẵn (Presets)</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex items-center gap-2">
-                            <select 
-                                value={selectedPresetId}
-                                onChange={e => handlePresetSelect(e.target.value)}
-                                className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-2 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition"
-                            >
-                                <option value="">Chọn để tải & áp dụng ngay...</option>
-                                {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </select>
-                            <button onClick={handleDeletePreset} disabled={!selectedPresetId} className="p-2 text-red-400 hover:bg-red-500/20 rounded-full transition disabled:opacity-50"><TrashIcon className="w-5 h-5"/></button>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <input 
-                                type="text"
-                                value={newPresetName}
-                                onChange={e => setNewPresetName(e.target.value)}
-                                className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-2 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 transition"
-                                placeholder="Tên cài đặt mới..."
+            {/* Main Content */}
+            <div className="flex-1 p-4 md:p-6 overflow-hidden">
+                 <div className="max-w-[1920px] mx-auto h-full">
+                     {activeTab === 'generator' ? (
+                        <div className="glass-card p-8 rounded-[40px] shadow-xl animate-fade-in border-4 border-white">
+                            <Generator 
+                                apiKeys={apiKeys} activeApiKey={activeApiKey} presets={presets} 
+                                onSavePresets={p => { setPresets(p); if(ipcRenderer) ipcRenderer.invoke('save-app-config', {presets:p}); }}
+                                onGenerateSuccess={handleGenerateSuccess}
+                                onFeedback={setFeedback}
                             />
-                            <button onClick={handleSavePreset} className="bg-indigo-500 text-white font-bold p-2 rounded-lg hover:bg-indigo-600 transition">Lưu</button>
                         </div>
-                    </div>
+                     ) : (
+                        <Tracker 
+                            trackedFiles={trackedFiles} activeFileIndex={activeTrackerFileIndex} setActiveFileIndex={setActiveTrackerFileIndex}
+                            onOpenFile={async () => {
+                                if(ipcRenderer) {
+                                    const res = await ipcRenderer.invoke('open-file-dialog');
+                                    if(res.success) {
+                                        const newFiles = res.files.map((f:any) => {
+                                            const wb = XLSX.read(f.content, {type:'buffer'});
+                                            const jobs = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}).slice(1).map((r:any,i:number)=>({
+                                                id: r[0]||`Job_${i}`, status: r[5]||'Pending', videoName: r[6]||'', prompt: r[1]
+                                            }));
+                                            ipcRenderer.send('start-watching-file', f.path);
+                                            return { name: f.name, path: f.path, jobs };
+                                        });
+                                        setTrackedFiles(prev => [...prev, ...newFiles]);
+                                    }
+                                }
+                            }}
+                            onCloseFile={(idx) => {
+                                const f = trackedFiles[idx];
+                                if(f.path && ipcRenderer) ipcRenderer.send('stop-watching-file', f.path);
+                                setTrackedFiles(p => p.filter((_,i) => i !== idx));
+                                if(activeTrackerFileIndex >= idx) setActiveTrackerFileIndex(Math.max(0, activeTrackerFileIndex - 1));
+                            }}
+                            stats={stats} ffmpegFound={ffmpegFound} isCombining={isCombining}
+                            onPlayVideo={(path) => ipcRenderer && ipcRenderer.send('open-video-path', path)}
+                            onShowFolder={(path) => ipcRenderer && ipcRenderer.send('open-folder', path.substring(0, path.lastIndexOf(navigator.userAgent.includes("Windows")?'\\':'/')))}
+                            onOpenToolFlows={() => ipcRenderer && ipcRenderer.invoke('open-tool-flow')}
+                            onReloadVideos={handleReloadVideos}
+                            onRetryStuck={() => currentFile?.path && ipcRenderer.invoke('retry-stuck-jobs', {filePath: currentFile.path})}
+                            onRetryJob={(id) => currentFile?.path && ipcRenderer.invoke('retry-job', {filePath: currentFile.path, jobId: id})}
+                            onDeleteVideo={async (id, path) => {
+                                if(ipcRenderer) {
+                                    const res = await ipcRenderer.invoke('delete-video-file', path);
+                                    if(res.success) handleReloadVideos();
+                                }
+                            }}
+                            onCombine={handleCombine}
+                            onCombineAll={handleCombineAll}
+                            onLinkVideo={async (id, idx) => {
+                                if(ipcRenderer) {
+                                    const res = await ipcRenderer.invoke('open-video-file-dialog');
+                                    if(res.success) {
+                                        setTrackedFiles(prev => {
+                                            const next = [...prev];
+                                            next[idx].jobs = next[idx].jobs.map(j => j.id === id ? {...j, videoPath: res.path, status: 'Completed'} : j);
+                                            return next;
+                                        });
+                                    }
+                                }
+                            }}
+                        />
+                     )}
                  </div>
+            </div>
 
-                  <div className={`${videoType === 'story' ? 'block' : 'hidden'} space-y-6`}>
-                    <div>
-                      <label htmlFor="idea" className="block text-sm font-medium text-indigo-100 mb-2">Nhập Lời bài hát hoặc Ý tưởng Kịch bản</label>
-                      <textarea id="idea" name="idea" value={formData.idea} onChange={handleInputChange} rows={4} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Dán toàn bộ lời bài hát hoặc mô tả chi tiết ý tưởng của bạn cho MV..."></textarea>
-                    </div>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label htmlFor="mvGenre" className="block text-sm font-medium text-indigo-100 mb-2">Chọn Thể Loại MV</label>
-                            <select id="mvGenre" name="mvGenre" value={formData.mvGenre} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
-                                {mvGenreOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="filmingStyle" className="block text-sm font-medium text-indigo-100 mb-2">Phong cách quay</label>
-                            <select id="filmingStyle" name="filmingStyle" value={formData.filmingStyle} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
-                                {filmingStyleOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                            </select>
-                        </div>
-                     </div>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label htmlFor="country" className="block text-sm font-medium text-indigo-100 mb-2">Quốc gia (Nationality)</label>
-                            <select id="country" name="country" value={formData.country} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
-                                {countryOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="musicGenre" className="block text-sm font-medium text-indigo-100 mb-2">Thể loại nhạc</label>
-                            <select id="musicGenre" name="musicGenre" value={formData.musicGenre} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
-                                {musicGenreOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                            </select>
-                        </div>
-                        {formData.musicGenre === 'other' && (
-                            <div className="md:col-span-2">
-                                <label htmlFor="customMusicGenre" className="block text-sm font-medium text-indigo-100 mb-2">Nhập thể loại nhạc khác</label>
-                                <input
-                                    type="text"
-                                    id="customMusicGenre"
-                                    name="customMusicGenre"
-                                    value={formData.customMusicGenre}
-                                    onChange={handleInputChange}
-                                    className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition"
-                                    placeholder="Ví dụ: Lofi Chill, Future Bass, ..."
-                                />
-                            </div>
-                        )}
-                     </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-sm font-medium text-indigo-100 mb-2">Đồng nhất nhân vật chính</label>
-                            <div className="flex items-center space-x-2 glass-card p-2 rounded-lg">
-                               <RadioLabel name="characterConsistency" value="true" checked={formData.characterConsistency} onChange={(val) => setFormData(p => ({ ...p, characterConsistency: val === 'true' }))}>Có</RadioLabel>
-                               <RadioLabel name="characterConsistency" value="false" checked={!formData.characterConsistency} onChange={(val) => setFormData(p => ({ ...p, characterConsistency: val === 'true' }))}>Không</RadioLabel>
-                            </div>
-                        </div>
-                        {formData.characterConsistency && (
-                           <div>
-                                <label htmlFor="characterCount" className="block text-sm font-medium text-indigo-100 mb-2">Số lượng nhân vật đồng nhất</label>
-                                <select id="characterCount" name="characterCount" value={formData.characterCount} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
-                                    <option value={1}>1 nhân vật</option>
-                                    <option value={2}>2 nhân vật</option>
-                                    <option value={3}>3 nhân vật</option>
-                                </select>
-                            </div>
-                        )}
-                    </div>
-                  </div>
-
-                  <div className={`${videoType === 'live' ? 'block' : 'hidden'} space-y-6`}>
-                    <div>
-                      <label htmlFor="liveAtmosphere" className="block text-sm font-medium text-indigo-100 mb-2">Mô tả Bối cảnh &amp; Không khí (Cho buổi diễn Acoustic)</label>
-                      <textarea id="liveAtmosphere" name="liveAtmosphere" value={formData.liveAtmosphere} onChange={handleInputChange} rows={3} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Ví dụ: Một góc phòng thu ấm cúng với vài cây nến..."></textarea>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-indigo-100 mb-2">Tải ảnh ca sĩ (Để AI nhận diện chính xác nhất)</label>
-                      <div className="flex items-center space-x-4">
-                        <label htmlFor="liveArtistImage" className="cursor-pointer inline-block px-6 py-3 bg-white/10 border-2 border-dashed border-white/30 rounded-lg text-center transition hover:bg-white/20 hover:border-white/50"><span>Chọn ảnh...</span></label>
-                        <input type="file" id="liveArtistImage" name="liveArtistImage" onChange={handleImageUpload} className="hidden" accept="image/png, image/jpeg, image/webp" />
-                        {formData.liveArtistImage && ( <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-white/30"><img src={`data:${formData.liveArtistImage.mimeType};base64,${formData.liveArtistImage.base64}`} alt="Image Preview" className="w-full h-full object-cover" /></div> )}
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor="liveArtistName" className="block text-sm font-medium text-indigo-100 mb-2">Tên Ca Sĩ (Nếu là người nổi tiếng)</label>
-                      <input type="text" id="liveArtistName" name="liveArtistName" value={formData.liveArtistName} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Ví dụ: Taylor Swift, Sơn Tùng M-TP..." />
-                    </div>
-                    <div>
-                      <label htmlFor="liveArtist" className="block text-sm font-medium text-indigo-100 mb-2">Mô tả Nghệ sĩ &amp; Phong cách trình diễn</label>
-                      <textarea id="liveArtist" name="liveArtist" value={formData.liveArtist} onChange={handleInputChange} rows={3} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Ví dụ: Nữ ca sĩ với giọng hát trong trẻo, mặc váy trắng, chơi đàn piano..."></textarea>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/10">
-                    <div>
-                      <label className="block text-sm font-medium text-indigo-100 mb-2">Thời lượng bài hát (Tối đa 5 phút)</label>
-                      <div className="flex items-center space-x-2">
-                        <input type="number" id="songMinutes" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Phút" min="0" max="5" />
-                        <span className="text-xl">:</span>
-                        <input type="number" id="songSeconds" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Giây" min="0" max="59" />
-                      </div>
-                    </div>
-                    <div>
-                      <label htmlFor="projectName" className="block text-sm font-medium text-indigo-100 mb-2">Tên Dự Án (Để đặt tên file)</label>
-                      <input type="text" id="projectName" name="projectName" value={formData.projectName} onChange={handleInputChange} className="w-full bg-white/10 border-2 border-white/20 rounded-lg p-3 text-white placeholder-indigo-300 focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400 transition" placeholder="Ví dụ: MV_Bai_Hat_Moi" />
-                    </div>
-                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label htmlFor="model" className="block text-sm font-medium text-indigo-100 mb-2">Chọn Model AI</label>
-                            <select id="model" name="model" value={formData.model} onChange={handleInputChange} className="w-full bg-indigo-900/60 border-2 border-indigo-400/50 rounded-lg p-3 text-white focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition">
-                                <option value="gemini-flash-lite-latest">Gemini Flash Lite</option>
-                                <option value="gemini-flash-latest">Gemini Flash</option>
-                                <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="temperature" className="block text-sm font-medium text-indigo-100 mb-2">
-                                Độ Sáng Tạo - <span className={`font-bold ${tempLabel.color}`}>{tempLabel.text} ({formData.temperature.toFixed(1)})</span>
-                            </label>
-                            <input
-                                type="range"
-                                id="temperature"
-                                name="temperature"
-                                min="0.1"
-                                max="1.0"
-                                step="0.1"
-                                value={formData.temperature}
-                                onChange={handleInputChange}
-                                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-                            />
-                        </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-white/20">
-                    <div className="flex justify-center items-center gap-4">
-                        <button onClick={generatePrompts} disabled={isLoading} className="bg-white text-indigo-700 font-bold py-3 px-8 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300 disabled:bg-gray-400 disabled:cursor-not-allowed disabled:scale-100" title="Tạo kịch bản">
-                            {isLoading ? <LoaderIcon /> : <span>Tạo Kịch Bản Prompt</span>}
-                        </button>
-                        {generatedScenes.length > 0 && (
-                            <button onClick={startProcess} className="bg-teal-500 text-white font-bold py-3 px-8 rounded-full hover:bg-teal-600 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-teal-300">
-                                Lưu kịch bản & Theo dõi
-                            </button>
-                        )}
-                    </div>
-                </div>
-                
-                {feedback && ( <div className={`text-center mt-6 font-medium p-3 rounded-lg flex items-center justify-center gap-4 ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>
+            {/* Feedback Toast */}
+            {feedback && (
+                <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 z-[200] animate-bounce-small font-bold text-sm border-2 ${feedback.type === 'error' ? 'bg-red-50 border-cute-pink text-cute-pink-dark' : feedback.type === 'success' ? 'bg-emerald-50 border-cute-mint-dark text-cute-mint-dark' : 'bg-blue-50 border-blue-200 text-blue-800'} backdrop-blur-xl`}>
+                    <span className="text-xl">{feedback.type === 'success' ? '🍪' : feedback.type === 'error' ? '🍩' : 'ℹ️'}</span>
                     <span>{feedback.message}</span>
-                    {feedback.type === 'success' && lastCombinedVideoPath && (
-                        <button onClick={() => handlePlayVideo(lastCombinedVideoPath)} className="bg-white/10 text-white font-bold py-1 px-4 rounded-full hover:bg-white/20 transition text-sm flex items-center gap-2">
-                            <PlayIcon className="w-4 h-4" /> Mở Video
-                        </button>
-                    )}
-                </div> )}
-                {generatedScenes.length > 0 && !feedback && (
-                  <div className="text-center mt-6 text-emerald-300">
-                    <h3 className="text-xl font-bold">Hoàn thành! Kịch bản của bạn đã sẵn sàng.</h3>
-                  </div>
-                )}
-                <Results scenes={generatedScenes} />
-              </main>
+                    <button onClick={() => setFeedback(null)} className="ml-2 hover:opacity-75 text-xl leading-none">&times;</button>
+                </div>
             )}
-            {activeTab === 'tracker' && (
-                <main>
-                    <div className="space-y-6">
-                        <div>
-                            <h2 className="text-2xl font-bold text-center mb-2">Bảng Theo Dõi Sản Xuất Video</h2>
-                            <p className="text-indigo-200 text-center">Trạng thái được cập nhật tự động khi file Excel thay đổi.</p>
-                        </div>
 
-                        {feedback && ( <div className={`text-center font-medium p-3 rounded-lg flex items-center justify-center gap-4 ${ feedback.type === 'error' ? 'text-red-300 bg-red-900/50' : feedback.type === 'success' ? 'text-emerald-300 bg-emerald-900/50' : 'text-blue-300 bg-blue-900/50' }`}>
-                            <span>{feedback.message}</span>
-                            {feedback.type === 'success' && lastCombinedVideoPath && (
-                                <button onClick={() => handlePlayVideo(lastCombinedVideoPath)} className="bg-white/10 text-white font-bold py-1 px-4 rounded-full hover:bg-white/20 transition text-sm flex items-center gap-2">
-                                    <PlayIcon className="w-4 h-4" /> Mở Video Đã Ghép
-                                </button>
-                            )}
-                        </div> )}
-                        
-                        {trackedFiles.length === 0 ? (
-                             <div className="text-center py-10 border-2 border-dashed border-white/20 rounded-lg">
-                                 <UploadIcon className="mx-auto h-12 w-12 text-indigo-300" />
-                                 <h3 className="mt-2 text-lg font-medium">Chưa có file nào được theo dõi</h3>
-                                 <p className="mt-1 text-sm text-indigo-200">Tạo một kịch bản mới hoặc tải lên một file Excel để bắt đầu.</p>
-                                 <div className="mt-6">
-                                     <button onClick={handleOpenNewFile} className="bg-white text-indigo-700 font-bold py-2 px-6 rounded-full hover:bg-indigo-100 transition-transform transform hover:scale-105 shadow-lg focus:outline-none focus:ring-4 focus:ring-indigo-300">Tải File Mới</button>
-                                 </div>
-                             </div>
-                        ) : (
-                            <div>
-                               <div className="flex justify-between items-start mb-4 gap-4">
-                                  <div className="tracker-tabs-container flex-grow">
-                                      {trackedFiles.map((file, index) => {
-                                          const completedCount = file.jobs.filter(j => j.status === 'Completed').length;
-                                          const totalJobs = file.jobs.length;
-                                          const progress = totalJobs > 0 ? (completedCount / totalJobs) * 100 : 0;
-
-                                          return (
-                                            <button key={`${file.path}-${index}`} className={`tracker-tab ${activeTrackerFileIndex === index ? 'active' : ''}`} onClick={() => setActiveTrackerFileIndex(index)}>
-                                                <div 
-                                                    className="tab-progress-frame"
-                                                    style={{ clipPath: `inset(0 ${100 - progress}% 0 0)` }}
-                                                ></div>
-                                                <span>{file.name}</span>
-                                                <span className="tab-close-btn" onClick={(e) => { e.stopPropagation(); handleCloseTrackerTab(index); }}>&times;</span>
-                                            </button>
-                                          )
-                                      })}
-                                  </div>
-                                  <button onClick={handleOpenNewFile} className="bg-white/10 text-white font-bold py-2 px-6 rounded-full hover:bg-white/20 transition whitespace-nowrap">Tải File Mới</button>
-                               </div>
-
-                                {currentFile && stats && (
-                                  <>
-                                  <div className="bg-black/20 p-4 rounded-lg mb-4 flex flex-wrap items-center justify-between gap-4">
-                                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                                      <div className="text-center">
-                                          <div className="text-2xl font-bold text-emerald-400">{stats.completed}/{stats.total}</div>
-                                          <div className="text-xs text-gray-400 uppercase tracking-wider">Hoàn thành</div>
-                                      </div>
-                                      <div className="text-center">
-                                          <div className="text-2xl font-bold text-amber-400">{stats.inProgress}</div>
-                                          <div className="text-xs text-gray-400 uppercase tracking-wider">Đang xử lý</div>
-                                      </div>
-                                       <div className="text-center">
-                                          <div className="text-2xl font-bold text-indigo-300">{formatDuration(currentFile.targetDurationSeconds)}</div>
-                                          <div className="text-xs text-gray-400 uppercase tracking-wider">Thời lượng</div>
-                                      </div>
-                                      <button
-                                          onClick={handleReloadVideos}
-                                          disabled={!currentFile}
-                                          className="flex items-center gap-2 bg-blue-500 text-white font-bold py-2 px-4 rounded-full hover:bg-blue-600 transition text-sm disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                          title="Quét lại thư mục để tìm và cập nhật các video đã được tạo."
-                                      >
-                                          <RetryIcon className="w-4 h-4"/>
-                                          <span>Tải lại video</span>
-                                      </button>
-                                      <button
-                                          onClick={handleRetryStuckJobs}
-                                          disabled={!currentFile || !currentFile.jobs.some(j => j.status === 'Generating' || j.status === 'Processing')}
-                                          className="flex items-center gap-2 bg-yellow-500 text-white font-bold py-2 px-4 rounded-full hover:bg-yellow-600 transition text-sm disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                          title="Xóa trạng thái của tất cả các video đang trong trạng thái 'Generating' hoặc 'Processing' để chúng được tạo lại."
-                                      >
-                                          <RetryIcon className="w-4 h-4"/>
-                                          <span>Tạo lại video đang xử lý</span>
-                                      </button>
-                                    </div>
-                                    <div className="flex flex-wrap items-center gap-2">
-                                        <div className="flex rounded-full bg-purple-500 hover:bg-purple-600 transition shadow-md">
-                                            <button onClick={handleOpenToolFlows} className="flex items-center gap-2 text-white font-bold py-2 pl-4 pr-3 text-sm">
-                                                <ExternalLinkIcon className="w-4 h-4"/>
-                                                <span>Mở ToolFlows</span>
-                                                
-                                            </button>
-                                            <button onClick={handleSetToolFlowsPath} className="text-white font-bold py-2 pr-3 pl-2 text-sm border-l border-purple-400 hover:bg-purple-700 rounded-r-full" title="Thay đổi đường dẫn ToolFlows Veo 3">
-                                                <CogIcon className="w-4 h-4"/>
-                                                
-                                            </button>
-                                        </div>
-                                        <button onClick={() => handleOpenFolder(currentFile.path)} className="flex items-center gap-2 bg-indigo-500 text-white font-bold py-2 px-4 rounded-full hover:bg-indigo-600 transition text-sm">
-                                            <FolderIcon className="w-4 h-4"/>
-                                            <span>Mở Thư mục</span>
-                                        </button>
-                                        <button onClick={() => handleCopyPath(getFolderPath(currentFile.path))} className="flex items-center gap-2 bg-white/10 text-white py-2 px-4 rounded-full hover:bg-white/20 transition text-sm">
-                                            <CopyIcon className="w-4 h-4"/>
-                                            <span>Copy Path Thư mục</span>
-                                        </button>
-                                        
-                                        {ffmpegFound === null ? (
-                                            <button 
-                                                disabled 
-                                                className="bg-gray-500 text-white font-bold py-2 px-4 rounded-full cursor-not-allowed"
-                                            >
-                                                Đang kiểm tra FFmpeg...
-                                            </button>
-                                        ) : !ffmpegFound ? (
-                                            <button 
-                                                disabled
-                                                className="bg-red-500 text-white font-bold py-2 px-4 rounded-full cursor-not-allowed"
-                                                title="FFmpeg không được tìm thấy. Vui lòng cài đặt lại ứng dụng."
-                                            >
-                                                Thiếu FFmpeg
-                                            </button>
-                                        ) : (
-                                            <>
-                                                <button 
-                                                    onClick={handleCombineAllFiles}
-                                                    disabled={trackedFiles.length === 0 || isCombiningAll || isCombiningVideo}
-                                                    className="bg-orange-500 text-white font-bold py-2 px-4 rounded-full hover:bg-orange-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                                    title="Ghép video lần lượt cho tất cả các file đang được theo dõi.Hãy kiểm tra tất cả các tab file trước khi ghép"
-                                                >
-                                                    {isCombiningAll ? 'Đang xử lý...' : 'Ghép Thường Tất Cả'}
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleExecuteCombine('normal')}
-                                                    disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath) || isCombiningVideo || isCombiningAll}
-                                                    className="bg-teal-500 text-white font-bold py-2 px-4 rounded-full hover:bg-teal-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                                    title="Ghép các video đã hoàn thành của file hiện tại theo thứ tự."
-                                                >
-                                                    {(isCombiningVideo && !isCombiningAll) ? 'Đang xử lý...' : 'Ghép Thường'}
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleExecuteCombine('timed')}
-                                                    disabled={!currentFile.jobs.some(j => j.status === 'Completed' && j.videoPath) || !currentFile.targetDurationSeconds || isCombiningVideo || isCombiningAll}
-                                                    className="bg-cyan-500 text-white font-bold py-2 px-4 rounded-full hover:bg-cyan-600 transition whitespace-nowrap disabled:bg-gray-500 disabled:cursor-not-allowed"
-                                                    title="Ghép các video đã hoàn thành của file hiện tại và đồng bộ với thời lượng bài hát"
-                                                >
-                                                    {(isCombiningVideo && !isCombiningAll) ? 'Đang xử lý...' : 'Ghép Theo Thời Gian'}
-                                                </button>
-                                            </>
-                                        )}
-                                    </div>
-                                  </div>
-                                  
-                                  <div className="overflow-x-auto bg-black/20 rounded-lg">
-                                      <table className="w-full text-white job-table">
-                                          <thead>
-                                              <tr>
-                                                  <th className="text-center">Job ID</th>
-                                                  <th className="text-center">Trạng Thái</th>
-                                                  <th className="text-center">Tên Video</th>
-                                                  <th className="text-center">Kết Quả</th>
-                                                  <th className="text-center">Thao tác</th>
-                                              </tr>
-                                          </thead>
-                                          <tbody>
-                                              {currentFile.jobs.map(job => (
-                                                  <tr key={job.id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
-                                                      <td className="font-mono text-sm align-middle text-center">{job.id}</td>
-                                                      <td className="align-middle text-center"><span className={getStatusBadge(job.status)}>{job.status}</span></td>
-                                                      <td className="font-mono text-sm align-middle text-center">{job.videoName}</td>
-                                                      <td className="align-middle flex justify-center py-2">{renderResultCell(job, activeTrackerFileIndex)}</td>
-                                                      <td className="align-middle">
-                                                        <div className="flex items-center justify-center gap-2 h-full">
-                                                            {job.videoPath && (
-                                                                <>
-                                                                    <button onClick={() => handlePlayVideo(job.videoPath)} className="group bg-teal-500/20 hover:bg-teal-500 border border-teal-500/30 text-teal-300 hover:text-white p-2.5 rounded-lg transition-all duration-200 shadow-lg hover:shadow-teal-500/50" title="Phát Video">
-                                                                        <PlayIcon className="w-5 h-5"/>
-                                                                    </button>
-                                                                    <button onClick={() => handleShowInFolder(job.videoPath)} className="group bg-indigo-500/20 hover:bg-indigo-500 border border-indigo-500/30 text-indigo-300 hover:text-white p-2.5 rounded-lg transition-all duration-200 shadow-lg hover:shadow-indigo-500/50" title="Mở thư mục chứa video">
-                                                                        <FolderIcon className="w-5 h-5"/>
-                                                                    </button>
-                                                                    <button onClick={() => handleDeleteVideo(job.id, job.videoPath)} className="group bg-red-500/20 hover:bg-red-500 border border-red-500/30 text-red-300 hover:text-white p-2.5 rounded-lg transition-all duration-200 shadow-lg hover:shadow-red-500/50" title="Xóa Video">
-                                                                        <TrashIcon className="w-5 h-5"/>
-                                                                    </button>
-                                                                </>
-                                                            )}
-                                                            <button onClick={() => handleRetryJob(job.id)} className="group bg-yellow-500/20 hover:bg-yellow-500 border border-yellow-500/30 text-yellow-300 hover:text-white p-2.5 rounded-lg transition-all duration-200 shadow-lg hover:shadow-yellow-500/50" title="Tạo lại video (Reset trạng thái)">
-                                                                <RetryIcon className="w-5 h-5"/>
-                                                            </button>
-                                                        </div>
-                                                      </td>
-                                                  </tr>
-                                              ))}
-                                          </tbody>
-                                      </table>
-                                  </div>
-                                  </>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </main>
-            )}
-          </div>
+            {showStats && <StatsModal onClose={() => setShowStats(false)} isAdmin={isAdminLoggedIn} onDeleteAll={() => ipcRenderer.invoke('delete-all-stats')} onDeleteHistory={(d) => ipcRenderer.invoke('delete-stat-date', d)} />}
+            {showAdminLogin && <AdminLoginModal onClose={() => setShowAdminLogin(false)} onLoginSuccess={() => { setIsAdminLoggedIn(true); setShowAdminLogin(false); setShowStats(true); }} />}
+            {alertModal && <AlertModal {...alertModal} onClose={() => setAlertModal(null)} />}
         </div>
-      </div>
-
-      {showStats && (
-          <StatsModal 
-            onClose={() => { setShowStats(false); setIsAdminLoggedIn(false); }} 
-            isAdmin={isAdminLoggedIn} 
-            onDeleteAll={handleDeleteAllStats}
-            onDeleteHistory={handleDeleteStatHistory}
-          />
-      )}
-
-      {showAdminLogin && (
-          <AdminLoginModal 
-            onClose={() => setShowAdminLogin(false)}
-            onLoginSuccess={() => {
-                setShowAdminLogin(false);
-                setIsAdminLoggedIn(true);
-                setShowStats(true);
-            }}
-          />
-      )}
-
-      {alertModal && (
-         <AlertModal
-            title={alertModal.title}
-            message={alertModal.message}
-            type={alertModal.type}
-            onClose={() => setAlertModal(null)}
-            onConfirm={alertModal.onConfirm}
-         />
-      )}
-    </div>
-  );
+    );
 };
 
 export default App;
