@@ -331,6 +331,11 @@ function showWindowAndNotify(title, message, type = 'completion') {
 }
 
 function createWindow() {
+  // Use platform-specific icons if available
+  const iconPath = process.platform === 'win32' 
+      ? path.join(__dirname, 'assets', 'icon.ico') 
+      : path.join(__dirname, 'assets', 'icon.png');
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -338,7 +343,7 @@ function createWindow() {
       contextIsolation: false,
       nodeIntegration: true,
     },
-    icon: path.join(__dirname, 'assets/icon.png')
+    icon: iconPath
   });
   
   const startUrl = app.isPackaged 
@@ -368,7 +373,10 @@ app.whenReady().then(() => {
         {
           label: 'Hướng dẫn sử dụng',
           click: () => {
-            const guideWindow = new BrowserWindow({ width: 900, height: 700, title: 'Hướng dẫn sử dụng - Prompt Generator Pro', icon: path.join(__dirname, 'assets/icon.png') });
+            const iconPath = process.platform === 'win32' 
+                ? path.join(__dirname, 'assets', 'icon.ico') 
+                : path.join(__dirname, 'assets', 'icon.png');
+            const guideWindow = new BrowserWindow({ width: 900, height: 700, title: 'Hướng dẫn sử dụng - Prompt Generator Pro', icon: iconPath });
             const guideUrl = app.isPackaged
                 ? path.join(__dirname, 'dist', 'guide.html')
                 : path.join(__dirname, 'guide.html');

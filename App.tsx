@@ -214,9 +214,9 @@ const App: React.FC = () => {
     } : null;
 
     return (
-        <div className="relative min-h-screen flex flex-col font-sans text-cute-brown">
+        <div className="relative h-screen overflow-hidden flex flex-col font-sans text-cute-brown">
             {/* Header - Cute Christmas Theme */}
-            <header className="px-8 py-4 bg-white/80 backdrop-blur-xl border-b-4 border-cute-pink/20 flex justify-between items-center sticky top-0 z-50 shadow-sm transition-all duration-300 rounded-b-[40px] mx-4 mt-2">
+            <header className="px-8 py-4 bg-white/80 backdrop-blur-xl border-b-4 border-cute-pink/20 flex justify-between items-center sticky top-0 z-50 shadow-sm transition-all duration-300 rounded-b-[40px] mx-4 mt-2 shrink-0">
                 <div className="flex items-center gap-4">
                     <span className="text-5xl filter drop-shadow-md animate-wiggle cursor-default">🎅</span>
                     <div>
@@ -224,7 +224,7 @@ const App: React.FC = () => {
                             Prompt Generator <span className="text-cute-pink-dark">Pro</span>
                         </h1>
                         <span className="text-[10px] font-bold text-cute-brown bg-cute-yellow px-3 py-1 rounded-full border-2 border-white tracking-widest uppercase ml-0.5 shadow-sm inline-flex items-center gap-1 mt-1">
-                            Christmas Cute Edition 🎄
+                            Christmas Cute Edition 🎄 🦌 ⛄
                         </span>
                     </div>
                 </div>
@@ -241,7 +241,7 @@ const App: React.FC = () => {
             </header>
 
             {/* Navigation Tabs - Pills */}
-            <div className="flex justify-center gap-4 py-6">
+            <div className="flex justify-center gap-4 py-4 shrink-0">
                 <button 
                     onClick={() => setActiveTab('generator')} 
                     className={`px-8 py-3 rounded-full font-extrabold uppercase tracking-wider text-xs transition-all shadow-md transform hover:-translate-y-1 flex items-center gap-2 ${activeTab === 'generator' ? 'bg-cute-pink text-white ring-4 ring-cute-pink/20' : 'bg-white text-cute-brown hover:bg-cute-pink/10'}`}
@@ -256,14 +256,15 @@ const App: React.FC = () => {
                 </button>
             </div>
 
-            {/* Main Content */}
+            {/* Main Content Container - Using hidden/block to preserve state */}
             <div className="flex-1 p-4 md:p-6 overflow-hidden">
                  <div className="max-w-[1920px] mx-auto h-full">
-                     {/* Generator Tab */}
-                     <div className={activeTab === 'generator' ? 'block h-full overflow-y-auto custom-scrollbar pb-20' : 'hidden'}>
-                        <div className="glass-card p-8 rounded-[40px] shadow-xl animate-fade-in border-4 border-white">
+                     
+                     {/* Generator Tab Wrapper */}
+                     <div className={`${activeTab === 'generator' ? 'block' : 'hidden'} h-full overflow-y-auto custom-scrollbar pb-20`}>
+                        <div className="glass-card p-8 rounded-[40px] shadow-xl animate-fade-in border-4 border-white mb-8">
                             <Generator 
-                                apiKeys={apiKeys} activeApiKey={activeApiKey} presets={presets} 
+                                activeApiKey={activeApiKey} presets={presets} 
                                 onSavePresets={p => { setPresets(p); if(ipcRenderer) ipcRenderer.invoke('save-app-config', {presets:p}); }}
                                 onGenerateSuccess={handleGenerateSuccess}
                                 onFeedback={setFeedback}
@@ -271,8 +272,8 @@ const App: React.FC = () => {
                         </div>
                      </div>
 
-                     {/* Tracker Tab */}
-                     <div className={activeTab === 'tracker' ? 'block h-full' : 'hidden'}>
+                     {/* Tracker Tab Wrapper */}
+                     <div className={`${activeTab === 'tracker' ? 'block' : 'hidden'} h-full`}>
                         <Tracker 
                             trackedFiles={trackedFiles} activeFileIndex={activeTrackerFileIndex} setActiveFileIndex={setActiveTrackerFileIndex}
                             onOpenFile={async () => {

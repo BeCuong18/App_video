@@ -9,7 +9,6 @@ import { LoaderIcon, TrashIcon } from './Icons';
 const ipcRenderer = (window as any).require ? (window as any).require('electron').ipcRenderer : null;
 
 interface GeneratorProps {
-    apiKeys: ApiKey[];
     activeApiKey: ApiKey | null;
     presets: Preset[];
     onSavePresets: (newPresets: Preset[]) => void;
@@ -260,7 +259,7 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                      {/* CARD 1: CONTENT CORE */}
                      <div className="bg-white/80 p-8 rounded-[32px] shadow-sm border-4 border-white relative overflow-hidden group">
                         <div className="absolute top-0 left-0 w-2 h-full bg-cute-mint"></div>
-                        <div className="absolute top-2 right-4 text-3xl opacity-20 rotate-12">📝</div>
+                        <div className="absolute -top-6 -right-6 text-6xl opacity-10 rotate-12 select-none">⛄</div>
                         <h3 className="text-cute-mint-dark font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-cute-mint/20 pb-2">
                              1. Nội Dung Cốt Lõi
                         </h3>
@@ -292,7 +291,7 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                      {/* CARD 2: ARTISTIC DIRECTION */}
                      <div className="bg-white/80 p-8 rounded-[32px] shadow-sm border-4 border-white relative overflow-hidden group">
                         <div className="absolute top-0 left-0 w-2 h-full bg-cute-yellow"></div>
-                        <div className="absolute top-2 right-4 text-3xl opacity-20 rotate-12">🎨</div>
+                        <div className="absolute -top-4 -right-2 text-6xl opacity-10 -rotate-12 select-none">🎨</div>
                         <h3 className="text-stone-600 font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-cute-yellow/40 pb-2">
                              2. Định Hướng Nghệ Thuật
                         </h3>
@@ -310,15 +309,16 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                                         {musicGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                     {formData.musicGenre === 'other' && (
-                                        <div className="mt-2 animate-fade-in">
+                                        <div className="mt-3 animate-fade-in relative">
                                             <input 
                                                 type="text" 
                                                 name="customMusicGenre"
                                                 value={formData.customMusicGenre}
                                                 onChange={handleInputChange}
-                                                className="w-full p-3 text-sm border-2 border-cute-mint/30 focus:border-cute-pink bg-white rounded-2xl font-bold placeholder-stone-300" 
+                                                className="w-full p-3 text-sm border-4 border-cute-pink/20 focus:border-cute-pink bg-white rounded-2xl font-bold placeholder-stone-300 candy-border shadow-inner" 
                                                 placeholder="Nhập thể loại nhạc cụ thể..." 
                                             />
+                                            <span className="absolute -top-2 right-2 text-xl animate-bounce-slow">🎵</span>
                                         </div>
                                     )}
                                 </div>
@@ -346,7 +346,7 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                      {videoType === 'story' && (
                         <div className="bg-white/80 p-8 rounded-[32px] shadow-sm border-4 border-white relative overflow-hidden group">
                             <div className="absolute top-0 left-0 w-2 h-full bg-cute-pink"></div>
-                            <div className="absolute top-2 right-4 text-3xl opacity-20 rotate-12">🧑‍🎤</div>
+                            <div className="absolute -top-4 -right-4 text-6xl opacity-10 rotate-45 select-none">🎅</div>
                             <div className="flex items-center justify-between mb-2 border-b-2 border-dashed border-cute-pink/20 pb-2">
                                 <h3 className="text-cute-pink-dark font-black uppercase text-xs tracking-widest">
                                     3. Nhân Vật & Diễn Viên
@@ -388,8 +388,8 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
 
                  {/* RIGHT COLUMN: CONFIGURATION (4 cols) */}
                  <div className="xl:col-span-4 space-y-6 sticky top-4">
-                    <div className="bg-white/90 p-8 rounded-[32px] border-4 border-white shadow-xl backdrop-blur-md">
-                        <div className="absolute top-2 right-4 text-3xl opacity-20 rotate-12">⚙️</div>
+                    <div className="bg-white/90 p-8 rounded-[32px] border-4 border-white shadow-xl backdrop-blur-md relative overflow-hidden">
+                        <div className="absolute -top-6 -right-6 text-6xl opacity-10 rotate-12 select-none">❄️</div>
                         <h3 className="text-cute-brown font-black uppercase text-xs mb-6 border-b-2 border-stone-100 pb-2 tracking-widest flex items-center gap-2">
                              Cấu hình Dự Án
                         </h3>

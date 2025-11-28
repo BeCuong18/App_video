@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -47,26 +48,40 @@
     <style>
         body {
             font-family: 'Nunito', sans-serif; /* Rounder font */
-            overflow-x: hidden;
             background-color: #FFFBF0;
             color: #5D4037;
+            /* CRITICAL FIX: Prevent scrollbar jumping caused by falling snow */
+            overflow: hidden; 
+            margin: 0;
+            height: 100vh;
+            width: 100vw;
         }
         
-        /* Cute Christmas Pattern Background */
+        /* Cute Christmas Pattern Background - Candy Cane & Polka Dots */
         .cute-bg {
             background-color: #FFFBF0;
-            /* Polka dots + Candy Cane vibe */
             background-image: 
                 radial-gradient(#FF8FA3 15%, transparent 16%), 
                 radial-gradient(#80DEEA 15%, transparent 16%),
-                repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255, 255, 255, 0.4) 10px, rgba(255, 255, 255, 0.4) 20px);
+                repeating-linear-gradient(45deg, rgba(255, 143, 163, 0.05) 0px, rgba(255, 143, 163, 0.05) 20px, transparent 20px, transparent 40px);
             background-size: 60px 60px, 60px 60px, 100% 100%;
             background-position: 0 0, 30px 30px, 0 0;
             position: relative;
-            min-height: 100vh;
         }
 
-        /* Soft Snow Effect */
+        /* FIXED SNOW CONTAINER: Prevents layout trashing and scrollbars */
+        #snow-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* Cuts off snow at the bottom edge */
+            pointer-events: none; /* Allows clicks to pass through */
+            z-index: 0; 
+        }
+
+        /* Soft Snow Effect - Optimized */
         .snowflake {
             position: absolute;
             top: -10px;
@@ -76,9 +91,10 @@
             pointer-events: none;
             animation: fall linear infinite;
             box-shadow: 0 0 5px rgba(255,255,255,0.8);
+            will-change: transform; /* PERFORMANCE FIX: Uses GPU to render animation */
         }
         @keyframes fall {
-            to { transform: translateY(105vh); }
+            to { transform: translateY(110vh); }
         }
 
         /* Glassmorphism - Milky & Soft */
@@ -116,6 +132,13 @@
             box-shadow: 0 0 0 4px rgba(255, 143, 163, 0.2);
         }
         ::placeholder { color: #D7CCC8 !important; font-weight: 600; }
+
+        /* Candy Cane Border Helper */
+        .candy-border {
+            border: 4px solid transparent;
+            background: linear-gradient(#fff, #fff) padding-box,
+                        repeating-linear-gradient(45deg, #FF8FA3 0, #FF8FA3 10px, #fff 10px, #fff 20px) border-box;
+        }
 
         /* Badges - Pill shaped */
         .status-badge {
