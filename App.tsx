@@ -304,7 +304,7 @@ const App: React.FC = () => {
                             onReloadVideos={handleReloadVideos}
                             onRetryStuck={() => currentFile?.path && ipcRenderer.invoke('retry-stuck-jobs', {filePath: currentFile.path})}
                             onRetryJob={(id) => currentFile?.path && ipcRenderer.invoke('retry-job', {filePath: currentFile.path, jobId: id})}
-                            onDeleteVideo={async (id, path) => {
+                            onDeleteVideo={async (_id, path) => {
                                 if(ipcRenderer) {
                                     const res = await ipcRenderer.invoke('delete-video-file', path);
                                     if(res.success) handleReloadVideos();

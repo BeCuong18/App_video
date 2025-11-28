@@ -17,7 +17,7 @@ interface GeneratorProps {
     onFeedback: (feedback: { type: 'error' | 'success' | 'info', message: string } | null) => void;
 }
 
-export const Generator: React.FC<GeneratorProps> = ({ apiKeys, activeApiKey, presets, onSavePresets, onGenerateSuccess, onFeedback }) => {
+export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onSavePresets, onGenerateSuccess, onFeedback }) => {
     const [videoType, setVideoType] = useState<VideoType>('story');
     const [isLoading, setIsLoading] = useState(false);
     const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { TrackedFile, VideoJob, JobStatus } from '../types';
 import { PlayIcon, FolderIcon, TrashIcon, RetryIcon, ExternalLinkIcon, CogIcon, UploadIcon, LoaderIcon, VideoIcon } from './Icons';
@@ -181,7 +182,7 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {currentFile.jobs.map((job, idx) => (
+                            {currentFile.jobs.map((job) => (
                                 <tr key={job.id} className="transition-colors group hover:bg-white border-b-2 border-white">
                                     <td className="font-mono text-xs text-center font-bold text-stone-400 bg-white/40 group-hover:bg-white">{job.id.replace('Job_', '')}</td>
                                     <td className="text-center bg-white/40 group-hover:bg-white"><span className={getStatusBadge(job.status)}>{job.status}</span></td>
