@@ -1,7 +1,7 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { TrackedFile, VideoJob, JobStatus } from '../types';
-import { PlayIcon, FolderIcon, TrashIcon, RetryIcon, ExternalLinkIcon, CogIcon, UploadIcon, LoaderIcon, VideoIcon } from './Icons';
+import { PlayIcon, FolderIcon, TrashIcon, RetryIcon, ExternalLinkIcon, CogIcon, UploadIcon, LoaderIcon, VideoIcon, CopyIcon, LinkIcon } from './Icons';
 
 interface TrackerProps {
     trackedFiles: TrackedFile[];
@@ -27,6 +27,15 @@ interface TrackerProps {
 export const Tracker: React.FC<TrackerProps> = (props) => {
     const { trackedFiles, activeFileIndex, setActiveFileIndex, stats } = props;
     const currentFile = trackedFiles[activeFileIndex];
+    const [copyFeedback, setCopyFeedback] = useState(false);
+
+    const handleCopyPath = () => {
+        if (currentFile?.path) {
+            navigator.clipboard.writeText(currentFile.path);
+            setCopyFeedback(true);
+            setTimeout(() => setCopyFeedback(false), 2000);
+        }
+    };
 
     const getStatusBadge = (status: JobStatus) => {
         const base = "status-badge";
@@ -70,7 +79,9 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
             return (
                 <div className="w-full aspect-video bg-white rounded-2xl flex flex-col items-center justify-center text-center p-2 mx-auto border-2 border-dashed border-cute-mint group hover:border-cute-pink transition-colors">
                     <VideoIcon className="w-6 h-6 text-cute-mint mb-2 group-hover:text-cute-pink transition-colors" />
-                    <button onClick={() => props.onLinkVideo(job.id, activeFileIndex)} className="text-[10px] font-bold text-cute-mint-dark hover:text-white uppercase tracking-wide border border-cute-mint hover:border-cute-pink px-3 py-1.5 rounded-full transition-colors bg-white hover:bg-cute-pink">Link File</button>
+                    <button onClick={() => props.onLinkVideo(job.id, activeFileIndex)} className="text-[10px] font-bold text-cute-mint-dark hover:text-white uppercase tracking-wide border border-cute-mint hover:border-cute-pink px-3 py-1.5 rounded-full transition-colors bg-white hover:bg-cute-pink flex items-center gap-1">
+                        <LinkIcon className="w-3 h-3"/> Link File
+                    </button>
                 </div>
             );
         }
@@ -135,10 +146,10 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 flex flex-col bg-cute-cream relative overflow-hidden">
+            <div className="flex-1 flex flex-col bg-cute-cream relative overflow-hidden min-w-0">
                 
-                {/* Toolbar Header */}
-                <div className="p-4 border-b-2 border-white bg-white/50 flex items-center justify-between flex-wrap gap-4 z-10 shadow-sm">
+                {/* Toolbar Header - Responsive Wrap */}
+                <div className="p-4 border-b-2 border-white bg-white/50 flex items-center justify-between flex-wrap gap-4 z-10 shadow-sm shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="text-center px-4 py-1.5 bg-emerald-100 rounded-2xl border border-white shadow-sm min-w-[80px]">
                             <div className="text-xl font-black text-emerald-600 leading-none">{stats?.completed || 0}/{stats?.total || 0}</div>
@@ -150,20 +161,33 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        <button onClick={props.onReloadVideos} className="bg-white hover:bg-blue-50 text-blue-500 p-3 rounded-xl shadow-sm border border-stone-100 transition transform hover:scale-110" title="Tải lại video"><RetryIcon className="w-5 h-5"/></button>
-                        <button onClick={props.onRetryStuck} className="bg-white hover:bg-yellow-50 text-yellow-500 p-3 rounded-xl shadow-sm border border-stone-100 transition transform hover:scale-110" title="Reset job bị kẹt"><ExternalLinkIcon className="w-5 h-5"/></button>
-                        <div className="h-6 w-0.5 bg-stone-200 mx-1 rounded-full"></div>
+                    <div className="flex items-center flex-wrap gap-2">
+                        <button onClick={props.onReloadVideos} className="bg-white hover:bg-blue-50 text-blue-500 px-4 py-2.5 rounded-xl shadow-sm border border-stone-100 transition transform hover:scale-105 flex items-center gap-2 font-bold text-xs" title="Tải lại video">
+                            <RetryIcon className="w-4 h-4"/> <span>Tải lại</span>
+                        </button>
+                        <button onClick={props.onRetryStuck} className="bg-white hover:bg-yellow-50 text-yellow-500 px-4 py-2.5 rounded-xl shadow-sm border border-stone-100 transition transform hover:scale-105 flex items-center gap-2 font-bold text-xs" title="Reset job bị kẹt">
+                            <ExternalLinkIcon className="w-4 h-4"/> <span>Reset Lỗi</span>
+                        </button>
+                        
+                        <div className="h-6 w-0.5 bg-stone-200 mx-1 rounded-full hidden md:block"></div>
+                        
                         <button onClick={props.onOpenToolFlows} className="bg-cute-brown hover:bg-cute-brown-light text-white px-4 py-2.5 rounded-xl shadow-md font-bold text-xs flex items-center gap-2 uppercase tracking-wide transform hover:scale-105 border-2 border-stone-300">
                             <CogIcon className="w-4 h-4"/> ToolFlows
                         </button>
-                        <button onClick={() => props.onShowFolder(currentFile.path!)} className="bg-stone-200 hover:bg-stone-300 text-stone-600 p-3 rounded-xl shadow-sm transition transform hover:scale-110" title="Mở thư mục"><FolderIcon className="w-5 h-5"/></button>
+                        
+                        <button onClick={() => props.onShowFolder(currentFile.path!)} className="bg-stone-200 hover:bg-stone-300 text-stone-600 px-4 py-2.5 rounded-xl shadow-sm transition transform hover:scale-105 flex items-center gap-2 font-bold text-xs" title="Mở thư mục">
+                            <FolderIcon className="w-4 h-4"/> <span>Mở Thư Mục</span>
+                        </button>
+
+                        <button onClick={handleCopyPath} className="bg-stone-100 hover:bg-cute-mint hover:text-white text-stone-500 px-4 py-2.5 rounded-xl shadow-sm transition transform hover:scale-105 flex items-center gap-2 font-bold text-xs" title="Copy đường dẫn">
+                            <CopyIcon className="w-4 h-4"/> <span>{copyFeedback ? 'Đã Copy!' : 'Copy Path'}</span>
+                        </button>
                     </div>
                 </div>
 
                 {/* Combine Actions Bar */}
                 {props.ffmpegFound && (
-                    <div className="px-6 py-3 bg-white/40 border-b border-white flex gap-3 z-10">
+                    <div className="px-6 py-3 bg-white/40 border-b border-white flex gap-3 z-10 shrink-0">
                         <button onClick={() => props.onCombine('normal')} disabled={props.isCombining} className="bg-cute-mint-dark hover:bg-teal-500 text-white px-6 py-2 rounded-full text-[10px] font-bold shadow-sm uppercase tracking-widest disabled:opacity-50 transition border-2 border-white">Ghép Thường</button>
                         <button onClick={() => props.onCombine('timed')} disabled={props.isCombining} className="bg-blue-400 hover:bg-blue-500 text-white px-6 py-2 rounded-full text-[10px] font-bold shadow-sm uppercase tracking-widest disabled:opacity-50 transition border-2 border-white">Ghép Theo Nhạc</button>
                     </div>
@@ -171,7 +195,7 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
 
                 {/* Job Table - Fixed Layout */}
                 <div className="flex-1 overflow-auto custom-scrollbar p-0 z-0 bg-cute-cream">
-                    <table className="w-full text-cute-brown job-table border-collapse table-fixed">
+                    <table className="w-full text-cute-brown job-table border-collapse table-fixed min-w-[800px]">
                         <thead className="sticky top-0 z-20 shadow-sm">
                             <tr>
                                 <th className="w-20 text-center rounded-tl-2xl">ID</th>
