@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
@@ -258,7 +259,8 @@ const App: React.FC = () => {
             {/* Main Content */}
             <div className="flex-1 p-4 md:p-6 overflow-hidden">
                  <div className="max-w-[1920px] mx-auto h-full">
-                     {activeTab === 'generator' ? (
+                     {/* Generator Tab */}
+                     <div className={activeTab === 'generator' ? 'block h-full overflow-y-auto custom-scrollbar pb-20' : 'hidden'}>
                         <div className="glass-card p-8 rounded-[40px] shadow-xl animate-fade-in border-4 border-white">
                             <Generator 
                                 apiKeys={apiKeys} activeApiKey={activeApiKey} presets={presets} 
@@ -267,7 +269,10 @@ const App: React.FC = () => {
                                 onFeedback={setFeedback}
                             />
                         </div>
-                     ) : (
+                     </div>
+
+                     {/* Tracker Tab */}
+                     <div className={activeTab === 'tracker' ? 'block h-full' : 'hidden'}>
                         <Tracker 
                             trackedFiles={trackedFiles} activeFileIndex={activeTrackerFileIndex} setActiveFileIndex={setActiveTrackerFileIndex}
                             onOpenFile={async () => {
@@ -320,7 +325,7 @@ const App: React.FC = () => {
                                 }
                             }}
                         />
-                     )}
+                     </div>
                  </div>
             </div>
 
