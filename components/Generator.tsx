@@ -416,10 +416,8 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                         <div className="mb-5">
                             <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Model AI</label>
                             <select name="model" value={formData.model} onChange={handleInputChange} className="w-full bg-cute-cream border-2 border-cute-mint/30 rounded-2xl p-3 text-sm focus:border-cute-pink">
-                                <option value="gemini-flash-lite-latest">Gemini 2.5 Flash Lite (Nhanh)</option>
-                                <option value="gemini-flash-latest">Gemini 2.5 Flash (Ổn định)</option>
-                                <option value="gemini-2.0-flash-thinking-exp-01-21">Gemini 2.5 Flash Thinking (Khuyên dùng)</option>
-                                <option value="gemini-2.0-pro-exp-02-05">Gemini 2.5 Pro (Cao cấp)</option>
+                                <option value="gemini-flash-lite-latest">Gemini 2.5 Flash Lite (Mặc định)</option>
+                                <option value="gemini-flash-latest">Gemini 2.5 Flash (Sáng tạo hơn)</option>
                             </select>
                         </div>
 

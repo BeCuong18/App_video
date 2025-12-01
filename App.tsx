@@ -199,6 +199,15 @@ const App: React.FC = () => {
         setIsCombining(false);
     };
 
+    const handleSetToolFlowPath = async () => {
+        if (ipcRenderer) {
+            const res = await ipcRenderer.invoke('set-tool-flow-path');
+            if (res.success) {
+                setFeedback({type:'success', message:'Đã cập nhật đường dẫn ToolFlows'});
+            }
+        }
+    };
+
     // --- Render ---
     if (!configLoaded) return <div className="min-h-screen bg-cute-cream flex items-center justify-center text-cute-brown"><ShieldIcon className="animate-spin w-16 h-16 text-cute-pink"/></div>;
     
@@ -302,6 +311,7 @@ const App: React.FC = () => {
                             onPlayVideo={(path) => ipcRenderer && ipcRenderer.send('open-video-path', path)}
                             onShowFolder={(path) => ipcRenderer && ipcRenderer.send('open-folder', path.substring(0, path.lastIndexOf(navigator.userAgent.includes("Windows")?'\\':'/')))}
                             onOpenToolFlows={() => ipcRenderer && ipcRenderer.invoke('open-tool-flow')}
+                            onSetToolFlowPath={handleSetToolFlowPath}
                             onReloadVideos={handleReloadVideos}
                             onRetryStuck={() => currentFile?.path && ipcRenderer.invoke('retry-stuck-jobs', {filePath: currentFile.path})}
                             onRetryJob={(id) => currentFile?.path && ipcRenderer.invoke('retry-job', {filePath: currentFile.path, jobId: id})}

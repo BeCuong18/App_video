@@ -15,6 +15,7 @@ interface TrackerProps {
     onPlayVideo: (path: string) => void;
     onShowFolder: (path: string) => void;
     onOpenToolFlows: () => void;
+    onSetToolFlowPath: () => void;
     onReloadVideos: () => void;
     onRetryStuck: () => void;
     onRetryJob: (id: string) => void;
@@ -176,9 +177,14 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
                         
                         <div className="h-6 w-0.5 bg-stone-200 mx-1 rounded-full hidden md:block"></div>
                         
-                        <button onClick={props.onOpenToolFlows} className="bg-cute-brown hover:bg-cute-brown-light text-white px-4 py-2.5 rounded-xl shadow-md font-bold text-xs flex items-center gap-2 uppercase tracking-wide transform hover:scale-105 border-2 border-stone-300">
-                            <CogIcon className="w-4 h-4"/> ToolFlows
-                        </button>
+                        <div className="flex items-center gap-1">
+                            <button onClick={props.onOpenToolFlows} className="bg-cute-brown hover:bg-cute-brown-light text-white px-4 py-2.5 rounded-xl shadow-md font-bold text-xs flex items-center gap-2 uppercase tracking-wide transform hover:scale-105 border-2 border-stone-300">
+                                <PlayIcon className="w-3 h-3"/> Mở ToolFlows
+                            </button>
+                            <button onClick={props.onSetToolFlowPath} className="bg-stone-200 hover:bg-stone-300 text-stone-600 p-2.5 rounded-xl shadow-sm transition transform hover:scale-105 border-2 border-stone-100" title="Cài đặt đường dẫn ToolFlows">
+                                <CogIcon className="w-4 h-4"/>
+                            </button>
+                        </div>
                         
                         <button onClick={() => props.onShowFolder(currentFile.path!)} className="bg-stone-200 hover:bg-stone-300 text-stone-600 px-4 py-2.5 rounded-xl shadow-sm transition transform hover:scale-105 flex items-center gap-2 font-bold text-xs" title="Mở thư mục">
                             <FolderIcon className="w-4 h-4"/> <span>Mở Thư Mục</span>
