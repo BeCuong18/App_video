@@ -31,7 +31,12 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
 
     const handleCopyPath = () => {
         if (currentFile?.path) {
-            navigator.clipboard.writeText(currentFile.path);
+            // Logic to get directory path: Find the last separator (\ or /) and substring up to it
+            const fullPath = currentFile.path;
+            const separator = fullPath.includes('\\') ? '\\' : '/';
+            const folderPath = fullPath.substring(0, fullPath.lastIndexOf(separator));
+
+            navigator.clipboard.writeText(folderPath);
             setCopyFeedback(true);
             setTimeout(() => setCopyFeedback(false), 2000);
         }
@@ -179,8 +184,8 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
                             <FolderIcon className="w-4 h-4"/> <span>Mở Thư Mục</span>
                         </button>
 
-                        <button onClick={handleCopyPath} className="bg-stone-100 hover:bg-cute-mint hover:text-white text-stone-500 px-4 py-2.5 rounded-xl shadow-sm transition transform hover:scale-105 flex items-center gap-2 font-bold text-xs" title="Copy đường dẫn">
-                            <CopyIcon className="w-4 h-4"/> <span>{copyFeedback ? 'Đã Copy!' : 'Copy Path'}</span>
+                        <button onClick={handleCopyPath} className="bg-stone-100 hover:bg-cute-mint hover:text-white text-stone-500 px-4 py-2.5 rounded-xl shadow-sm transition transform hover:scale-105 flex items-center gap-2 font-bold text-xs" title="Copy đường dẫn thư mục">
+                            <CopyIcon className="w-4 h-4"/> <span>{copyFeedback ? 'Đã Copy Folder!' : 'Copy Path Folder'}</span>
                         </button>
                     </div>
                 </div>
