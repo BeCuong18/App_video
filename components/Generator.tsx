@@ -101,13 +101,13 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
         } else if (name === 'songMinutes') {
             if (value === '') { setFormData(prev => ({ ...prev, songMinutes: '' })); return; }
             let val = parseInt(value);
-            if (isNaN(val)) val = 0; if (val < 0) val = 0; if (val > 5) val = 5;
-            setFormData(prev => ({ ...prev, songMinutes: val.toString(), songSeconds: (val === 5) ? '0' : prev.songSeconds }));
+            if (isNaN(val)) val = 0; if (val < 0) val = 0; if (val > 15) val = 15;
+            setFormData(prev => ({ ...prev, songMinutes: val.toString(), songSeconds: (val === 15) ? '0' : prev.songSeconds }));
         } else if (name === 'songSeconds') {
             let val = parseInt(value);
             if (isNaN(val) || val < 0) val = 0;
             setFormData(prev => {
-                if (parseInt(prev.songMinutes) >= 5) return { ...prev, songSeconds: '0' }; 
+                if (parseInt(prev.songMinutes) >= 15) return { ...prev, songSeconds: '0' }; 
                 if (val > 59) val = 59;
                 return { ...prev, songSeconds: val.toString() };
             });
@@ -160,8 +160,8 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
         setGeneratedScenes([]);
 
         const totalSeconds = (parseInt(formData.songMinutes) || 0) * 60 + (parseInt(formData.songSeconds) || 0);
-        if (totalSeconds <= 0 || totalSeconds > 300) {
-            onFeedback({ type: 'error', message: 'Thời lượng không hợp lệ (1s - 5 phút).' });
+        if (totalSeconds <= 0 || totalSeconds > 900) {
+            onFeedback({ type: 'error', message: 'Thời lượng không hợp lệ (1s - 15 phút).' });
             setIsLoading(false);
             return;
         }
@@ -400,10 +400,10 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                         </div>
 
                         <div className="mb-5">
-                            <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Thời lượng (Max 5 phút)</label>
+                            <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Thời lượng (Max 15 phút)</label>
                             <div className="flex gap-2">
                                 <div className="relative flex-1 group">
-                                    <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} min="0" max="5" className="w-full bg-cute-cream border-2 border-cute-mint/30 rounded-2xl p-3 text-center font-black text-xl text-stone-700 focus:border-cute-pink transition" placeholder="0" />
+                                    <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} min="0" max="15" className="w-full bg-cute-cream border-2 border-cute-mint/30 rounded-2xl p-3 text-center font-black text-xl text-stone-700 focus:border-cute-pink transition" placeholder="0" />
                                     <span className="absolute right-3 top-4 text-stone-400 text-[9px] uppercase font-bold">Phút</span>
                                 </div>
                                 <div className="relative flex-1 group">
