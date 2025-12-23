@@ -5,32 +5,39 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Prompt Generator Pro - Christmas Cute Edition</title>
+    <title>Prompt Generator Pro - Tet Binh Ngo 2026</title>
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#FFFBF0">
+    <meta name="theme-color" content="#B71C1C">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
           theme: {
             extend: {
               colors: {
-                'cute-cream': '#FFFBF0',      /* Milky Cream Background */
-                'cute-pink': '#FF8FA3',       /* Peach Red / Macaron Pink */
-                'cute-pink-dark': '#FF4D6D',  /* Deeper Pink for text */
-                'cute-mint': '#80DEEA',       /* Mint Green */
-                'cute-mint-dark': '#26A69A',  /* Teal for contrast */
-                'cute-brown': '#5D4037',      /* Cookie Brown (Text) */
-                'cute-brown-light': '#8D6E63', /* Milk Chocolate */
-                'cute-yellow': '#FFE066',     /* Butter Yellow */
-                'cute-red': '#FF5252',        /* Santa Red */
+                'tet-cream': '#FFFDF5',      /* Richer Cream */
+                'tet-red': '#D50000',        /* Vivid Red */
+                'tet-red-dark': '#8E0000',   /* Lacquer Red */
+                'tet-gold': '#FFD600',       /* Pure Gold */
+                'tet-gold-light': '#FFF59D', /* Light Gold */
+                'tet-gold-dark': '#F57F17',  /* Bronze/Copper */
+                'tet-peach': '#FF4081',      /* Deep Peach */
+                'tet-green': '#1B5E20',      /* Deep Bamboo Green */
+                'tet-brown': '#3E2723',      /* Dark Wood */
               },
               animation: {
                 'bounce-slow': 'bounce 3s infinite',
+                'swing': 'swing 3s ease-in-out infinite',
                 'fade-in': 'fadeIn 0.5s ease-out',
                 'wiggle': 'wiggle 1s ease-in-out infinite',
-                'spin-slow': 'spin 8s linear infinite',
+                'spin-slow': 'spin 12s linear infinite',
+                'float': 'float 6s ease-in-out infinite',
+                'pulse-glow': 'pulseGlow 2s infinite',
               },
               keyframes: {
+                swing: {
+                    '0%, 100%': { transform: 'rotate(-5deg)' },
+                    '50%': { transform: 'rotate(5deg)' },
+                },
                 fadeIn: {
                   '0%': { opacity: '0', transform: 'translateY(10px)' },
                   '100%': { opacity: '1', transform: 'translateY(0)' },
@@ -38,6 +45,14 @@
                 wiggle: {
                   '0%, 100%': { transform: 'rotate(-3deg)' },
                   '50%': { transform: 'rotate(3deg)' },
+                },
+                float: {
+                  '0%, 100%': { transform: 'translateY(0)' },
+                  '50%': { transform: 'translateY(-10px)' },
+                },
+                pulseGlow: {
+                    '0%, 100%': { boxShadow: '0 0 10px #FFD600', transform: 'scale(1)' },
+                    '50%': { boxShadow: '0 0 25px #FFD600', transform: 'scale(1.02)' },
                 }
               }
             }
@@ -45,133 +60,217 @@
         }
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: 'Nunito', sans-serif; /* Rounder font */
-            background-color: #FFFBF0;
-            color: #5D4037;
-            /* CRITICAL FIX: Prevent scrollbar jumping caused by falling snow */
+            font-family: 'Nunito', sans-serif;
+            background-color: #FFFDF5;
+            color: #3E2723;
             overflow: hidden; 
             margin: 0;
             height: 100vh;
             width: 100vw;
         }
         
-        /* Cute Christmas Pattern Background - Candy Cane & Polka Dots */
-        .cute-bg {
-            background-color: #FFFBF0;
+        /* Traditional Silk Pattern Background */
+        .tet-bg {
+            background-color: #FFFDF5;
             background-image: 
-                radial-gradient(#FF8FA3 15%, transparent 16%), 
-                radial-gradient(#80DEEA 15%, transparent 16%),
-                repeating-linear-gradient(45deg, rgba(255, 143, 163, 0.05) 0px, rgba(255, 143, 163, 0.05) 20px, transparent 20px, transparent 40px);
-            background-size: 60px 60px, 60px 60px, 100% 100%;
-            background-position: 0 0, 30px 30px, 0 0;
-            position: relative;
+                radial-gradient(circle at 100% 150%, #FFF59D 24%, #FFFDF5 25%, #FFFDF5 28%, #FFF59D 29%, #FFF59D 36%, #FFFDF5 36%, #FFFDF5 40%, transparent 40%, transparent),
+                radial-gradient(circle at 0 150%, #FFF59D 24%, #FFFDF5 25%, #FFFDF5 28%, #FFF59D 29%, #FFF59D 36%, #FFFDF5 36%, #FFFDF5 40%, transparent 40%, transparent),
+                radial-gradient(circle at 50%  100%, #ffe0b2 10%, #FFFDF5 11%, #FFFDF5 23%, #ffe0b2 24%, #ffe0b2 30%, #FFFDF5 31%, #FFFDF5 43%, #ffe0b2 44%, #ffe0b2 50%, #FFFDF5 51%, #FFFDF5 63%, #ffe0b2 64%, #ffe0b2 71%, transparent 71%, transparent),
+                radial-gradient(circle at 100% 50%, #FFF59D 5%, #FFFDF5 6%, #FFFDF5 15%, #FFF59D 16%, #FFF59D 20%, #FFFDF5 21%, #FFFDF5 30%, #FFF59D 31%, #FFF59D 35%, #FFFDF5 36%, #FFFDF5 45%, #FFF59D 46%, #FFF59D 49%, transparent 50%, transparent),
+                radial-gradient(circle at 0 50%, #FFF59D 5%, #FFFDF5 6%, #FFFDF5 15%, #FFF59D 16%, #FFF59D 20%, #FFFDF5 21%, #FFFDF5 30%, #FFF59D 31%, #FFF59D 35%, #FFFDF5 36%, #FFFDF5 45%, #FFF59D 46%, #FFF59D 49%, transparent 50%, transparent);
+            background-size: 100px 50px;
+            opacity: 1;
         }
 
-        /* FIXED SNOW CONTAINER: Prevents layout trashing and scrollbars */
-        #snow-container {
+        #petals-container {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            overflow: hidden; /* Cuts off snow at the bottom edge */
-            pointer-events: none; /* Allows clicks to pass through */
-            z-index: 0; 
+            overflow: hidden;
+            pointer-events: none;
+            z-index: 100; /* On top of background but below modals */
         }
 
-        /* Soft Snow Effect - Optimized */
-        .snowflake {
+        /* Falling Blossoms */
+        .petal {
             position: absolute;
-            top: -10px;
-            background: #fff;
-            border-radius: 50%;
-            opacity: 0.9;
+            top: -20px;
+            background: #FF4081;
+            border-radius: 100% 0% 100% 0%; /* Leaf/Petal shape */
+            opacity: 0.8;
             pointer-events: none;
             animation: fall linear infinite;
-            box-shadow: 0 0 5px rgba(255,255,255,0.8);
-            will-change: transform; /* PERFORMANCE FIX: Uses GPU to render animation */
+            will-change: transform;
+            box-shadow: 0 0 5px rgba(255,255,255,0.5);
         }
         @keyframes fall {
-            to { transform: translateY(110vh); }
+            0% { transform: translateY(-10vh) rotate(0deg) translateX(0px); opacity: 0; }
+            10% { opacity: 1; }
+            100% { transform: translateY(110vh) rotate(720deg) translateX(100px); opacity: 0; }
         }
 
-        /* Glassmorphism - Milky & Soft */
+        /* Glassmorphism - Red & Gold Theme */
         .glass-card {
-            background: rgba(255, 255, 255, 0.85);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 4px solid #fff;
-            box-shadow: 0 10px 40px rgba(255, 143, 163, 0.2);
-            border-radius: 32px; /* More rounded */
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 2px solid #FFD600;
+            box-shadow: 0 15px 35px rgba(142, 0, 0, 0.2); 
+            border-radius: 24px;
         }
-        
-        /* Custom Scrollbar - Candy Cane Style */
-        ::-webkit-scrollbar { width: 12px; height: 12px; }
-        ::-webkit-scrollbar-track { background: #FFFBF0; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb { 
-            background: repeating-linear-gradient(45deg, #FFCDD2, #FFCDD2 10px, #FF8FA3 10px, #FF8FA3 20px);
-            border-radius: 10px; 
-            border: 3px solid #FFFBF0; 
-        }
-        ::-webkit-scrollbar-thumb:hover { background: #FF8FA3; }
 
-        /* Form Elements - Rounded & Cute */
+        /* Scrollbar - Festive */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #FFF3E0; }
+        ::-webkit-scrollbar-thumb { 
+            background: linear-gradient(to bottom, #D50000, #FFD600);
+            border-radius: 10px; 
+        }
+        ::-webkit-scrollbar-thumb:hover { background: #8E0000; }
+
+        /* Form Elements - Royal Style */
         select, input, textarea {
             background-color: #ffffff !important;
-            border: 3px solid #E0F7FA !important;
-            color: #5D4037 !important;
-            border-radius: 20px !important;
+            border: 2px solid #FFE082 !important; 
+            color: #3E2723 !important;
+            border-radius: 12px !important;
             transition: all 0.3s ease;
             font-weight: 700;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
         }
         select:focus, input:focus, textarea:focus {
-            border-color: #FF8FA3 !important;
+            border-color: #D50000 !important; 
             outline: none;
-            box-shadow: 0 0 0 4px rgba(255, 143, 163, 0.2);
+            box-shadow: 0 0 0 3px rgba(213, 0, 0, 0.15);
         }
-        ::placeholder { color: #D7CCC8 !important; font-weight: 600; }
+        ::placeholder { color: #BCAAA4 !important; font-weight: 600; }
 
-        /* Candy Cane Border Helper */
-        .candy-border {
-            border: 4px solid transparent;
-            background: linear-gradient(#fff, #fff) padding-box,
-                        repeating-linear-gradient(45deg, #FF8FA3 0, #FF8FA3 10px, #fff 10px, #fff 20px) border-box;
+        /* Lantern Animation CSS */
+        .lantern-container {
+            position: fixed;
+            top: -20px;
+            z-index: 40;
+            transform-origin: top center;
+            animation: swing 4s infinite ease-in-out;
+            pointer-events: none;
+        }
+        .lantern-left { left: 5%; animation-delay: 0s; }
+        .lantern-right { right: 5%; animation-delay: 1.5s; }
+        
+        .lantern-body {
+            width: 60px;
+            height: 70px;
+            background: radial-gradient(circle, #FFD600 0%, #D50000 70%);
+            border-radius: 20px;
+            position: relative;
+            box-shadow: 0 10px 20px rgba(255, 214, 0, 0.4);
+            border: 2px solid #8E0000;
+        }
+        .lantern-body::before, .lantern-body::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 6px;
+            background: #3E2723;
+            border-radius: 2px;
+        }
+        .lantern-body::before { top: -6px; }
+        .lantern-body::after { bottom: -6px; }
+        
+        .lantern-string {
+            width: 2px;
+            height: 100px; /* Length of string */
+            background: #8E0000;
+            position: absolute;
+            top: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        .lantern-tassel {
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #D50000;
+            font-size: 24px;
         }
 
-        /* Badges - Pill shaped */
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.5em 1.2em;
-            font-size: 0.75em;
-            font-weight: 800;
-            border-radius: 999px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        .status-pending { background: #EFEBE9; color: #8D6E63; }
-        .status-processing { background: #E0F7FA; color: #00838F; }
-        .status-generating { background: #FFF9C4; color: #F57F17; animation: bounce-slow 2s infinite; }
-        .status-completed { background: #E8F5E9; color: #2E7D32; border: 2px solid #C8E6C9; }
-        .status-failed { background: #FFEBEE; color: #C62828; }
-
-        .job-table th {
-            text-transform: uppercase;
-            font-size: 0.75rem;
-            letter-spacing: 0.05em;
-            color: #5D4037;
-            background: #B2DFDB; /* Soft Mint Header */
-            padding: 1.2rem;
+        /* Ong Do Style Couplets */
+        .couplet {
+            position: fixed;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 85px; /* Slimmer width to prevent overlap */
+            height: auto;
+            background: radial-gradient(circle at center, #D50000 0%, #8E0000 100%);
+            border: 4px solid #FFD600;
+            border-radius: 8px;
+            color: #FFD600;
+            text-align: center;
+            padding: 40px 5px; /* Reduced padding */
+            font-family: 'Dancing Script', cursive;
+            font-size: 2rem; /* Smaller font size */
+            line-height: 1.3;
             font-weight: 900;
-            border-bottom: 4px solid white;
+            text-shadow: 2px 2px 0px #3E2723; /* Adjusted shadow */
+            box-shadow: 10px 15px 30px rgba(0,0,0,0.5);
+            z-index: 30;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            word-spacing: 100vw; /* Force each word to new line */
         }
-        .job-table td { padding: 1rem; border-bottom: 2px dashed #E0F2F1; vertical-align: middle; }
-        .job-table tr:last-child td { border-bottom: none; }
-        .job-table tr:hover td { background: #FFFDE7; } /* Butter yellow hover */
+        
+        /* The decorative rollers (Truc Cuon) */
+        .couplet::before, .couplet::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 140%; /* Wider than the paper */
+            height: 24px; /* Smaller rollers */
+            background: linear-gradient(90deg, #3E2723 0%, #8D6E63 50%, #3E2723 100%);
+            border-radius: 12px;
+            border: 2px solid #FFD600;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+        }
+        .couplet::before { top: -12px; }
+        .couplet::after { bottom: -12px; }
+
+        /* Golden tassel for scroll */
+        .couplet-tassel {
+            position: absolute;
+            bottom: -50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 30px;
+            background: #FFD600;
+        }
+        .couplet-tassel::after {
+            content: '♦';
+            position: absolute;
+            bottom: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            color: #FFD600;
+        }
+
+        .couplet-left { left: 20px; }
+        .couplet-right { right: 20px; }
+
+        .oriental-pattern {
+            background-image: repeating-linear-gradient(45deg, #D50000 0, #D50000 2px, transparent 0, transparent 50%);
+            background-size: 10px 10px;
+        }
 
         .animate-fade-in { animation: fadeIn 0.4s ease-out; }
     </style>
@@ -192,25 +291,64 @@
 }
 </script>
 </head>
-<body class="cute-bg">
-    <div id="snow-container"></div>
+<body class="tet-bg">
+    <!-- Hanging Lanterns -->
+    <div class="lantern-container lantern-left">
+        <div class="lantern-string"></div>
+        <div class="lantern-body">
+            <div class="absolute inset-0 flex items-center justify-center text-tet-gold font-bold text-xl opacity-80">福</div>
+        </div>
+        <div class="lantern-tassel">|||</div>
+    </div>
+    <div class="lantern-container lantern-right">
+        <div class="lantern-string"></div>
+        <div class="lantern-body">
+            <div class="absolute inset-0 flex items-center justify-center text-tet-gold font-bold text-xl opacity-80">春</div>
+        </div>
+        <div class="lantern-tassel">|||</div>
+    </div>
+
+    <!-- Ong Do Style Couplets (Hidden on small screens) -->
+    <div class="hidden xl:flex couplet couplet-left">
+        <span>Chúc</span>
+        <span>Mừng</span>
+        <span>Năm</span>
+        <span>Mới</span>
+        <div class="couplet-tassel"></div>
+    </div>
+    <div class="hidden xl:flex couplet couplet-right">
+        <span>An</span>
+        <span>Khang</span>
+        <span>Thịnh</span>
+        <span>Vượng</span>
+        <div class="couplet-tassel"></div>
+    </div>
+
+    <div id="petals-container"></div>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
     <script>
-      const snowContainer = document.getElementById('snow-container');
-      const snowflakeCount = 40;
-      const colors = ['#FFCDD2', '#B2DFDB', '#FFF9C4', '#FFFFFF'];
-      for (let i = 0; i < snowflakeCount; i++) {
-          const flake = document.createElement('div');
-          flake.classList.add('snowflake');
-          flake.style.left = Math.random() * 100 + 'vw';
-          const size = (Math.random() * 8 + 5) + 'px';
-          flake.style.width = size;
-          flake.style.height = size;
-          flake.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-          flake.style.animationDuration = (Math.random() * 10 + 10) + 's';
-          flake.style.animationDelay = '-' + (Math.random() * 5) + 's';
-          snowContainer.appendChild(flake);
+      const petalContainer = document.getElementById('petals-container');
+      const petalCount = 40; // Increased count
+      const colors = ['#FF4081', '#FF80AB', '#FFD600', '#FBC02D', '#FFEB3B']; // Pink (Peach) and Yellow (Apricot)
+      
+      for (let i = 0; i < petalCount; i++) {
+          const petal = document.createElement('div');
+          petal.classList.add('petal');
+          petal.style.left = Math.random() * 100 + 'vw';
+          const size = (Math.random() * 12 + 6) + 'px';
+          petal.style.width = size;
+          petal.style.height = size;
+          petal.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+          petal.style.animationDuration = (Math.random() * 8 + 6) + 's';
+          petal.style.animationDelay = '-' + (Math.random() * 5) + 's';
+          
+          // Random shapes for variety (Circle vs Leaf)
+          if(Math.random() > 0.5) {
+             petal.style.borderRadius = '50%';
+          }
+          
+          petalContainer.appendChild(petal);
       }
     </script>
 </body>

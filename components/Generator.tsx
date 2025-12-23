@@ -27,7 +27,7 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
     const [formData, setFormData] = useState<FormData>({
         idea: '', liveAtmosphere: '', liveArtistImage: null, liveArtistName: '', liveArtist: '',
         songMinutes: '3', songSeconds: '30', projectName: '',
-        model: 'gemini-flash-lite-latest', mvGenre: 'narrative', filmingStyle: 'auto',
+        model: 'gemini-3-flash-preview', mvGenre: 'narrative', filmingStyle: 'auto',
         country: 'Vietnamese', musicGenre: 'v-pop', customMusicGenre: '',
         characterConsistency: true, characterCount: 1, temperature: 0.3,
     });
@@ -230,23 +230,23 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
         <main className="space-y-6">
             {/* Top Bar: Presets & Video Type */}
             <div className="flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
-                <div className="flex flex-1 w-full xl:w-auto gap-3 p-2 bg-white rounded-3xl border-2 border-white shadow-md">
+                <div className="flex flex-1 w-full xl:w-auto gap-3 p-2 bg-white rounded-3xl border-2 border-tet-gold shadow-sm">
                      <div className="flex-1 flex gap-2">
-                        <select value={selectedPresetId} onChange={e => handlePresetSelect(e.target.value)} className="flex-1 rounded-2xl p-2 text-sm border-2 border-cute-mint focus:border-cute-pink bg-stone-50">
+                        <select value={selectedPresetId} onChange={e => handlePresetSelect(e.target.value)} className="flex-1 rounded-2xl p-2 text-sm border-2 border-stone-200 focus:border-tet-red bg-tet-cream font-bold">
                             <option value="">-- Tải Cài Đặt Sẵn --</option>
                             {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
                         <button onClick={handleDeletePreset} disabled={!selectedPresetId} className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition border border-transparent hover:border-red-200"><TrashIcon className="w-4 h-4"/></button>
                      </div>
                      <div className="flex-1 flex gap-2">
-                        <input type="text" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} className="flex-1 rounded-2xl p-2 text-sm placeholder-gray-400 border-2 border-cute-mint focus:border-cute-pink bg-stone-50" placeholder="Tên cài đặt mới..." />
-                        <button onClick={handleSavePreset} className="bg-cute-mint-dark hover:bg-cute-mint text-white font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider shadow transition transform hover:scale-105">Lưu</button>
+                        <input type="text" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} className="flex-1 rounded-2xl p-2 text-sm placeholder-gray-400 border-2 border-stone-200 focus:border-tet-red bg-tet-cream font-bold" placeholder="Tên cài đặt mới..." />
+                        <button onClick={handleSavePreset} className="bg-tet-gold hover:bg-tet-gold-dark text-tet-brown font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider shadow transition transform hover:scale-105 border-2 border-white">Lưu</button>
                      </div>
                 </div>
 
-                <div className="flex p-1.5 bg-white rounded-full border-2 border-white shadow-md self-center xl:self-auto">
-                    <button onClick={() => setVideoType('story')} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${videoType === 'story' ? 'bg-cute-pink text-white shadow-lg' : 'text-stone-400 hover:text-cute-pink'}`}>MV Kể Chuyện</button>
-                    <button onClick={() => setVideoType('live')} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${videoType === 'live' ? 'bg-cute-pink text-white shadow-lg' : 'text-stone-400 hover:text-cute-pink'}`}>Live Acoustic</button>
+                <div className="flex p-1.5 bg-white rounded-full border-2 border-tet-gold shadow-sm self-center xl:self-auto">
+                    <button onClick={() => setVideoType('story')} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${videoType === 'story' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>MV Kể Chuyện</button>
+                    <button onClick={() => setVideoType('live')} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${videoType === 'live' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>Live Acoustic</button>
                 </div>
             </div>
 
@@ -256,32 +256,39 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                  {/* LEFT COLUMN: CREATIVE & ARTISTIC (8 cols) */}
                  <div className="xl:col-span-8 space-y-6">
                      
-                     {/* CARD 1: CONTENT CORE */}
-                     <div className="bg-white/80 p-8 rounded-[32px] shadow-sm border-4 border-white relative overflow-hidden group">
-                        <div className="absolute top-0 left-0 w-2 h-full bg-cute-mint"></div>
-                        <div className="absolute -top-6 -right-6 text-6xl opacity-10 rotate-12 select-none">⛄</div>
-                        <h3 className="text-cute-mint-dark font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-cute-mint/20 pb-2">
+                     {/* CARD 1: CONTENT CORE - Oriental Border */}
+                     <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-red relative overflow-hidden group">
+                        {/* Corner Accents */}
+                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-tet-gold rounded-tl-2xl"></div>
+                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-tet-gold rounded-tr-2xl"></div>
+                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-tet-gold rounded-bl-2xl"></div>
+                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-tet-gold rounded-br-2xl"></div>
+
+                        <div className="absolute top-0 left-0 w-1 h-full bg-tet-red"></div>
+                        <div className="absolute -top-6 -right-6 text-7xl opacity-10 rotate-12 select-none filter grayscale sepia text-tet-red">🌸</div>
+                        
+                        <h3 className="text-tet-red-dark font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-tet-red/30 pb-2">
                              1. Nội Dung Cốt Lõi
                         </h3>
                         {videoType === 'story' ? (
                              <div>
-                                <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Ý Tưởng / Lời Bài Hát</label>
-                                <textarea name="idea" value={formData.idea} onChange={handleInputChange} rows={6} className="w-full p-4 transition resize-none shadow-inner text-sm leading-relaxed border-2 border-cute-mint/30 focus:border-cute-pink bg-cute-cream" placeholder="Nhập lời bài hát hoặc mô tả chi tiết ý tưởng MV..." />
+                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Ý Tưởng / Lời Bài Hát</label>
+                                <textarea name="idea" value={formData.idea} onChange={handleInputChange} rows={6} className="w-full p-4 transition resize-none shadow-inner text-sm leading-relaxed border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="Nhập lời bài hát hoặc mô tả chi tiết ý tưởng MV..." />
                              </div>
                         ) : (
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Không khí / Bối cảnh Live</label>
-                                    <textarea name="liveAtmosphere" value={formData.liveAtmosphere} onChange={handleInputChange} rows={3} className="w-full p-4 transition text-sm border-2 border-cute-mint/30 focus:border-cute-pink bg-cute-cream" placeholder="VD: Sân thượng lúc hoàng hôn, phòng thu ấm cúng với nến..." />
+                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Không khí / Bối cảnh Live</label>
+                                    <textarea name="liveAtmosphere" value={formData.liveAtmosphere} onChange={handleInputChange} rows={3} className="w-full p-4 transition text-sm border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="VD: Sân thượng lúc hoàng hôn, phòng thu ấm cúng với nến..." />
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Tên Ca Sĩ</label>
-                                        <input type="text" name="liveArtist" value={formData.liveArtist} onChange={handleInputChange} className="w-full p-3 text-sm border-2 border-cute-mint/30 focus:border-cute-pink bg-cute-cream" placeholder="Tên nghệ sĩ..." />
+                                        <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Tên Ca Sĩ</label>
+                                        <input type="text" name="liveArtist" value={formData.liveArtist} onChange={handleInputChange} className="w-full p-3 text-sm border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="Tên nghệ sĩ..." />
                                     </div>
                                     <div>
-                                        <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Ảnh Ca Sĩ (AI nhận diện)</label>
-                                        <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full p-2 text-stone-500 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-cute-mint file:text-white hover:file:bg-cute-mint-dark border-2 border-cute-mint/30 bg-cute-cream" />
+                                        <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Ảnh Ca Sĩ (AI nhận diện)</label>
+                                        <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full p-2 text-stone-500 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-tet-red file:text-white hover:file:bg-tet-red-dark border-2 border-tet-gold/50 bg-tet-cream" />
                                     </div>
                                 </div>
                             </div>
@@ -289,23 +296,29 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                      </div>
 
                      {/* CARD 2: ARTISTIC DIRECTION */}
-                     <div className="bg-white/80 p-8 rounded-[32px] shadow-sm border-4 border-white relative overflow-hidden group">
-                        <div className="absolute top-0 left-0 w-2 h-full bg-cute-yellow"></div>
-                        <div className="absolute -top-4 -right-2 text-6xl opacity-10 -rotate-12 select-none">🎨</div>
-                        <h3 className="text-stone-600 font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-cute-yellow/40 pb-2">
+                     <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-gold relative overflow-hidden group">
+                        {/* Corner Accents */}
+                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-tet-red rounded-tl-2xl"></div>
+                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-tet-red rounded-tr-2xl"></div>
+                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-tet-red rounded-bl-2xl"></div>
+                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-tet-red rounded-br-2xl"></div>
+
+                        <div className="absolute top-0 left-0 w-1 h-full bg-tet-gold"></div>
+                        <div className="absolute -top-4 -right-2 text-7xl opacity-10 -rotate-12 select-none text-tet-gold-dark">🎨</div>
+                        <h3 className="text-tet-brown font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-tet-gold/40 pb-2">
                              2. Định Hướng Nghệ Thuật
                         </h3>
                         {videoType === 'story' ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                                 <div>
-                                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Quốc Gia</label>
-                                    <select name="country" value={formData.country} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-cute-pink border-2 border-cute-mint/30 bg-cute-cream">
+                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Quốc Gia</label>
+                                    <select name="country" value={formData.country} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
                                         {countryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Nhạc nền</label>
-                                    <select name="musicGenre" value={formData.musicGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-cute-pink border-2 border-cute-mint/30 bg-cute-cream">
+                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Nhạc nền</label>
+                                    <select name="musicGenre" value={formData.musicGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
                                         {musicGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                     {formData.musicGenre === 'other' && (
@@ -315,7 +328,7 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                                                 name="customMusicGenre"
                                                 value={formData.customMusicGenre}
                                                 onChange={handleInputChange}
-                                                className="w-full p-3 text-sm border-4 border-cute-pink/20 focus:border-cute-pink bg-white rounded-2xl font-bold placeholder-stone-300 candy-border shadow-inner" 
+                                                className="w-full p-3 text-sm border-4 border-tet-red/20 focus:border-tet-red bg-white rounded-2xl font-bold placeholder-stone-300 shadow-inner" 
                                                 placeholder="Nhập thể loại nhạc cụ thể..." 
                                             />
                                             <span className="absolute -top-2 right-2 text-xl animate-bounce-slow">🎵</span>
@@ -323,14 +336,14 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                                     )}
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Thể Loại MV</label>
-                                    <select name="mvGenre" value={formData.mvGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-cute-pink border-2 border-cute-mint/30 bg-cute-cream">
+                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Thể Loại MV</label>
+                                    <select name="mvGenre" value={formData.mvGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
                                         {mvGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Phong Cách Quay</label>
-                                    <select name="filmingStyle" value={formData.filmingStyle} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-cute-pink border-2 border-cute-mint/30 bg-cute-cream">
+                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Phong Cách Quay</label>
+                                    <select name="filmingStyle" value={formData.filmingStyle} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
                                         {filmingStyleOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                 </div>
@@ -344,11 +357,17 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
 
                      {/* CARD 3: CAST & CHARACTER */}
                      {videoType === 'story' && (
-                        <div className="bg-white/80 p-8 rounded-[32px] shadow-sm border-4 border-white relative overflow-hidden group">
-                            <div className="absolute top-0 left-0 w-2 h-full bg-cute-pink"></div>
-                            <div className="absolute -top-4 -right-4 text-6xl opacity-10 rotate-45 select-none">🎅</div>
-                            <div className="flex items-center justify-between mb-2 border-b-2 border-dashed border-cute-pink/20 pb-2">
-                                <h3 className="text-cute-pink-dark font-black uppercase text-xs tracking-widest">
+                        <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-green relative overflow-hidden group">
+                             {/* Corner Accents */}
+                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-tet-gold rounded-tl-2xl"></div>
+                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-tet-gold rounded-tr-2xl"></div>
+                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-tet-gold rounded-bl-2xl"></div>
+                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-tet-gold rounded-br-2xl"></div>
+
+                            <div className="absolute top-0 left-0 w-1 h-full bg-tet-green"></div>
+                            <div className="absolute -top-4 -right-4 text-7xl opacity-10 rotate-45 select-none text-tet-green">🧧</div>
+                            <div className="flex items-center justify-between mb-2 border-b-2 border-dashed border-tet-green/20 pb-2">
+                                <h3 className="text-tet-green font-black uppercase text-xs tracking-widest">
                                     3. Nhân Vật & Diễn Viên
                                 </h3>
                             </div>
@@ -360,7 +379,7 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                                         name="characterConsistency" 
                                         checked={formData.characterConsistency} 
                                         onChange={handleInputChange} 
-                                        className="w-6 h-6 rounded-lg text-cute-pink focus:ring-cute-pink border-cute-mint cursor-pointer" 
+                                        className="w-6 h-6 rounded-lg text-tet-red focus:ring-tet-red border-tet-gold cursor-pointer" 
                                     />
                                     <div>
                                         <label htmlFor="charConsistency" className="text-sm font-bold text-stone-700 cursor-pointer select-none tracking-wide block">Đồng nhất nhân vật</label>
@@ -368,7 +387,7 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                                     </div>
                                 </div>
                                 {formData.characterConsistency && (
-                                    <div className="flex items-center gap-3 bg-cute-cream px-4 py-2 rounded-2xl border-2 border-cute-mint/20">
+                                    <div className="flex items-center gap-3 bg-tet-cream px-4 py-2 rounded-2xl border-2 border-tet-gold/20">
                                         <label className="text-[10px] text-stone-500 uppercase font-bold tracking-wider">Số lượng nhân vật:</label>
                                         <input 
                                             type="number" 
@@ -377,7 +396,7 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                                             onChange={handleInputChange} 
                                             min={1} 
                                             max={3} 
-                                            className="w-14 bg-white border-2 border-white rounded-xl p-1 text-center text-cute-pink-dark font-black text-xl focus:border-cute-pink" 
+                                            className="w-14 bg-white border-2 border-white rounded-xl p-1 text-center text-tet-red font-black text-xl focus:border-tet-gold" 
                                         />
                                     </div>
                                 )}
@@ -388,35 +407,36 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
 
                  {/* RIGHT COLUMN: CONFIGURATION (4 cols) */}
                  <div className="xl:col-span-4 space-y-6 sticky top-4">
-                    <div className="bg-white/90 p-8 rounded-[32px] border-4 border-white shadow-xl backdrop-blur-md relative overflow-hidden">
-                        <div className="absolute -top-6 -right-6 text-6xl opacity-10 rotate-12 select-none">❄️</div>
-                        <h3 className="text-cute-brown font-black uppercase text-xs mb-6 border-b-2 border-stone-100 pb-2 tracking-widest flex items-center gap-2">
+                    <div className="bg-white/95 p-8 rounded-[32px] border-4 border-tet-gold/40 shadow-xl backdrop-blur-md relative overflow-hidden">
+                        <div className="absolute -top-6 -right-6 text-7xl opacity-10 rotate-12 select-none text-tet-gold-dark">🐎</div>
+                        <h3 className="text-tet-brown font-black uppercase text-xs mb-6 border-b-2 border-stone-100 pb-2 tracking-widest flex items-center gap-2">
                              Cấu hình Dự Án
                         </h3>
                         
                         <div className="mb-5">
-                            <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Tên Dự Án</label>
-                            <input type="text" name="projectName" value={formData.projectName} onChange={handleInputChange} className="w-full bg-cute-cream border-2 border-cute-mint/30 rounded-2xl p-3 text-sm focus:border-cute-pink font-bold text-stone-700" placeholder="VD: Mua_Dong_Khong_Lanh" />
+                            <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Tên Dự Án</label>
+                            <input type="text" name="projectName" value={formData.projectName} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-sm focus:border-tet-red font-bold text-stone-700" placeholder="VD: Tet_Doan_Vien" />
                         </div>
 
                         <div className="mb-5">
-                            <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Thời lượng (Max 15 phút)</label>
+                            <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Thời lượng (Max 15 phút)</label>
                             <div className="flex gap-2">
                                 <div className="relative flex-1 group">
-                                    <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} min="0" max="15" className="w-full bg-cute-cream border-2 border-cute-mint/30 rounded-2xl p-3 text-center font-black text-xl text-stone-700 focus:border-cute-pink transition" placeholder="0" />
+                                    <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} min="0" max="15" className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center font-black text-xl text-stone-700 focus:border-tet-red transition" placeholder="0" />
                                     <span className="absolute right-3 top-4 text-stone-400 text-[9px] uppercase font-bold">Phút</span>
                                 </div>
                                 <div className="relative flex-1 group">
-                                    <input type="number" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} min="0" max="59" className="w-full bg-cute-cream border-2 border-cute-mint/30 rounded-2xl p-3 text-center font-black text-xl text-stone-700 focus:border-cute-pink transition" placeholder="00" />
+                                    <input type="number" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} min="0" max="59" className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center font-black text-xl text-stone-700 focus:border-tet-red transition" placeholder="00" />
                                     <span className="absolute right-3 top-4 text-stone-400 text-[9px] uppercase font-bold">Giây</span>
                                 </div>
                             </div>
                         </div>
 
                         <div className="mb-5">
-                            <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Model AI</label>
-                            <select name="model" value={formData.model} onChange={handleInputChange} className="w-full bg-cute-cream border-2 border-cute-mint/30 rounded-2xl p-3 text-sm focus:border-cute-pink">
-                                <option value="gemini-flash-lite-latest">Gemini 2.5 Flash Lite (Mặc định)</option>
+                            <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Model AI</label>
+                            <select name="model" value={formData.model} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-sm focus:border-tet-red">
+                                <option value="gemini-3-flash-preview">Gemini 3 Flash (Mới nhất & Nhanh)</option>
+                                <option value="gemini-flash-lite-latest">Gemini 2.5 Flash Lite (Cơ bản)</option>
                                 <option value="gemini-flash-latest">Gemini 2.5 Flash (Sáng tạo hơn)</option>
                             </select>
                         </div>
@@ -428,15 +448,19 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                                     {formData.temperature < 0.5 ? 'An toàn' : formData.temperature < 0.8 ? 'Cân bằng' : 'Đột phá'}
                                 </span>
                             </div>
-                            <input type="range" name="temperature" min="0" max="1" step="0.1" value={formData.temperature} onChange={handleInputChange} className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-cute-pink" />
+                            <input type="range" name="temperature" min="0" max="1" step="0.1" value={formData.temperature} onChange={handleInputChange} className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-tet-red" />
                         </div>
 
+                        {/* Li Xi Button */}
                         <button 
                             onClick={generatePrompts} 
                             disabled={isLoading} 
-                            className="w-full py-4 bg-gradient-to-r from-cute-pink to-cute-pink-dark text-white font-black text-sm uppercase tracking-widest rounded-2xl shadow-lg hover:shadow-pink-200 transform hover:-translate-y-1 transition-all disabled:opacity-50 disabled:transform-none flex items-center justify-center gap-3 border-4 border-white"
+                            className="w-full py-4 bg-gradient-to-b from-tet-red to-tet-red-dark text-tet-gold font-black text-lg uppercase tracking-widest rounded-2xl shadow-xl hover:shadow-red-500/30 transform hover:-translate-y-1 transition-all disabled:opacity-50 disabled:transform-none flex items-center justify-center gap-3 border-4 border-tet-gold relative overflow-hidden group"
                         >
-                            {isLoading ? <><LoaderIcon /> PROCESSING...</> : '✨ TẠO KỊCH BẢN'}
+                            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/black-scales.png')] opacity-10"></div>
+                            <span className="relative flex items-center gap-2">
+                                {isLoading ? <LoaderIcon /> : '🧧 TẠO KỊCH BẢN'}
+                            </span>
                         </button>
                     </div>
 

@@ -209,7 +209,7 @@ const App: React.FC = () => {
     };
 
     // --- Render ---
-    if (!configLoaded) return <div className="min-h-screen bg-cute-cream flex items-center justify-center text-cute-brown"><ShieldIcon className="animate-spin w-16 h-16 text-cute-pink"/></div>;
+    if (!configLoaded) return <div className="min-h-screen bg-tet-cream flex items-center justify-center text-tet-brown"><ShieldIcon className="animate-spin w-16 h-16 text-tet-red"/></div>;
     
     if (!isActivated && machineId) return <Activation machineId={machineId} onActivate={handleActivate} />;
     
@@ -223,61 +223,78 @@ const App: React.FC = () => {
     } : null;
 
     return (
-        <div className="relative h-screen overflow-hidden flex flex-col font-sans text-cute-brown">
-            {/* Header - Cute Christmas Theme */}
-            <header className="px-8 py-4 bg-white/80 backdrop-blur-xl border-b-4 border-cute-pink/20 flex justify-between items-center sticky top-0 z-50 shadow-sm transition-all duration-300 rounded-b-[40px] mx-4 mt-2 shrink-0">
+        <div className="relative h-screen overflow-hidden flex flex-col font-sans text-tet-brown">
+            {/* Header - Tet Binh Ngo Theme - Highly Decorative */}
+            <header className="px-8 py-3 bg-gradient-to-r from-tet-red-dark via-tet-red to-tet-red-dark border-b-4 border-tet-gold shadow-lg flex justify-between items-center sticky top-0 z-50 rounded-b-[40px] mx-4 mt-2 shrink-0">
                 <div className="flex items-center gap-4">
-                    <span className="text-5xl filter drop-shadow-md animate-wiggle cursor-default">🎅</span>
-                    <div>
-                        <h1 className="text-2xl font-black tracking-tight leading-none text-cute-mint-dark drop-shadow-sm flex items-center gap-2">
-                            Prompt Generator <span className="text-cute-pink-dark">Pro</span>
-                        </h1>
-                        <span className="text-[10px] font-bold text-cute-brown bg-cute-yellow px-3 py-1 rounded-full border-2 border-white tracking-widest uppercase ml-0.5 shadow-sm inline-flex items-center gap-1 mt-1">
-                            Christmas Cute Edition 🎄 🦌 ⛄
-                        </span>
+                    {/* Tet Logo Block */}
+                    <div className="bg-tet-gold p-2 rounded-full border-4 border-tet-red shadow-md animate-bounce-slow">
+                        <span className="text-4xl filter drop-shadow-sm cursor-default">🐎</span>
+                    </div>
+                    
+                    <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                             <h1 className="text-2xl font-black tracking-tighter leading-none text-tet-gold drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)]">
+                                CHÚC MỪNG NĂM MỚI
+                            </h1>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                             <span className="text-xs font-bold text-white uppercase tracking-[0.2em] opacity-90">Prompt Generator Pro</span>
+                             <span className="text-[10px] font-bold text-tet-red bg-tet-gold-light px-2 py-0.5 rounded-full border border-tet-gold shadow-sm">2026</span>
+                        </div>
                     </div>
                 </div>
+
                 <div className="flex items-center gap-3">
                     {activeApiKey && (
-                        <div onClick={() => setIsManagingKeys(true)} className="flex items-center gap-2 bg-white hover:bg-cute-mint/20 px-4 py-2 rounded-full cursor-pointer transition border-2 border-cute-mint/50 hover:border-cute-mint shadow-sm group">
-                            <KeyIcon className="w-4 h-4 text-cute-mint-dark group-hover:text-cute-pink transition-colors" />
-                            <span className="text-xs font-bold text-cute-brown group-hover:text-cute-pink-dark uppercase tracking-wide">{activeApiKey.name}</span>
+                        <div onClick={() => setIsManagingKeys(true)} className="flex items-center gap-2 bg-red-900/50 hover:bg-red-800/80 px-4 py-2 rounded-full cursor-pointer transition border border-tet-gold/30 hover:border-tet-gold shadow-sm group">
+                            <KeyIcon className="w-4 h-4 text-tet-gold group-hover:text-white transition-colors" />
+                            <span className="text-xs font-bold text-tet-gold group-hover:text-white uppercase tracking-wide">{activeApiKey.name}</span>
                         </div>
                     )}
-                    <button onClick={() => setShowStats(true)} className="p-3 bg-white border-2 border-cute-yellow hover:bg-cute-yellow text-cute-brown rounded-full transition shadow-sm hover:shadow-md transform hover:rotate-12" title="Thống Kê"><ChartIcon className="w-5 h-5"/></button>
-                    <button onClick={() => setShowAdminLogin(true)} className="p-3 bg-white border-2 border-cute-pink hover:bg-cute-pink text-cute-pink-dark hover:text-white rounded-full transition shadow-sm hover:shadow-md transform hover:rotate-12" title="Admin"><ShieldIcon className="w-5 h-5"/></button>
+                    <button onClick={() => setShowStats(true)} className="p-3 bg-tet-gold hover:bg-white text-tet-red-dark hover:text-tet-red rounded-full transition shadow-md hover:shadow-lg transform hover:rotate-12 border-2 border-white" title="Thống Kê"><ChartIcon className="w-5 h-5"/></button>
+                    <button onClick={() => setShowAdminLogin(true)} className="p-3 bg-tet-red hover:bg-white text-white hover:text-tet-red rounded-full transition shadow-md hover:shadow-lg transform hover:rotate-12 border-2 border-white" title="Admin"><ShieldIcon className="w-5 h-5"/></button>
                 </div>
             </header>
 
             {/* Navigation Tabs - Pills */}
-            <div className="flex justify-center gap-4 py-4 shrink-0">
+            <div className="flex justify-center gap-4 py-4 shrink-0 relative z-40">
                 <button 
                     onClick={() => setActiveTab('generator')} 
-                    className={`px-8 py-3 rounded-full font-extrabold uppercase tracking-wider text-xs transition-all shadow-md transform hover:-translate-y-1 flex items-center gap-2 ${activeTab === 'generator' ? 'bg-cute-pink text-white ring-4 ring-cute-pink/20' : 'bg-white text-cute-brown hover:bg-cute-pink/10'}`}
+                    className={`px-8 py-3 rounded-full font-extrabold uppercase tracking-wider text-xs transition-all shadow-md transform hover:-translate-y-1 flex items-center gap-2 border-2 ${activeTab === 'generator' ? 'bg-tet-red text-white border-tet-gold shadow-tet-red/30' : 'bg-white text-tet-brown hover:bg-tet-red/10 border-white'}`}
                 >
-                    ✨ Tạo Kịch Bản
+                    <span className="text-lg">✨</span> Kịch Bản Tết
                 </button>
                 <button 
                     onClick={() => setActiveTab('tracker')} 
-                    className={`px-8 py-3 rounded-full font-extrabold uppercase tracking-wider text-xs transition-all shadow-md transform hover:-translate-y-1 flex items-center gap-2 ${activeTab === 'tracker' ? 'bg-cute-mint text-cute-brown ring-4 ring-cute-mint/20' : 'bg-white text-cute-brown hover:bg-cute-mint/10'}`}
+                    className={`px-8 py-3 rounded-full font-extrabold uppercase tracking-wider text-xs transition-all shadow-md transform hover:-translate-y-1 flex items-center gap-2 border-2 ${activeTab === 'tracker' ? 'bg-tet-green text-white border-tet-gold shadow-tet-green/30' : 'bg-white text-tet-brown hover:bg-tet-green/10 border-white'}`}
                 >
-                    🎬 Theo Dõi <span className="bg-white text-cute-mint-dark px-2 py-0.5 rounded-full text-[10px] shadow-sm border border-cute-mint/20">{trackedFiles.length}</span>
+                    <span className="text-lg">🎬</span> Xưởng Phim <span className="bg-white text-tet-green px-2 py-0.5 rounded-full text-[10px] shadow-sm ml-1 font-black">{trackedFiles.length}</span>
                 </button>
             </div>
 
-            {/* Main Content Container - Using hidden/block to preserve state */}
-            <div className="flex-1 p-4 md:p-6 overflow-hidden">
-                 <div className="max-w-[1920px] mx-auto h-full">
+            {/* Main Content Container */}
+            <div className="flex-1 p-4 md:p-6 overflow-hidden relative z-20">
+                 <div className="max-w-[1600px] mx-auto h-full">
                      
                      {/* Generator Tab Wrapper */}
                      <div className={`${activeTab === 'generator' ? 'block' : 'hidden'} h-full overflow-y-auto custom-scrollbar pb-20`}>
-                        <div className="glass-card p-8 rounded-[40px] shadow-xl animate-fade-in border-4 border-white mb-8">
-                            <Generator 
-                                activeApiKey={activeApiKey} presets={presets} 
-                                onSavePresets={p => { setPresets(p); if(ipcRenderer) ipcRenderer.invoke('save-app-config', {presets:p}); }}
-                                onGenerateSuccess={handleGenerateSuccess}
-                                onFeedback={setFeedback}
-                            />
+                        {/* Decorative Wrapper for Generator */}
+                        <div className="relative">
+                            <div className="absolute -top-4 -left-4 w-20 h-20 border-t-4 border-l-4 border-tet-gold rounded-tl-3xl opacity-50 pointer-events-none"></div>
+                            <div className="absolute -top-4 -right-4 w-20 h-20 border-t-4 border-r-4 border-tet-gold rounded-tr-3xl opacity-50 pointer-events-none"></div>
+                            
+                            <div className="glass-card p-8 rounded-[40px] shadow-2xl animate-fade-in border-4 border-tet-gold/30 mb-8 bg-white/95 relative overflow-hidden">
+                                <Generator 
+                                    activeApiKey={activeApiKey} presets={presets} 
+                                    onSavePresets={p => { setPresets(p); if(ipcRenderer) ipcRenderer.invoke('save-app-config', {presets:p}); }}
+                                    onGenerateSuccess={handleGenerateSuccess}
+                                    onFeedback={setFeedback}
+                                />
+                            </div>
+
+                            <div className="absolute -bottom-4 -left-4 w-20 h-20 border-b-4 border-l-4 border-tet-gold rounded-bl-3xl opacity-50 pointer-events-none"></div>
+                            <div className="absolute -bottom-4 -right-4 w-20 h-20 border-b-4 border-r-4 border-tet-gold rounded-br-3xl opacity-50 pointer-events-none"></div>
                         </div>
                      </div>
 
@@ -340,10 +357,10 @@ const App: React.FC = () => {
                  </div>
             </div>
 
-            {/* Feedback Toast */}
+            {/* Feedback Toast - Tet Style */}
             {feedback && (
-                <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 z-[200] animate-bounce-small font-bold text-sm border-2 ${feedback.type === 'error' ? 'bg-red-50 border-cute-pink text-cute-pink-dark' : feedback.type === 'success' ? 'bg-emerald-50 border-cute-mint-dark text-cute-mint-dark' : 'bg-blue-50 border-blue-200 text-blue-800'} backdrop-blur-xl`}>
-                    <span className="text-xl">{feedback.type === 'success' ? '🍪' : feedback.type === 'error' ? '🍩' : 'ℹ️'}</span>
+                <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-4 z-[200] animate-bounce-small font-bold text-sm border-2 ${feedback.type === 'error' ? 'bg-red-50 border-tet-red text-tet-red' : feedback.type === 'success' ? 'bg-yellow-50 border-tet-gold-dark text-tet-gold-dark' : 'bg-blue-50 border-blue-200 text-blue-800'} backdrop-blur-xl`}>
+                    <span className="text-xl">{feedback.type === 'success' ? '🧧' : feedback.type === 'error' ? '🧨' : 'ℹ️'}</span>
                     <span>{feedback.message}</span>
                     <button onClick={() => setFeedback(null)} className="ml-2 hover:opacity-75 text-xl leading-none">&times;</button>
                 </div>

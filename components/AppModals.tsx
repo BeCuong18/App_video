@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { StatsData } from '../types';
 import { ChartIcon, ShieldIcon, LoaderIcon, TrashIcon, LockIcon } from './Icons';
@@ -42,13 +43,13 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDele
             <div className={`glass-card border-4 border-white rounded-[40px] max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-hidden flex flex-col bg-white/90`}>
                 <div className="p-6 border-b-2 border-dashed border-stone-100 flex justify-between items-center bg-white/50">
                     <h3 className="text-xl font-black text-stone-700 flex items-center gap-3 uppercase tracking-wide">
-                        {isAdmin ? <ShieldIcon className="w-6 h-6 text-cute-pink" /> : <ChartIcon className="w-6 h-6 text-cute-yellow" />}
+                        {isAdmin ? <ShieldIcon className="w-6 h-6 text-tet-red" /> : <ChartIcon className="w-6 h-6 text-tet-gold-dark" />}
                         {isAdmin ? 'QUẢN TRỊ VIÊN' : 'THỐNG KÊ SẢN XUẤT'}
                     </h3>
                     <button onClick={onClose} className="w-8 h-8 rounded-full bg-stone-100 hover:bg-red-100 text-stone-400 hover:text-red-400 flex items-center justify-center transition font-bold text-lg">&times;</button>
                 </div>
                 
-                <div className="p-6 overflow-y-auto flex-1 custom-scrollbar bg-cute-cream">
+                <div className="p-6 overflow-y-auto flex-1 custom-scrollbar bg-tet-cream">
                     {loading ? ( <div className="flex justify-center py-10"><LoaderIcon /></div> ) : !stats ? ( <p className="text-center text-stone-400">Không có dữ liệu.</p> ) : (
                         <div>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -72,7 +73,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDele
                             {isAdmin && (
                                 <div className="mb-8 p-6 bg-white rounded-3xl border-2 border-stone-100 shadow-sm">
                                     <div className="flex justify-between items-center mb-6">
-                                        <h4 className="text-stone-600 font-bold text-sm uppercase tracking-wide flex items-center gap-2"><ChartIcon className="w-4 h-4 text-cute-yellow"/> Biểu đồ năng suất</h4>
+                                        <h4 className="text-stone-600 font-bold text-sm uppercase tracking-wide flex items-center gap-2"><ChartIcon className="w-4 h-4 text-tet-gold-dark"/> Biểu đồ năng suất</h4>
                                         <button onClick={() => { if(confirm("Xóa TOÀN BỘ lịch sử?")) handleDeleteAll(); }} className="bg-red-400 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-xl text-xs flex items-center gap-2 transition shadow-md border-2 border-white">
                                             <TrashIcon className="w-3 h-3"/> Reset All
                                         </button>
@@ -81,9 +82,9 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDele
                                         {stats.history.length === 0 ? <p className="text-stone-400 w-full text-center text-sm">Chưa có dữ liệu biểu đồ</p> : 
                                             stats.history.slice(0, 30).reverse().map((item) => (
                                                 <div key={item.date} className="flex flex-col items-center gap-1 group relative min-w-[24px] flex-1 h-full justify-end">
-                                                    <div className="text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 bg-cute-brown px-2 py-1 rounded-lg shadow-lg z-10 whitespace-nowrap font-bold">{item.count} video</div>
+                                                    <div className="text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 bg-tet-brown px-2 py-1 rounded-lg shadow-lg z-10 whitespace-nowrap font-bold">{item.count} video</div>
                                                     <div 
-                                                        className="w-full bg-cute-mint-dark hover:bg-cute-mint transition-all rounded-t-lg"
+                                                        className="w-full bg-tet-green hover:bg-tet-gold transition-all rounded-t-lg"
                                                         style={{ height: `${(item.count / maxCount) * 100}%`, minHeight: '8px' }}
                                                     ></div>
                                                 </div>
@@ -93,7 +94,7 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDele
                                 </div>
                             )}
 
-                            <h4 className="text-sm font-bold text-stone-600 mb-4 border-l-4 border-cute-pink pl-3 uppercase tracking-wider">Lịch sử chi tiết</h4>
+                            <h4 className="text-sm font-bold text-stone-600 mb-4 border-l-4 border-tet-red pl-3 uppercase tracking-wider">Lịch sử chi tiết</h4>
                             <div className="overflow-hidden rounded-3xl border-2 border-stone-100 bg-white shadow-sm">
                                 <table className="w-full text-left text-sm text-stone-700">
                                     <thead className="bg-stone-50 text-stone-400 uppercase font-bold text-[10px] tracking-wider">
@@ -195,12 +196,12 @@ interface AlertModalProps {
 export const AlertModal: React.FC<AlertModalProps> = ({ title, message, type, onClose, onConfirm }) => {
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 backdrop-blur-md p-4 animate-fade-in">
-      <div className={`glass-card border-4 ${type === 'update' ? 'border-blue-300' : 'border-cute-yellow'} rounded-[40px] max-w-md w-full shadow-2xl transform scale-100 p-8 text-center bg-white`}>
+      <div className={`glass-card border-4 ${type === 'update' ? 'border-blue-300' : 'border-tet-gold'} rounded-[40px] max-w-md w-full shadow-2xl transform scale-100 p-8 text-center bg-white`}>
           <div className={`mx-auto flex items-center justify-center h-24 w-24 rounded-full mb-6 ${type === 'update' ? 'bg-blue-50' : 'bg-yellow-50'} border-4 ${type === 'update' ? 'border-blue-200' : 'border-yellow-200'} shadow-lg animate-bounce-slow`}>
              {type === 'update' ? (
                 <span className="text-4xl">🚀</span>
              ) : (
-                <span className="text-5xl">🎁</span>
+                <span className="text-5xl">🧧</span>
              )}
           </div>
           <h3 className="text-2xl font-black text-stone-700 mb-3 uppercase tracking-wide">{title}</h3>
@@ -208,7 +209,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({ title, message, type, on
           <div className="flex justify-center gap-4">
             <button onClick={onClose} className="px-6 py-3 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-500 font-bold transition text-sm">Đóng</button>
             {onConfirm && (
-              <button onClick={onConfirm} className={`px-6 py-3 rounded-2xl font-bold transition shadow-lg text-white text-sm uppercase tracking-wide transform hover:scale-105 border-4 border-white ${type === 'update' ? 'bg-blue-500 hover:bg-blue-400' : 'bg-cute-yellow hover:bg-yellow-300 text-stone-800'}`}>
+              <button onClick={onConfirm} className={`px-6 py-3 rounded-2xl font-bold transition shadow-lg text-white text-sm uppercase tracking-wide transform hover:scale-105 border-4 border-white ${type === 'update' ? 'bg-blue-500 hover:bg-blue-400' : 'bg-tet-gold hover:bg-yellow-300 text-stone-800'}`}>
                 {type === 'update' ? 'Cập nhật' : 'Tuyệt vời'}
               </button>
             )}

@@ -337,8 +337,8 @@ function createWindow() {
       : path.join(__dirname, 'assets', 'icon.png');
 
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: 1920,
+    height: 1080,
     webPreferences: {
       contextIsolation: false,
       nodeIntegration: true,
@@ -401,7 +401,7 @@ app.whenReady().then(() => {
   createWindow();
   autoUpdater.checkForUpdatesAndNotify().catch(err => console.log('Updater error:', err));
 
-  const STUCK_JOB_TIMEOUT = 5 * 60 * 1000; 
+  const STUCK_JOB_TIMEOUT = 6 * 60 * 1000; 
 
   setInterval(() => {
     const now = Date.now();
