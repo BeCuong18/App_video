@@ -160,15 +160,18 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         const sceneCount = Math.max(3, Math.round(totalSeconds / 8));
         const systemPrompt = formData.videoType === 'story' ? storySystemPrompt : in2vSystemPrompt;
         
-        let userPrompt = `Mode: ${formData.videoType}. Input Idea/Lyrics: "${formData.idea.trim()}". Specs: Nationality: ${formData.country}, Genre: ${formData.mvGenre}, Style: ${formData.filmingStyle}, Music Genre: ${formData.musicGenre === 'other' ? formData.customMusicGenre : formData.musicGenre}. Generate exactly ${sceneCount} scenes.`;
+        let userPrompt = `Mode: ${formData.videoType}. Input Idea/Lyrics: "${formData.idea.trim()}". Specs: Nationality: ${formData.country}, Genre: ${formData.mvGenre}, Style: ${formData.filmingStyle}, Music Genre: ${formData.musicGenre === 'other' ? formData.customMusicGenre : formData.musicGenre}. Generate exactly ${sceneCount} scenes. Character Consistency Enforced: ${formData.characterConsistency}, Number of Characters: ${formData.characterCount}.`;
 
         const parts: any[] = [{ text: userPrompt }];
-        formData.uploadedImages.forEach((img, i) => {
-            if (img) {
-                parts.push({ text: `Analyze this reference image ${i+1} for visual consistency:` });
-                parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
-            }
-        });
+        // Only provide images to Gemini in IN2V mode
+        if (formData.videoType === 'in2v') {
+            formData.uploadedImages.forEach((img, i) => {
+                if (img) {
+                    parts.push({ text: `Analyze this reference image ${i+1} for visual consistency:` });
+                    parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+                }
+            });
+        }
 
         try {
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -284,33 +287,49 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                             3. {formData.videoType === 'story' ? 'Nhân Vật & Diễn Viên' : 'Dữ Liệu Hình Ảnh (Tối đa 3)'}
                         </h3>
                         <div className="space-y-6">
-                            {formData.videoType === 'story' && (
+                            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
                                 <div className="flex items-center gap-3">
                                     <input type="checkbox" name="characterConsistency" checked={formData.characterConsistency} onChange={handleInputChange} className="w-6 h-6 rounded-lg text-tet-red focus:ring-tet-red border-tet-gold cursor-pointer" />
-                                    <label className="text-sm font-bold text-stone-700">Đồng nhất nhân vật (Tải ảnh mặt bên dưới)</label>
+                                    <label className="text-sm font-bold text-stone-700">Đồng nhất nhân vật (AI tự động tạo Blueprint)</label>
+                                </div>
+                                {formData.characterConsistency && (
+                                    <div className="flex items-center gap-3 bg-tet-cream px-4 py-2 rounded-2xl border-2 border-tet-gold/20">
+                                        <label className="text-[10px] text-stone-500 uppercase font-bold tracking-wider">Số lượng nhân vật:</label>
+                                        <input 
+                                            type="number" 
+                                            name="characterCount" 
+                                            value={formData.characterCount} 
+                                            onChange={handleInputChange} 
+                                            min={1} 
+                                            max={3} 
+                                            className="w-14 bg-white border-2 border-white rounded-xl p-1 text-center text-tet-red font-black text-xl focus:border-tet-gold" 
+                                        />
+                                    </div>
+                                )}
+                            </div>
+
+                            {formData.videoType === 'in2v' && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
+                                    {[0, 1, 2].map((idx) => {
+                                        const img = formData.uploadedImages[idx];
+                                        return (
+                                            <div key={idx} className="relative group">
+                                                <div className="relative border-2 border-dashed border-tet-gold/50 rounded-2xl p-2 bg-tet-cream hover:border-tet-red transition-colors aspect-square flex flex-col items-center justify-center overflow-hidden">
+                                                    {img ? (
+                                                        <img src={`data:${img.mimeType};base64,${img.base64}`} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <div className="text-center">
+                                                            <span className="text-2xl">📸</span>
+                                                            <span className="block text-[9px] font-bold uppercase mt-1">Tải ảnh {idx+1}</span>
+                                                        </div>
+                                                    )}
+                                                    <input type="file" accept="image/*" onChange={handleMultiImageUpload(idx)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                {[0, 1, 2].map((idx) => {
-                                    if (formData.videoType === 'story' && idx > 0) return null;
-                                    const img = formData.uploadedImages[idx];
-                                    return (
-                                        <div key={idx} className="relative group">
-                                            <div className="relative border-2 border-dashed border-tet-gold/50 rounded-2xl p-2 bg-tet-cream hover:border-tet-red transition-colors aspect-square flex flex-col items-center justify-center overflow-hidden">
-                                                {img ? (
-                                                    <img src={`data:${img.mimeType};base64,${img.base64}`} className="w-full h-full object-cover" />
-                                                ) : (
-                                                    <div className="text-center">
-                                                        <span className="text-2xl">📸</span>
-                                                        <span className="block text-[9px] font-bold uppercase mt-1">Tải ảnh {idx+1}</span>
-                                                    </div>
-                                                )}
-                                                <input type="file" accept="image/*" onChange={handleMultiImageUpload(idx)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
                         </div>
                      </div>
                  </div>
