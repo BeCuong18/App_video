@@ -4,7 +4,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Notification } = requi
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
-const { execFile, spawn } = require('child_process');
+const { execFile, spawn, execSync } = require('child_process');
 const XLSX = require('xlsx');
 const { randomUUID } = require('crypto');
 
@@ -27,22 +27,47 @@ const ADMIN_CREDENTIALS = {
     password: '285792684'
 };
 
+/**
+ * ORIGINAL MECHANISM: Get Stable Hardware ID
+ */
+function getSystemId() {
+    try {
+        let id = '';
+        if (process.platform === 'win32') {
+            id = execSync('wmic csproduct get uuid').toString().split('\n')[1].trim();
+        } else if (process.platform === 'darwin') {
+            id = execSync("ioreg -rd1 -c IOPlatformExpertDevice | grep -E 'IOPlatformUUID' | awk '{print $3}' | tr -d '\"'").toString().trim();
+        } else {
+            id = execSync('cat /var/lib/dbus/machine-id || cat /etc/machine-id').toString().trim();
+        }
+        return id || 'UNKNOWN_HARDWARE_ID';
+    } catch (e) {
+        console.error("Failed to get hardware ID, falling back to random/file ID", e);
+        return null;
+    }
+}
+
 function readConfig() {
   try {
+    const hardwareId = getSystemId();
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      if (!config.machineId) {
+      // If we have a hardware ID, we always prioritize it to keep it "original" and stable
+      if (hardwareId) {
+          config.machineId = hardwareId;
+      } else if (!config.machineId) {
           config.machineId = randomUUID();
-          writeConfig(config);
       }
       return config;
+    } else {
+        const newConfig = { machineId: hardwareId || randomUUID() };
+        writeConfig(newConfig);
+        return newConfig;
     }
   } catch (error) {
     console.error('Error reading config file:', error);
   }
-  const newConfig = { machineId: randomUUID() };
-  writeConfig(newConfig);
-  return newConfig;
+  return { machineId: getSystemId() || randomUUID() };
 }
 
 function writeConfig(config) {

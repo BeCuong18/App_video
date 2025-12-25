@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from 'react';
 import { LoaderIcon, CopyIcon, CheckIcon } from './Icons';
 
