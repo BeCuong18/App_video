@@ -1,7 +1,6 @@
 
 import React, { useState, ChangeEvent, useEffect } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
-import * as XLSX from 'xlsx';
 import { FormData, Scene, MvGenre, Preset, StatsData } from '../types';
 import { storySystemPrompt, in2vSystemPrompt } from '../constants';
 import Results from './Results';
@@ -123,13 +122,11 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         } else if (name === 'temperature') {
           setFormData((prev) => ({ ...prev, [name]: parseFloat(value) }));
         } else if (name === 'songMinutes') {
-          // Giới hạn từ 0 đến 15 phút
           let val = parseInt(value, 10);
           if (isNaN(val)) val = 0;
           val = Math.max(0, Math.min(15, val));
           setFormData((prev) => ({ ...prev, [name]: val.toString() }));
         } else if (name === 'songSeconds') {
-          // Giới hạn từ 0 đến 59 giây
           let val = parseInt(value, 10);
           if (isNaN(val)) val = 0;
           val = Math.max(0, Math.min(59, val));
