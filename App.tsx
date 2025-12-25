@@ -45,11 +45,19 @@ const App: React.FC = () => {
                 setApiKeys(savedKeys);
                 setActiveApiKeyId(config.activeApiKeyId || (savedKeys[0]?.id || ''));
                 
+                // Quyết định tab khởi đầu dựa trên việc có API Key hay chưa
                 if (savedKeys.length === 0) {
                     setActiveTab('api-manager');
+                } else {
+                    setActiveTab('generator');
                 }
             } else {
+                // Mock mode (browser)
                 setIsActivated(true);
+                // Nếu không có API Key trong mock mode cũng chuyển sang manager
+                if (apiKeys.length === 0) {
+                    setActiveTab('api-manager');
+                }
             }
             setConfigLoaded(true);
         };
@@ -161,14 +169,14 @@ const App: React.FC = () => {
         }
     };
 
-    const handleGenerateSuccess = async (scenes: any[], formData: FormData) => {
+    const handleGenerateSuccess = async (scenes: any[], formData: FormData, detectedType: 'TEXT' | 'IN2V') => {
         const safeName = (formData.projectName || 'MV').replace(/[^a-z0-9_]/gi, '_');
         const jobs: VideoJob[] = scenes.map((p,i) => ({
             id: `Job_${i+1}`, 
             prompt: p.prompt_text, 
             status: 'Pending', 
             videoName: `${safeName}_${i+1}`, 
-            typeVideo: formData.videoType === 'in2v' ? 'IN2V' : 'TEXT',
+            typeVideo: detectedType,
             imagePath: formData.uploadedImages[0]?.name || '', 
             imagePath2: formData.uploadedImages[1]?.name || '', 
             imagePath3: formData.uploadedImages[2]?.name || ''
@@ -257,6 +265,7 @@ const App: React.FC = () => {
                             onGenerateSuccess={handleGenerateSuccess} 
                             onFeedback={setFeedback} 
                             apiKey={activeApiKey?.value}
+                            activeApiKeyId={activeApiKeyId}
                         />
                     ) : (
                         <Tracker 
@@ -328,7 +337,7 @@ const App: React.FC = () => {
                     <span className="font-bold">{feedback.message}</span>
                 </div>
             )}
-            {showStats && <StatsModal onClose={() => setShowStats(false)} isAdmin={isAdminLoggedIn} onDeleteAll={() => {}} onDeleteHistory={() => {}} />}
+            {showStats && <StatsModal onClose={() => setShowStats(false)} isAdmin={isAdminLoggedIn} activeApiKeyId={activeApiKeyId} />}
             {showAdminLogin && <AdminLoginModal onClose={() => setShowAdminLogin(false)} onLoginSuccess={() => setIsAdminLoggedIn(true)} />}
             {alertModal && <AlertModal {...alertModal} onClose={() => setAlertModal(null)} />}
         </div>

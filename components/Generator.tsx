@@ -1,34 +1,35 @@
 
-import React, { useState, ChangeEvent } from 'react';
+import React, { useState, ChangeEvent, useEffect } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
-import { FormData, Scene, MvGenre, Preset } from '../types';
+import { FormData, Scene, MvGenre, Preset, StatsData } from '../types';
 import { storySystemPrompt, in2vSystemPrompt } from '../constants';
 import Results from './Results';
-import { LoaderIcon, TrashIcon } from './Icons';
+import { LoaderIcon, TrashIcon, UploadIcon } from './Icons';
 
 const ipcRenderer = (window as any).require ? (window as any).require('electron').ipcRenderer : null;
 
 interface GeneratorProps {
     presets: Preset[];
     onSavePresets: (newPresets: Preset[]) => void;
-    onGenerateSuccess: (scenes: Scene[], formData: FormData) => void;
+    onGenerateSuccess: (scenes: Scene[], formData: FormData, detectedType: 'TEXT' | 'IN2V') => void;
     onFeedback: (feedback: { type: 'error' | 'success' | 'info', message: string } | null) => void;
     apiKey?: string;
+    activeApiKeyId?: string;
 }
 
-export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, onGenerateSuccess, onFeedback, apiKey }) => {
+export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, onGenerateSuccess, onFeedback, apiKey, activeApiKeyId }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
     const [newPresetName, setNewPresetName] = useState('');
     const [selectedPresetId, setSelectedPresetId] = useState('');
+    const [modelUsageCount, setModelUsageCount] = useState(0);
 
     const [formData, setFormData] = useState<FormData>({
         idea: '', in2vAtmosphere: '', uploadedImages: [null, null, null], liveArtistName: '', liveArtist: '',
         songMinutes: '3', songSeconds: '30', projectName: '',
         model: 'gemini-3-flash-preview', mvGenre: 'narrative', filmingStyle: 'auto',
-        country: 'Vietnamese', musicGenre: 'v-pop', customMusicGenre: '',
-        characterConsistency: true, characterCount: 1, temperature: 0.3,
-        videoType: 'story',
+        country: 'Việt Nam', musicGenre: 'V-Pop', customMusicGenre: '',
+        characterConsistency: true, characterCount: 1, temperature: 0.3
     });
 
     const mvGenreOptions: { value: MvGenre, label: string }[] = [
@@ -38,7 +39,7 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         { value: 'dance-choreography', label: 'Nhảy / Vũ đạo' },
         { value: 'lyrical', label: 'Video lời bài hát (Lyric)' },
         { value: 'conceptual', label: 'Nghệ thuật / Trừu tượng' },
-        { value: 'abstract-visualizer', label: 'Hiệu ứng hình ảnh' },
+        { value: 'abstract-visualizer', label: 'Hiệu ứng hình ảnh (Visualizer)' },
         { value: 'scenic', label: 'Cảnh đẹp / Chill (Không người)' },
         { value: 'animation', label: 'Hoạt hình (2D/3D)' },
         { value: 'one-take', label: 'Một cú máy (One-shot)' },
@@ -46,47 +47,65 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         { value: 'sci-fi', label: 'Khoa học viễn tưởng' },
         { value: 'horror', label: 'Kinh dị / Rùng rợn' },
         { value: 'historical-period', label: 'Cổ trang / Lịch sử' },
-        { value: 'retro-futurism', label: 'Phong cách Retro' },
+        { value: 'retro-futurism', label: 'Phong cách Retro / Cổ điển' },
         { value: 'social-commentary', label: 'Phóng sự / Đời sống' },
         { value: 'documentary', label: 'Tài liệu' },
     ];
   
     const filmingStyleOptions = [
         { value: 'auto', label: 'AI tự chọn (Đẹp nhất)' },
-        { value: 'Vintage 35mm Film', label: 'Màu phim cũ (Vintage)' },
-        { value: 'Sharp & Modern Digital', label: 'Hiện đại & Sắc nét' },
-        { value: 'Artistic Black & White', label: 'Đen trắng nghệ thuật' },
-        { value: 'Cinematic Neon Noir', label: 'Neon (Cyberpunk)' },
-        { value: 'Dark & Moody Low-Key', label: 'Tông tối / Tâm trạng' },
-        { value: 'Golden Hour Glow', label: 'Nắng vàng (Golden Hour)' },
-        { value: 'Clean & Minimalist', label: 'Tối giản (Minimalist)' },
-        { value: 'Surreal & Dreamlike', label: 'Mộng mơ (Dreamy)' },
-        { value: 'Epic Drone Cinematography', label: 'Quay Flycam' },
-        { value: 'High-Speed Slow Motion', label: 'Quay chậm (Slow Motion)' },
-        { value: 'Macro & Extreme Close-up', label: 'Cận cảnh chi tiết' },
-        { value: 'GoPro / POV', label: 'Góc nhìn thứ nhất' },
-        { value: 'Found Footage / Handheld', label: 'Cầm tay (Rung nhẹ)' },
-        { value: 'Wes Anderson Style', label: 'Màu Pastel / Đối xứng' },
-        { value: '80s VHS Look', label: 'Băng từ (VHS)' },
-        { value: '2D Animation (Ghibli Style)', label: 'Hoạt hình Ghibli' },
-        { value: '3D Animation (Pixar Style)', label: 'Hoạt hình Pixar' },
+        { value: 'Vintage', label: 'Màu phim cũ (Vintage)' },
+        { value: 'Modern & Sharp', label: 'Hiện đại & Sắc nét' },
+        { value: 'B&W Artistic', label: 'Đen trắng nghệ thuật' },
+        { value: 'Cyberpunk', label: 'Neon (Cyberpunk)' },
+        { value: 'Moody', label: 'Tông tối / Tâm trạng' },
+        { value: 'Golden Hour', label: 'Nắng vàng (Golden Hour)' },
+        { value: 'Minimalist', label: 'Tối giản (Minimalist)' },
+        { value: 'Dreamy', label: 'Mộng mơ (Dreamy)' },
+        { value: 'Drone FPV', label: 'Quay Flycam' },
+        { value: 'Slow Motion', label: 'Quay chậm (Slow Motion)' },
+        { value: 'Macro Details', label: 'Cận cảnh chi tiết' },
+        { value: 'POV', label: 'Góc nhìn thứ nhất (POV)' },
+        { value: 'Handheld', label: 'Cầm tay (Rung nhẹ)' },
+        { value: 'Pastel / Symmetric', label: 'Màu Pastel / Đối xứng' },
+        { value: 'VHS', label: 'Băng từ (VHS)' },
+        { value: 'Ghibli Style', label: 'Hoạt hình Ghibli' },
+        { value: 'Pixar Style', label: 'Hoạt hình Pixar' },
     ];
-    
-    const countryOptions = [
-      { value: 'Vietnamese', label: 'Việt Nam' }, { value: 'American', label: 'Mỹ (American)' },
-      { value: 'British', label: 'Anh (British)' }, { value: 'South Korean', label: 'Hàn Quốc' },
-      { value: 'Japanese', label: 'Nhật Bản' }, { value: 'Chinese', label: 'Trung Quốc' },
-      { value: 'French', label: 'Pháp' }, { value: 'Brazilian', label: 'Brazil' },
-      { value: 'Spanish', label: 'Tây Ban Nha' }, { value: 'Generic/International', label: 'Quốc tế' },
-    ];
-  
+
     const musicGenreOptions = [
-      { value: 'v-pop', label: 'V-Pop' }, { value: 'k-pop', label: 'K-Pop' },
-      { value: 'us-uk-pop', label: 'US-UK Pop' }, { value: 'jazz-bossa-nova', label: 'Jazz Bossa Nova' },
-      { value: 'smooth-jazz', label: 'Smooth Jazz' }, { value: 'edm', label: 'EDM' },
-      { value: 'worship', label: 'Nhạc Thờ Phụng' }, { value: 'country', label: 'Nhạc Country' },
-      { value: 'other', label: 'Khác (Nhập thủ công)' }
+        { value: 'V-Pop', label: 'V-Pop' },
+        { value: 'K-Pop', label: 'K-Pop' },
+        { value: 'US-UK Pop', label: 'US-UK Pop' },
+        { value: 'Jazz Bossa Nova', label: 'Jazz Bossa Nova' },
+        { value: 'Smooth Jazz', label: 'Smooth Jazz' },
+        { value: 'EDM', label: 'EDM (Electronic Dance Music)' },
+        { value: 'Worship', label: 'Nhạc Thờ Phụng (Worship)' },
+        { value: 'Country', label: 'Nhạc Country' },
+        { value: 'Custom', label: 'Khác (Nhập thủ công)' },
     ];
+
+    const countryOptions = [
+        { value: 'Việt Nam', label: 'Việt Nam' },
+        { value: 'Mỹ (American)', label: 'Mỹ (American)' },
+        { value: 'Anh (British)', label: 'Anh (British)' },
+        { value: 'Hàn Quốc (South Korean)', label: 'Hàn Quốc (South Korean)' },
+        { value: 'Nhật Bản (Japanese)', label: 'Nhật Bản (Japanese)' },
+        { value: 'Trung Quốc (Chinese)', label: 'Trung Quốc (Chinese)' },
+        { value: 'Pháp (French)', label: 'Pháp (French)' },
+        { value: 'Brazil', label: 'Brazil' },
+        { value: 'Tây Ban Nha (Spanish)', label: 'Tây Ban Nha (Spanish)' },
+        { value: 'International', label: 'Quốc tế / Không xác định' },
+    ];
+
+    useEffect(() => {
+        if (ipcRenderer && activeApiKeyId) {
+            ipcRenderer.invoke('get-stats').then((stats: StatsData) => {
+                const count = stats.modelUsage?.[activeApiKeyId]?.[formData.model] || 0;
+                setModelUsageCount(count);
+            });
+        }
+    }, [formData.model, activeApiKeyId]);
 
     const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value, type } = e.target;
@@ -94,22 +113,9 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
           const checked = (e.target as HTMLInputElement).checked;
           setFormData((prev) => ({ ...prev, [name]: checked }));
         } else if (name === 'characterCount') {
-          setFormData((prev) => ({ ...prev, [name]: parseInt(value, 10) }));
+          setFormData((prev) => ({ ...prev, [name]: parseInt(value, 10) || 1 }));
         } else if (name === 'temperature') {
           setFormData((prev) => ({ ...prev, [name]: parseFloat(value) }));
-        } else if (name === 'songMinutes') {
-            if (value === '') { setFormData(prev => ({ ...prev, songMinutes: '' })); return; }
-            let val = parseInt(value);
-            if (isNaN(val)) val = 0; if (val < 0) val = 0; if (val > 15) val = 15;
-            setFormData(prev => ({ ...prev, songMinutes: val.toString(), songSeconds: (val === 15) ? '0' : prev.songSeconds }));
-        } else if (name === 'songSeconds') {
-            let val = parseInt(value);
-            if (isNaN(val) || val < 0) val = 0;
-            setFormData(prev => {
-                if (parseInt(prev.songMinutes) >= 15) return { ...prev, songSeconds: '0' }; 
-                if (val > 59) val = 59;
-                return { ...prev, songSeconds: val.toString() };
-            });
         } else {
           setFormData((prev) => ({ ...prev, [name]: value }));
         }
@@ -134,8 +140,17 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         reader.readAsDataURL(file);
     };
 
+    const clearImage = (index: number) => {
+        setFormData(prev => {
+            const updated = [...prev.uploadedImages];
+            updated[index] = null;
+            return { ...prev, uploadedImages: updated };
+        });
+    };
+
     const handleSavePreset = () => {
         if (!newPresetName.trim()) return;
+        // Saves entire formData state (Artistic Direction, Time, Count, Consistency, etc.)
         const newPreset: Preset = { id: crypto.randomUUID(), name: newPresetName.trim(), settings: formData };
         onSavePresets([...presets, newPreset]);
         setNewPresetName('');
@@ -148,13 +163,19 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
     };
 
     const handleDeletePreset = () => {
+        if (!selectedPresetId) return;
         onSavePresets(presets.filter(p => p.id !== selectedPresetId));
         setSelectedPresetId('');
     };
 
     const generatePrompts = async () => {
-        if (!apiKey) {
+        const currentApiKey = process.env.API_KEY || apiKey;
+        if (!currentApiKey) {
             onFeedback({ type: 'error', message: 'Vui lòng cấu hình API Key trong mục Quản lý API.' });
+            return;
+        }
+        if (modelUsageCount >= 20) {
+            onFeedback({ type: 'error', message: 'Bạn đã đạt giới hạn 20 lượt tạo Prompt cho Model này.' });
             return;
         }
 
@@ -162,24 +183,25 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         onFeedback(null);
         setGeneratedScenes([]);
 
+        // Detect mode automatically
+        const hasImages = formData.uploadedImages.some(img => img !== null);
+        const effectiveType: 'TEXT' | 'IN2V' = hasImages ? 'IN2V' : 'TEXT';
+
         const totalSeconds = (parseInt(formData.songMinutes) || 0) * 60 + (parseInt(formData.songSeconds) || 0);
         const sceneCount = Math.max(3, Math.round(totalSeconds / 8));
-        const systemPrompt = formData.videoType === 'story' ? storySystemPrompt : in2vSystemPrompt;
+        const systemPrompt = effectiveType === 'TEXT' ? storySystemPrompt : in2vSystemPrompt;
         
-        let userPrompt = `Mode: ${formData.videoType}. Input Idea/Lyrics: "${formData.idea.trim()}". Specs: Nationality: ${formData.country}, Genre: ${formData.mvGenre}, Style: ${formData.filmingStyle}, Music Genre: ${formData.musicGenre === 'other' ? formData.customMusicGenre : formData.musicGenre}. Generate exactly ${sceneCount} scenes. Character Consistency Enforced: ${formData.characterConsistency}, Number of Characters: ${formData.characterCount}.`;
+        let userPrompt = `Idea: "${formData.idea.trim()}". Specs: Country: ${formData.country}, Genre: ${formData.mvGenre}, Music: ${formData.musicGenre}, Style: ${formData.filmingStyle}, Character Consistency: ${formData.characterConsistency}, Count: ${formData.characterCount}. Generate ${sceneCount} scenes.`;
 
         const parts: any[] = [{ text: userPrompt }];
-        if (formData.videoType === 'in2v') {
-            formData.uploadedImages.forEach((img, i) => {
-                if (img) {
-                    parts.push({ text: `Analyze this reference image ${i+1} for visual consistency:` });
-                    parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
-                }
+        if (effectiveType === 'IN2V') {
+            formData.uploadedImages.forEach((img) => {
+                if (img) parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
             });
         }
 
         try {
-            const ai = new GoogleGenAI({ apiKey });
+            const ai = new GoogleGenAI({ apiKey: currentApiKey });
             const response = await ai.models.generateContent({
                 model: formData.model,
                 contents: { parts },
@@ -208,10 +230,15 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                 },
             });
 
-            const parsedData = JSON.parse(response.text || '{}');
+            const responseText = response.text || '{}';
+            const parsedData = JSON.parse(responseText);
             if (parsedData.prompts) {
                 setGeneratedScenes(parsedData.prompts);
-                if (ipcRenderer) ipcRenderer.invoke('increment-prompt-count');
+                if (ipcRenderer && activeApiKeyId) {
+                    const res = await ipcRenderer.invoke('increment-prompt-count', { modelName: formData.model, apiKeyId: activeApiKeyId });
+                    if (res.success) setModelUsageCount(res.count);
+                }
+                onGenerateSuccess(parsedData.prompts, formData, effectiveType);
             }
         } catch (err: any) {
             onFeedback({ type: 'error', message: `Lỗi: ${err.message}` });
@@ -222,146 +249,163 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
 
     return (
         <main className="space-y-6">
-            <div className="flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
-                <div className="flex flex-1 w-full xl:w-auto gap-3 p-2 bg-white rounded-3xl border-2 border-tet-gold shadow-sm">
-                     <select value={selectedPresetId} onChange={e => handlePresetSelect(e.target.value)} className="flex-1 rounded-2xl p-2 text-sm border-2 border-stone-200 focus:border-tet-red bg-tet-cream font-bold">
-                        <option value="">-- Tải Cài Đặt Sẵn --</option>
-                        {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                    <button onClick={handleDeletePreset} disabled={!selectedPresetId} className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition border border-transparent hover:border-red-200"><TrashIcon className="w-4 h-4"/></button>
-                    <input type="text" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} className="flex-1 rounded-2xl p-2 text-sm placeholder-gray-400 border-2 border-stone-200 focus:border-tet-red bg-tet-cream font-bold" placeholder="Tên cài đặt mới..." />
-                    <button onClick={handleSavePreset} className="bg-tet-gold hover:bg-tet-gold-dark text-tet-brown font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider shadow transition transform hover:scale-105 border-2 border-white">Lưu</button>
+            {/* Top Bar: Model & Presets & Save Quick Preset */}
+            <div className="flex flex-col xl:flex-row gap-4 justify-between items-stretch xl:items-center bg-white p-3 rounded-[32px] border-2 border-tet-gold shadow-md">
+                {/* Selection Section */}
+                <div className="flex flex-1 gap-3 items-center">
+                     <div className="relative shrink-0">
+                        <select name="model" value={formData.model} onChange={handleInputChange} className="rounded-2xl p-2 pr-20 text-[10px] border-2 border-stone-100 focus:border-tet-red bg-tet-cream font-black uppercase">
+                            <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                            <option value="gemini-2.5-flash-lite-latest">Gemini 2.5 Flash Lite</option>
+                        </select>
+                        <div className={`absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-lg text-[8px] font-black ${modelUsageCount >= 18 ? 'bg-red-500 text-white' : 'bg-tet-gold text-tet-brown'} border border-white shadow-sm pointer-events-none`}>
+                            {modelUsageCount}/20
+                        </div>
+                    </div>
+                    <div className="h-6 w-0.5 bg-stone-100 mx-1 shrink-0"></div>
+                    <div className="flex items-center gap-2 flex-1">
+                        <select value={selectedPresetId} onChange={e => handlePresetSelect(e.target.value)} className="flex-1 rounded-2xl p-2 text-[10px] border-2 border-stone-100 focus:border-tet-red bg-tet-cream font-bold uppercase min-w-[140px]">
+                            <option value="">-- CHỌN CÀI ĐẶT SẴN --</option>
+                            {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                        <button onClick={handleDeletePreset} disabled={!selectedPresetId} className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition shrink-0"><TrashIcon className="w-4 h-4"/></button>
+                    </div>
                 </div>
 
-                <div className="flex p-1.5 bg-white rounded-full border-2 border-tet-gold shadow-sm self-center xl:self-auto">
-                    <button onClick={() => setFormData(p => ({ ...p, videoType: 'story' }))} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${formData.videoType === 'story' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>MV Kể Chuyện</button>
-                    <button onClick={() => setFormData(p => ({ ...p, videoType: 'in2v' }))} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${formData.videoType === 'in2v' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>MV Image to Video</button>
+                {/* Save Section - Moved up here near the selector */}
+                <div className="flex gap-2 p-1.5 bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200 items-center xl:w-[450px]">
+                    <div className="relative flex-1">
+                        <input 
+                            type="text" 
+                            value={newPresetName} 
+                            onChange={e => setNewPresetName(e.target.value)} 
+                            className="w-full bg-white border-none rounded-xl p-2 text-[10px] font-bold focus:ring-0" 
+                            placeholder="Tên kịch bản để lưu nhanh..." 
+                        />
+                    </div>
+                    <button 
+                        onClick={handleSavePreset} 
+                        disabled={!newPresetName.trim()}
+                        className="bg-tet-gold hover:bg-tet-gold-dark text-tet-brown disabled:opacity-50 font-black px-6 py-2 rounded-xl text-[9px] uppercase tracking-widest transition-colors shadow-sm whitespace-nowrap"
+                    >
+                        LƯU CÀI ĐẶT NHANH
+                    </button>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                  <div className="xl:col-span-8 space-y-6">
-                     <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-red relative overflow-hidden group">
-                        <h3 className="text-tet-red-dark font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-tet-red/30 pb-2">1. Nội Dung Cốt Lõi</h3>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Ý Tưởng / Lời Bài Hát</label>
-                                <textarea name="idea" value={formData.idea} onChange={handleInputChange} rows={6} className="w-full p-4 transition resize-none shadow-inner text-sm leading-relaxed border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="Nhập lời bài hát hoặc mô tả chi tiết ý tưởng..." />
-                            </div>
-                            {formData.videoType === 'in2v' && (
-                                <div className="animate-fade-in">
-                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Bối cảnh / Không khí chủ đạo</label>
-                                    <textarea name="in2vAtmosphere" value={formData.in2vAtmosphere} onChange={handleInputChange} rows={2} className="w-full p-4 transition text-sm border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="VD: Rừng thông mờ ảo..." />
-                                </div>
-                            )}
+                     {/* 1. Core Idea */}
+                     <div className="bg-white/95 p-8 rounded-[32px] shadow-lg border-2 border-tet-red relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                            <span className="text-8xl">✍️</span>
                         </div>
+                        <h3 className="text-tet-red-dark font-black uppercase text-[10px] mb-6 tracking-[0.2em] border-b-2 border-dashed border-tet-red/20 pb-2">1. Ý TƯỞNG CỐT LÕI (LYRICS / STORY)</h3>
+                        <textarea name="idea" value={formData.idea} onChange={handleInputChange} rows={6} className="w-full p-5 transition resize-none shadow-inner text-sm leading-relaxed border-2 border-tet-gold/30 focus:border-tet-red bg-tet-cream font-bold" placeholder="Nhập lời bài hát hoặc kịch bản chi tiết. Nếu up ảnh bên dưới, AI sẽ tự động chuyển sang chế độ I2V..." />
                      </div>
 
-                     <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-gold relative overflow-hidden group">
-                        <h3 className="text-tet-brown font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-tet-gold/40 pb-2">2. Định Hướng Nghệ Thuật</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                            <div>
-                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Quốc Gia</label>
-                                <select name="country" value={formData.country} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
-                                    {countryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Nhạc nền</label>
-                                <select name="musicGenre" value={formData.musicGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
-                                    {musicGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Thể Loại MV</label>
-                                <select name="mvGenre" value={formData.mvGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
-                                    {mvGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Phong Cách Quay</label>
-                                <select name="filmingStyle" value={formData.filmingStyle} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
-                                    {filmingStyleOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                     </div>
-
-                     <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-green relative overflow-hidden group">
-                        <h3 className="text-tet-green font-black uppercase text-xs tracking-widest mb-6 border-b-2 border-dashed border-tet-green/20 pb-2">
-                            3. {formData.videoType === 'story' ? 'Nhân Vật & Diễn Viên' : 'Dữ Liệu Hình Ảnh (Tối đa 3)'}
-                        </h3>
-                        <div className="space-y-6">
-                            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                    <input type="checkbox" name="characterConsistency" checked={formData.characterConsistency} onChange={handleInputChange} className="w-6 h-6 rounded-lg text-tet-red focus:ring-tet-red border-tet-gold cursor-pointer" />
-                                    <label className="text-sm font-bold text-stone-700">Đồng nhất nhân vật (AI tự động tạo Blueprint)</label>
-                                </div>
-                                {formData.characterConsistency && (
-                                    <div className="flex items-center gap-3 bg-tet-cream px-4 py-2 rounded-2xl border-2 border-tet-gold/20">
-                                        <label className="text-[10px] text-stone-500 uppercase font-bold tracking-wider">Số lượng nhân vật:</label>
-                                        <input 
-                                            type="number" 
-                                            name="characterCount" 
-                                            value={formData.characterCount} 
-                                            onChange={handleInputChange} 
-                                            min={1} 
-                                            max={3} 
-                                            className="w-14 bg-white border-2 border-white rounded-xl p-1 text-center text-tet-red font-black text-xl focus:border-tet-gold" 
-                                        />
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* 2. Artistic Direction */}
+                        <div className="bg-white/95 p-8 rounded-[32px] shadow-lg border-2 border-tet-gold relative">
+                            <h3 className="text-tet-brown font-black uppercase text-[10px] mb-6 tracking-[0.2em] border-b-2 border-dashed border-tet-gold/20 pb-2">2. ĐỊNH HƯỚNG NGHỆ THUẬT</h3>
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-[8px] font-black text-stone-400 uppercase tracking-widest mb-2">QUỐC GIA</label>
+                                        <select name="country" value={formData.country} onChange={handleInputChange} className="w-full p-3 text-xs focus:border-tet-red border-2 border-stone-100 bg-tet-cream">
+                                            {countryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                        </select>
                                     </div>
-                                )}
-                            </div>
-
-                            {formData.videoType === 'in2v' && (
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
-                                    {[0, 1, 2].map((idx) => {
-                                        const img = formData.uploadedImages[idx];
-                                        return (
-                                            <div key={idx} className="relative group">
-                                                <div className="relative border-2 border-dashed border-tet-gold/50 rounded-2xl p-2 bg-tet-cream hover:border-tet-red transition-colors aspect-square flex flex-col items-center justify-center overflow-hidden">
-                                                    {img ? (
-                                                        <img src={`data:${img.mimeType};base64,${img.base64}`} className="w-full h-full object-cover" />
-                                                    ) : (
-                                                        <div className="text-center">
-                                                            <span className="text-2xl">📸</span>
-                                                            <span className="block text-[9px] font-bold uppercase mt-1">Tải ảnh {idx+1}</span>
-                                                        </div>
-                                                    )}
-                                                    <input type="file" accept="image/*" onChange={handleMultiImageUpload(idx)} className="absolute inset-0 opacity-0 cursor-pointer" />
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                    <div>
+                                        <label className="block text-[8px] font-black text-stone-400 uppercase tracking-widest mb-2">THỂ LOẠI NHẠC</label>
+                                        <select name="musicGenre" value={formData.musicGenre} onChange={handleInputChange} className="w-full p-3 text-xs focus:border-tet-red border-2 border-stone-100 bg-tet-cream">
+                                            {musicGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
-                            )}
+                                <div>
+                                    <label className="block text-[8px] font-black text-stone-400 uppercase tracking-widest mb-2">THỂ LOẠI MV</label>
+                                    <select name="mvGenre" value={formData.mvGenre} onChange={handleInputChange} className="w-full p-3 text-xs focus:border-tet-red border-2 border-stone-100 bg-tet-cream">
+                                        {mvGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-[8px] font-black text-stone-400 uppercase tracking-widest mb-2">PHONG CÁCH QUAY (CINEMATOGRAPHY)</label>
+                                    <select name="filmingStyle" value={formData.filmingStyle} onChange={handleInputChange} className="w-full p-3 text-xs focus:border-tet-red border-2 border-stone-100 bg-tet-cream">
+                                        {filmingStyleOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 3. Assets & Identity */}
+                        <div className="bg-white/95 p-8 rounded-[32px] shadow-lg border-2 border-tet-green relative">
+                            <h3 className="text-tet-green font-black uppercase text-[10px] mb-6 tracking-[0.2em] border-b-2 border-dashed border-tet-green/20 pb-2">3. HÌNH ẢNH GỐC (TỰ ĐỘNG I2V)</h3>
+                            <div className="space-y-6">
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[0, 1, 2].map(idx => (
+                                        <div key={idx} className="relative aspect-square border-2 border-dashed border-stone-200 rounded-2xl bg-stone-50 flex items-center justify-center overflow-hidden hover:border-tet-red transition-colors cursor-pointer group">
+                                            {formData.uploadedImages[idx] ? (
+                                                <>
+                                                    <img src={`data:${formData.uploadedImages[idx]!.mimeType};base64,${formData.uploadedImages[idx]!.base64}`} className="w-full h-full object-cover" alt="asset" />
+                                                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); clearImage(idx); }} className="absolute top-1 right-1 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10">&times;</button>
+                                                </>
+                                            ) : (
+                                                <div className="text-center">
+                                                    <UploadIcon className="w-6 h-6 mx-auto opacity-20 mb-1" />
+                                                    <span className="block text-[7px] font-black text-stone-300 uppercase">Up ảnh {idx + 1}</span>
+                                                </div>
+                                            )}
+                                            <input type="file" accept="image/*" onChange={handleMultiImageUpload(idx)} className="absolute inset-0 opacity-0 cursor-pointer" />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="p-4 bg-emerald-50 rounded-2xl border-2 border-emerald-100 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <input type="checkbox" name="characterConsistency" checked={formData.characterConsistency} onChange={handleInputChange} className="w-5 h-5 accent-tet-green" />
+                                        <label className="text-[10px] font-black text-tet-green uppercase tracking-widest">Đồng nhất khuôn mặt</label>
+                                    </div>
+                                    {formData.characterConsistency && (
+                                        <input type="number" name="characterCount" value={formData.characterCount} onChange={handleInputChange} min={1} max={3} className="w-12 p-1 text-center bg-white border-2 border-emerald-200 rounded-lg font-black text-tet-green" />
+                                    )}
+                                </div>
+                            </div>
                         </div>
                      </div>
                  </div>
 
+                 {/* Action Sidebar */}
                  <div className="xl:col-span-4 space-y-6 sticky top-4">
-                    <div className="bg-white/95 p-8 rounded-[32px] border-4 border-tet-gold/40 shadow-xl relative overflow-hidden">
-                        <h3 className="text-tet-brown font-black uppercase text-xs mb-6 border-b-2 border-stone-100 pb-2 tracking-widest">Cấu hình Dự Án</h3>
-                        <div className="mb-5">
-                            <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Tên Dự Án</label>
-                            <input type="text" name="projectName" value={formData.projectName} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-sm focus:border-tet-red font-bold" placeholder="VD: MV_Tet_2026" />
+                    <div className="bg-white/95 p-8 rounded-[32px] border-4 border-tet-gold/40 shadow-xl relative">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                            <span className="text-6xl">📊</span>
                         </div>
-                        <div className="mb-5">
-                            <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Thời lượng (Phút/Giây)</label>
-                            <div className="flex gap-2">
-                                <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} className="w-1/2 bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center text-xl font-black" placeholder="Min" />
-                                <input type="number" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} className="w-1/2 bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center text-xl font-black" placeholder="Sec" />
+                        <h3 className="text-tet-brown font-black uppercase text-[10px] mb-6 border-b-2 border-stone-100 pb-2 tracking-[0.2em]">THÔNG TIN DỰ ÁN</h3>
+                        <div className="space-y-5 mb-8">
+                            <div>
+                                <label className="block text-[8px] font-black text-stone-400 uppercase tracking-widest mb-2">Tên Dự Án (Export File)</label>
+                                <input type="text" name="projectName" value={formData.projectName} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-stone-100 rounded-2xl p-4 text-xs focus:border-tet-red font-black" placeholder="MV_XUAN_BINH_NGO" />
+                            </div>
+                            <div className="flex gap-4">
+                                <div className="flex-1">
+                                    <label className="block text-[8px] font-black text-stone-400 uppercase tracking-widest mb-2">Phút</label>
+                                    <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-stone-100 rounded-2xl p-4 text-center text-xl font-black" />
+                                </div>
+                                <div className="flex-1">
+                                    <label className="block text-[8px] font-black text-stone-400 uppercase tracking-widest mb-2">Giây</label>
+                                    <input type="number" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-stone-100 rounded-2xl p-4 text-center text-xl font-black" />
+                                </div>
                             </div>
                         </div>
-                        <button onClick={generatePrompts} disabled={isLoading} className="w-full py-4 bg-gradient-to-b from-tet-red to-tet-red-dark text-tet-gold font-black text-lg uppercase tracking-widest rounded-2xl shadow-xl border-4 border-tet-gold">
+                        <button onClick={generatePrompts} disabled={isLoading || modelUsageCount >= 20} className="w-full py-5 bg-gradient-to-b from-tet-red to-tet-red-dark text-tet-gold font-black text-lg uppercase tracking-widest rounded-2xl shadow-xl border-4 border-tet-gold disabled:opacity-50 hover:brightness-110 active:scale-95 transition-all">
                             {isLoading ? <LoaderIcon /> : '🧧 TẠO KỊCH BẢN'}
                         </button>
                     </div>
-                    {generatedScenes.length > 0 && (
-                        <button onClick={() => onGenerateSuccess(generatedScenes, formData)} className="w-full py-4 bg-emerald-400 text-white font-bold rounded-2xl shadow-md uppercase tracking-wide border-2 border-white">💾 Lưu & Theo dõi</button>
-                    )}
                  </div>
             </div>
+
             <Results scenes={generatedScenes} />
         </main>
     );

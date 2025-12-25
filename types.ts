@@ -1,7 +1,7 @@
 
 export type MvGenre = 'narrative' | 'cinematic-short-film' | 'performance' | 'dance-choreography' | 'lyrical' | 'conceptual' | 'abstract-visualizer' | 'scenic' | 'animation' | 'one-take' | 'surreal' | 'sci-fi' | 'horror' | 'historical-period' | 'retro-futurism' | 'social-commentary' | 'documentary';
 export type VideoType = 'story' | 'in2v';
-export type ActiveTab = 'generator' | 'tracker';
+export type ActiveTab = 'generator' | 'tracker' | 'api-manager';
 export type JobStatus = 'Pending' | 'Processing' | 'Generating' | 'Completed' | 'Failed';
 
 export interface ScenePrompt {
@@ -22,7 +22,6 @@ export interface FormData {
   idea: string;
   in2vAtmosphere: string;
   uploadedImages: (UploadedImage | null)[];
-  videoType: VideoType;
   liveArtistName: string;
   liveArtist: string;
   songMinutes: string;
@@ -88,5 +87,10 @@ export interface StatsData {
     history: DailyStats[];
     total: number;
     promptCount: number;
+    modelUsage: {
+        [apiKeyId: string]: {
+            [modelName: string]: number;
+        }
+    };
     totalCredits: number;
 }

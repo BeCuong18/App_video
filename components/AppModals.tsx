@@ -9,11 +9,10 @@ const ipcRenderer = (window as any).require ? (window as any).require('electron'
 interface StatsModalProps {
     onClose: () => void;
     isAdmin: boolean;
-    onDeleteHistory: (date: string) => void;
-    onDeleteAll: () => void;
+    activeApiKeyId?: string;
 }
 
-export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDeleteHistory, onDeleteAll }) => {
+export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, activeApiKeyId }) => {
     const [stats, setStats] = useState<StatsData | null>(null);
     const [loading, setLoading] = useState(true);
 
@@ -33,8 +32,15 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDele
 
     useEffect(() => { loadStats(); }, []);
 
-    const handleDelete = async (date: string) => { await onDeleteHistory(date); loadStats(); };
-    const handleDeleteAll = async () => { await onDeleteAll(); loadStats(); };
+    const handleDelete = async (date: string) => { 
+        if (ipcRenderer) await ipcRenderer.invoke('delete-stat-date', date);
+        loadStats(); 
+    };
+    
+    const handleDeleteAll = async () => { 
+        if (ipcRenderer) await ipcRenderer.invoke('delete-all-stats');
+        loadStats(); 
+    };
 
     const maxCount = stats?.history.reduce((max, item) => Math.max(max, item.count), 0) || 1;
 
@@ -69,6 +75,29 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, onDele
                                     </div>
                                 ))}
                             </div>
+
+                            {/* Detailed Quota View for Active Key */}
+                            {activeApiKeyId && stats.modelUsage?.[activeApiKeyId] && (
+                                <div className="mb-8 p-6 bg-white rounded-3xl border-2 border-tet-gold/30 shadow-sm">
+                                    <h4 className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-4">Lượt sử dụng Model (Active Key)</h4>
+                                    <div className="space-y-3">
+                                        {Object.entries(stats.modelUsage[activeApiKeyId]).map(([model, count]) => (
+                                            <div key={model} className="flex items-center justify-between bg-stone-50 p-3 rounded-2xl border border-stone-100">
+                                                <span className="text-xs font-bold text-stone-600">{model}</span>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-32 h-2 bg-stone-200 rounded-full overflow-hidden">
+                                                        <div 
+                                                            className={`h-full ${count >= 15 ? 'bg-red-500' : 'bg-tet-gold'}`} 
+                                                            style={{ width: `${(count/20)*100}%` }}
+                                                        ></div>
+                                                    </div>
+                                                    <span className={`text-xs font-black ${count >= 18 ? 'text-red-500' : 'text-stone-700'}`}>{count}/20</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {isAdmin && (
                                 <div className="mb-8 p-6 bg-white rounded-3xl border-2 border-stone-100 shadow-sm">
