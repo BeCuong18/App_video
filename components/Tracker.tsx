@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { TrackedFile, VideoJob, JobStatus } from '../types';
-import { PlayIcon, FolderIcon, TrashIcon, RetryIcon, ExternalLinkIcon, CogIcon, UploadIcon, LoaderIcon, VideoIcon, CopyIcon, LinkIcon } from './Icons';
+import { PlayIcon, FolderIcon, TrashIcon, RetryIcon, ExternalLinkIcon, UploadIcon, LoaderIcon, LinkIcon } from './Icons';
 
 interface TrackerProps {
     trackedFiles: TrackedFile[];

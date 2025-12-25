@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Scene } from '../types';
-import { CopyIcon, CheckIcon, FolderIcon } from './Icons';
+import { CopyIcon, CheckIcon } from './Icons';
 
 interface SceneCardProps {
   scene: Scene;
