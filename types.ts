@@ -4,14 +4,12 @@ export type VideoType = 'story' | 'in2v';
 export type ActiveTab = 'generator' | 'tracker';
 export type JobStatus = 'Pending' | 'Processing' | 'Generating' | 'Completed' | 'Failed';
 
-
 export interface ScenePrompt {
   scene_number: number;
   scene_title: string;
   prompt_text: string;
 }
 
-// The Scene type is now simplified, as video generation is handled externally.
 export type Scene = ScenePrompt;
 
 export interface UploadedImage {
@@ -23,8 +21,7 @@ export interface UploadedImage {
 export interface FormData {
   idea: string;
   in2vAtmosphere: string;
-  uploadedImages: (UploadedImage | null)[]; // Supporting up to 3 images
-  // Fix: Added videoType property to resolve 'Property videoType does not exist on type FormData' error
+  uploadedImages: (UploadedImage | null)[];
   videoType: VideoType;
   liveArtistName: string;
   liveArtist: string;
@@ -52,12 +49,12 @@ export interface VideoJob {
     videoName: string;
     typeVideo: string;
     videoPath?: string;
-  }
+}
   
 export interface TrackedFile {
   name: string;
   jobs: VideoJob[];
-  path?: string; // Path to the file on disk for watching
+  path?: string;
   targetDurationSeconds?: number;
 }
 

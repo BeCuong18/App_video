@@ -1,7 +1,7 @@
 
 import React, { useState, ChangeEvent } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
-import { FormData, VideoType, Scene, ApiKey, MvGenre, Preset, UploadedImage } from '../types';
+import { FormData, Scene, MvGenre, Preset } from '../types';
 import { storySystemPrompt, in2vSystemPrompt } from '../constants';
 import Results from './Results';
 import { LoaderIcon, TrashIcon } from './Icons';
@@ -9,7 +9,6 @@ import { LoaderIcon, TrashIcon } from './Icons';
 const ipcRenderer = (window as any).require ? (window as any).require('electron').ipcRenderer : null;
 
 interface GeneratorProps {
-    // Fix: Removed activeApiKey prop to comply with Gemini API security guidelines (exclusive use of process.env.API_KEY)
     presets: Preset[];
     onSavePresets: (newPresets: Preset[]) => void;
     onGenerateSuccess: (scenes: Scene[], formData: FormData) => void;
@@ -17,10 +16,8 @@ interface GeneratorProps {
 }
 
 export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, onGenerateSuccess, onFeedback }) => {
-    // Fix: Merged standalone videoType state into formData to fix Property 'videoType' does not exist error
     const [isLoading, setIsLoading] = useState(false);
     const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
-    
     const [newPresetName, setNewPresetName] = useState('');
     const [selectedPresetId, setSelectedPresetId] = useState('');
 
@@ -30,7 +27,6 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         model: 'gemini-3-flash-preview', mvGenre: 'narrative', filmingStyle: 'auto',
         country: 'Vietnamese', musicGenre: 'v-pop', customMusicGenre: '',
         characterConsistency: true, characterCount: 1, temperature: 0.3,
-        // Added videoType to initial formData state
         videoType: 'story',
     });
 
@@ -120,14 +116,7 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
 
     const handleMultiImageUpload = (index: number) => (e: ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file) {
-            setFormData(prev => {
-                const updated = [...prev.uploadedImages];
-                updated[index] = null;
-                return { ...prev, uploadedImages: updated };
-            });
-            return;
-        }
+        if (!file) return;
         const reader = new FileReader();
         reader.onloadend = () => {
           if (reader.result && typeof reader.result === 'string') {
@@ -145,76 +134,47 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
     };
 
     const handleSavePreset = () => {
-        if (!newPresetName.trim()) { onFeedback({type: 'error', message: 'Vui lòng nhập tên cài đặt.'}); return; }
+        if (!newPresetName.trim()) return;
         const newPreset: Preset = { id: crypto.randomUUID(), name: newPresetName.trim(), settings: formData };
-        const updated = [...presets, newPreset];
-        onSavePresets(updated);
+        onSavePresets([...presets, newPreset]);
         setNewPresetName('');
-        onFeedback({ type: 'success', message: 'Đã lưu cài đặt!' });
     };
 
     const handlePresetSelect = (pid: string) => {
         setSelectedPresetId(pid);
         const p = presets.find(pre => pre.id === pid);
-        if (p) {
-            setFormData(prev => ({ ...prev, ...p.settings }));
-            onFeedback({ type: 'info', message: `Đã tải: ${p.name}` });
-        }
+        if (p) setFormData(prev => ({ ...prev, ...p.settings }));
     };
 
     const handleDeletePreset = () => {
-        if (!selectedPresetId) return;
         onSavePresets(presets.filter(p => p.id !== selectedPresetId));
         setSelectedPresetId('');
     };
 
     const generatePrompts = async () => {
-        // Fix: Relying on process.env.API_KEY as per GenAI guidelines instead of manual prop checking
         setIsLoading(true);
         onFeedback(null);
         setGeneratedScenes([]);
 
         const totalSeconds = (parseInt(formData.songMinutes) || 0) * 60 + (parseInt(formData.songSeconds) || 0);
-        if (totalSeconds <= 0 || totalSeconds > 900) {
-            onFeedback({ type: 'error', message: 'Thời lượng không hợp lệ (1s - 15 phút).' });
-            setIsLoading(false);
-            return;
-        }
-
-        let sceneCount = Math.max(3, Math.round(totalSeconds / 8));
+        const sceneCount = Math.max(3, Math.round(totalSeconds / 8));
         const systemPrompt = formData.videoType === 'story' ? storySystemPrompt : in2vSystemPrompt;
         
-        let userPrompt = `Generate prompts for a music video. Mode: ${formData.videoType === 'story' ? 'Text-to-Video' : 'Image-to-Video'}.`;
-        const genre = formData.musicGenre === 'other' ? formData.customMusicGenre : formData.musicGenre;
-
-        if (formData.videoType === 'story') {
-            if (!formData.idea.trim()) { onFeedback({type: 'error', message: 'Thiếu ý tưởng.'}); setIsLoading(false); return; }
-            userPrompt += ` Input: "${formData.idea.trim()}". Specs: Nationality: ${formData.country}, Genre: ${formData.mvGenre}, Style: ${formData.filmingStyle}, Consistent: ${formData.characterConsistency}, Music Genre: ${genre}`;
-        } else {
-             userPrompt += ` Input Lyrics/Idea: "${formData.idea.trim()}". Reference Images analyzed below. Environment/Atmosphere: ${formData.in2vAtmosphere}. Specs: Nationality: ${formData.country}, Genre: ${formData.mvGenre}, Style: ${formData.filmingStyle}, Music Genre: ${genre}`;
-        }
-        userPrompt += ` Create exactly ${sceneCount} scenes.`;
+        let userPrompt = `Mode: ${formData.videoType}. Input Idea/Lyrics: "${formData.idea.trim()}". Specs: Nationality: ${formData.country}, Genre: ${formData.mvGenre}, Style: ${formData.filmingStyle}, Music Genre: ${formData.musicGenre === 'other' ? formData.customMusicGenre : formData.musicGenre}. Generate exactly ${sceneCount} scenes.`;
 
         const parts: any[] = [{ text: userPrompt }];
-        
-        // Handle images for Story mode (Character Consistency) or IN2V mode (Multi-Image)
-        if (formData.videoType === 'story' && formData.characterConsistency && formData.uploadedImages[0]) {
-            parts.push({ inlineData: { mimeType: formData.uploadedImages[0].mimeType, data: formData.uploadedImages[0].base64 } });
-        } else if (formData.videoType === 'in2v') {
-            formData.uploadedImages.forEach((img, idx) => {
-                if (img) {
-                    parts.push({ text: `Analysis for Reference Image ${idx + 1}:` });
-                    parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
-                }
-            });
-        }
+        formData.uploadedImages.forEach((img, i) => {
+            if (img) {
+                parts.push({ text: `Analyze this reference image ${i+1} for visual consistency:` });
+                parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+            }
+        });
 
         try {
-            // Fix: Use process.env.API_KEY directly as per GenAI guidelines
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: formData.model,
-                contents: { parts: parts },
+                contents: { parts },
                 config: {
                     systemInstruction: systemPrompt,
                     temperature: formData.temperature,
@@ -244,7 +204,7 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
             if (parsedData.prompts) {
                 setGeneratedScenes(parsedData.prompts);
                 if (ipcRenderer) ipcRenderer.invoke('increment-prompt-count');
-            } else throw new Error('Invalid AI response');
+            }
         } catch (err: any) {
             onFeedback({ type: 'error', message: `Lỗi: ${err.message}` });
         } finally {
@@ -254,79 +214,43 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
 
     return (
         <main className="space-y-6">
-            {/* Top Bar: Presets & Video Type */}
             <div className="flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
                 <div className="flex flex-1 w-full xl:w-auto gap-3 p-2 bg-white rounded-3xl border-2 border-tet-gold shadow-sm">
-                     <div className="flex-1 flex gap-2">
-                        <select value={selectedPresetId} onChange={e => handlePresetSelect(e.target.value)} className="flex-1 rounded-2xl p-2 text-sm border-2 border-stone-200 focus:border-tet-red bg-tet-cream font-bold">
-                            <option value="">-- Tải Cài Đặt Sẵn --</option>
-                            {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
-                        <button onClick={handleDeletePreset} disabled={!selectedPresetId} className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition border border-transparent hover:border-red-200"><TrashIcon className="w-4 h-4"/></button>
-                     </div>
-                     <div className="flex-1 flex gap-2">
-                        <input type="text" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} className="flex-1 rounded-2xl p-2 text-sm placeholder-gray-400 border-2 border-stone-200 focus:border-tet-red bg-tet-cream font-bold" placeholder="Tên cài đặt mới..." />
-                        <button onClick={handleSavePreset} className="bg-tet-gold hover:bg-tet-gold-dark text-tet-brown font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider shadow transition transform hover:scale-105 border-2 border-white">Lưu</button>
-                     </div>
+                     <select value={selectedPresetId} onChange={e => handlePresetSelect(e.target.value)} className="flex-1 rounded-2xl p-2 text-sm border-2 border-stone-200 focus:border-tet-red bg-tet-cream font-bold">
+                        <option value="">-- Tải Cài Đặt Sẵn --</option>
+                        {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                    <button onClick={handleDeletePreset} disabled={!selectedPresetId} className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition border border-transparent hover:border-red-200"><TrashIcon className="w-4 h-4"/></button>
+                    <input type="text" value={newPresetName} onChange={e => setNewPresetName(e.target.value)} className="flex-1 rounded-2xl p-2 text-sm placeholder-gray-400 border-2 border-stone-200 focus:border-tet-red bg-tet-cream font-bold" placeholder="Tên cài đặt mới..." />
+                    <button onClick={handleSavePreset} className="bg-tet-gold hover:bg-tet-gold-dark text-tet-brown font-bold px-4 py-2 rounded-xl text-xs uppercase tracking-wider shadow transition transform hover:scale-105 border-2 border-white">Lưu</button>
                 </div>
 
                 <div className="flex p-1.5 bg-white rounded-full border-2 border-tet-gold shadow-sm self-center xl:self-auto">
-                    {/* Fix: Updated buttons to modify videoType within formData state */}
-                    <button onClick={() => setFormData(prev => ({ ...prev, videoType: 'story' }))} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${formData.videoType === 'story' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>MV Kể Chuyện</button>
-                    <button onClick={() => setFormData(prev => ({ ...prev, videoType: 'in2v' }))} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${formData.videoType === 'in2v' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>MV Image to Video</button>
+                    <button onClick={() => setFormData(p => ({ ...p, videoType: 'story' }))} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${formData.videoType === 'story' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>MV Kể Chuyện</button>
+                    <button onClick={() => setFormData(p => ({ ...p, videoType: 'in2v' }))} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${formData.videoType === 'in2v' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>MV Image to Video</button>
                 </div>
             </div>
 
-            {/* Main Dashboard Grid */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-                 
-                 {/* LEFT COLUMN: CREATIVE & ARTISTIC (8 cols) */}
                  <div className="xl:col-span-8 space-y-6">
-                     
-                     {/* CARD 1: CONTENT CORE - Oriental Border */}
                      <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-red relative overflow-hidden group">
-                        {/* Corner Accents */}
-                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-tet-gold rounded-tl-2xl"></div>
-                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-tet-gold rounded-tr-2xl"></div>
-                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-tet-gold rounded-bl-2xl"></div>
-                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-tet-gold rounded-br-2xl"></div>
-
-                        <div className="absolute top-0 left-0 w-1 h-full bg-tet-red"></div>
-                        <div className="absolute -top-6 -right-6 text-7xl opacity-10 rotate-12 select-none filter grayscale sepia text-tet-red">🌸</div>
-                        
-                        <h3 className="text-tet-red-dark font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-tet-red/30 pb-2">
-                             1. Nội Dung Cốt Lõi
-                        </h3>
-                        
+                        <h3 className="text-tet-red-dark font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-tet-red/30 pb-2">1. Nội Dung Cốt Lõi</h3>
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Ý Tưởng / Lời Bài Hát</label>
-                                <textarea name="idea" value={formData.idea} onChange={handleInputChange} rows={6} className="w-full p-4 transition resize-none shadow-inner text-sm leading-relaxed border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="Nhập lời bài hát hoặc mô tả chi tiết ý tưởng MV..." />
+                                <textarea name="idea" value={formData.idea} onChange={handleInputChange} rows={6} className="w-full p-4 transition resize-none shadow-inner text-sm leading-relaxed border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="Nhập lời bài hát hoặc mô tả chi tiết ý tưởng..." />
                             </div>
-                            
                             {formData.videoType === 'in2v' && (
                                 <div className="animate-fade-in">
                                     <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Bối cảnh / Không khí chủ đạo</label>
-                                    <textarea name="in2vAtmosphere" value={formData.in2vAtmosphere} onChange={handleInputChange} rows={2} className="w-full p-4 transition text-sm border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="VD: Rừng thông mờ ảo, phố cổ Hội An đêm rằm..." />
+                                    <textarea name="in2vAtmosphere" value={formData.in2vAtmosphere} onChange={handleInputChange} rows={2} className="w-full p-4 transition text-sm border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="VD: Rừng thông mờ ảo..." />
                                 </div>
                             )}
                         </div>
                      </div>
 
-                     {/* CARD 2: ARTISTIC DIRECTION */}
                      <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-gold relative overflow-hidden group">
-                        {/* Corner Accents */}
-                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-tet-red rounded-tl-2xl"></div>
-                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-tet-red rounded-tr-2xl"></div>
-                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-tet-red rounded-bl-2xl"></div>
-                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-tet-red rounded-br-2xl"></div>
-
-                        <div className="absolute top-0 left-0 w-1 h-full bg-tet-gold"></div>
-                        <div className="absolute -top-4 -right-2 text-7xl opacity-10 -rotate-12 select-none text-tet-gold-dark">🎨</div>
-                        <h3 className="text-tet-brown font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-tet-gold/40 pb-2">
-                             2. Định Hướng Nghệ Thuật
-                        </h3>
-                        
+                        <h3 className="text-tet-brown font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-tet-gold/40 pb-2">2. Định Hướng Nghệ Thuật</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                             <div>
                                 <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Quốc Gia</label>
@@ -339,19 +263,6 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                                 <select name="musicGenre" value={formData.musicGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
                                     {musicGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                 </select>
-                                {formData.musicGenre === 'other' && (
-                                    <div className="mt-3 animate-fade-in relative">
-                                        <input 
-                                            type="text" 
-                                            name="customMusicGenre"
-                                            value={formData.customMusicGenre}
-                                            onChange={handleInputChange}
-                                            className="w-full p-3 text-sm border-4 border-tet-red/20 focus:border-tet-red bg-white rounded-2xl font-bold placeholder-stone-300 shadow-inner" 
-                                            placeholder="Nhập thể loại nhạc cụ thể..." 
-                                        />
-                                        <span className="absolute -top-2 right-2 text-xl animate-bounce-slow">🎵</span>
-                                    </div>
-                                )}
                             </div>
                             <div>
                                 <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Thể Loại MV</label>
@@ -368,180 +279,65 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                         </div>
                      </div>
 
-                     {/* CARD 3: CAST & CHARACTER / IMAGE ASSETS */}
                      <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-green relative overflow-hidden group">
-                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-tet-gold rounded-tl-2xl"></div>
-                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-tet-gold rounded-tr-2xl"></div>
-                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-tet-gold rounded-bl-2xl"></div>
-                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-tet-gold rounded-br-2xl"></div>
-
-                        <div className="absolute top-0 left-0 w-1 h-full bg-tet-green"></div>
-                        <div className="absolute -top-4 -right-4 text-7xl opacity-10 rotate-45 select-none text-tet-green">🧧</div>
-                        
                         <h3 className="text-tet-green font-black uppercase text-xs tracking-widest mb-6 border-b-2 border-dashed border-tet-green/20 pb-2">
                             3. {formData.videoType === 'story' ? 'Nhân Vật & Diễn Viên' : 'Dữ Liệu Hình Ảnh (Tối đa 3)'}
                         </h3>
-
-                        <div className="space-y-6 mt-4">
+                        <div className="space-y-6">
                             {formData.videoType === 'story' && (
-                                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-                                    <div className="flex items-center gap-3">
-                                        <input 
-                                            type="checkbox" 
-                                            id="charConsistency"
-                                            name="characterConsistency" 
-                                            checked={formData.characterConsistency} 
-                                            onChange={handleInputChange} 
-                                            className="w-6 h-6 rounded-lg text-tet-red focus:ring-tet-red border-tet-gold cursor-pointer" 
-                                        />
-                                        <div>
-                                            <label htmlFor="charConsistency" className="text-sm font-bold text-stone-700 cursor-pointer select-none tracking-wide block">Đồng nhất nhân vật</label>
-                                            <span className="text-[10px] text-stone-400">AI sẽ giữ ngoại hình nhân vật giống nhau xuyên suốt video.</span>
-                                        </div>
-                                    </div>
-                                    {formData.characterConsistency && (
-                                        <div className="flex items-center gap-3 bg-tet-cream px-4 py-2 rounded-2xl border-2 border-tet-gold/20">
-                                            <label className="text-[10px] text-stone-500 uppercase font-bold tracking-wider">Số lượng nhân vật:</label>
-                                            <input 
-                                                type="number" 
-                                                name="characterCount" 
-                                                value={formData.characterCount} 
-                                                onChange={handleInputChange} 
-                                                min={1} 
-                                                max={3} 
-                                                className="w-14 bg-white border-2 border-white rounded-xl p-1 text-center text-tet-red font-black text-xl focus:border-tet-gold" 
-                                            />
-                                        </div>
-                                    )}
+                                <div className="flex items-center gap-3">
+                                    <input type="checkbox" name="characterConsistency" checked={formData.characterConsistency} onChange={handleInputChange} className="w-6 h-6 rounded-lg text-tet-red focus:ring-tet-red border-tet-gold cursor-pointer" />
+                                    <label className="text-sm font-bold text-stone-700">Đồng nhất nhân vật (Tải ảnh mặt bên dưới)</label>
                                 </div>
                             )}
-
-                            {/* Image Upload Area */}
-                            {(formData.videoType === 'in2v' || (formData.videoType === 'story' && formData.characterConsistency)) && (
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
-                                    {[0, 1, 2].map((idx) => {
-                                        // For story mode, only show first upload
-                                        if (formData.videoType === 'story' && idx > 0) return null;
-                                        
-                                        return (
-                                            <div key={idx} className="relative group">
-                                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Ảnh {idx + 1}</label>
-                                                <div className="relative border-2 border-dashed border-tet-gold/50 rounded-2xl p-2 bg-tet-cream hover:border-tet-red transition-colors">
-                                                    {formData.uploadedImages[idx] ? (
-                                                        <div className="relative aspect-square rounded-xl overflow-hidden shadow-sm">
-                                                            <img src={`data:${formData.uploadedImages[idx]!.mimeType};base64,${formData.uploadedImages[idx]!.base64}`} className="w-full h-full object-cover" />
-                                                            <button 
-                                                                onClick={() => setFormData(prev => {
-                                                                    const updated = [...prev.uploadedImages];
-                                                                    updated[idx] = null;
-                                                                    return { ...prev, uploadedImages: updated };
-                                                                })}
-                                                                className="absolute top-1 right-1 bg-tet-red text-white p-1 rounded-full shadow-lg hover:scale-110 transition"
-                                                            >
-                                                                <TrashIcon className="w-3 h-3" />
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="aspect-square flex flex-col items-center justify-center text-stone-300">
-                                                            <span className="text-2xl mb-1">📸</span>
-                                                            <span className="text-[9px] font-bold uppercase">Tải ảnh</span>
-                                                            <input 
-                                                                type="file" 
-                                                                accept="image/*" 
-                                                                onChange={handleMultiImageUpload(idx)} 
-                                                                className="absolute inset-0 opacity-0 cursor-pointer"
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {[0, 1, 2].map((idx) => {
+                                    if (formData.videoType === 'story' && idx > 0) return null;
+                                    const img = formData.uploadedImages[idx];
+                                    return (
+                                        <div key={idx} className="relative group">
+                                            <div className="relative border-2 border-dashed border-tet-gold/50 rounded-2xl p-2 bg-tet-cream hover:border-tet-red transition-colors aspect-square flex flex-col items-center justify-center overflow-hidden">
+                                                {img ? (
+                                                    <img src={`data:${img.mimeType};base64,${img.base64}`} className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <div className="text-center">
+                                                        <span className="text-2xl">📸</span>
+                                                        <span className="block text-[9px] font-bold uppercase mt-1">Tải ảnh {idx+1}</span>
+                                                    </div>
+                                                )}
+                                                <input type="file" accept="image/*" onChange={handleMultiImageUpload(idx)} className="absolute inset-0 opacity-0 cursor-pointer" />
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                            {formData.videoType === 'in2v' && (
-                                <p className="text-[9px] text-stone-400 italic text-center">* AI sẽ tự động nhận diện nhân vật, bối cảnh trong các ảnh để kết nối kịch bản.</p>
-                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                      </div>
                  </div>
 
-                 {/* RIGHT COLUMN: CONFIGURATION (4 cols) */}
                  <div className="xl:col-span-4 space-y-6 sticky top-4">
-                    <div className="bg-white/95 p-8 rounded-[32px] border-4 border-tet-gold/40 shadow-xl backdrop-blur-md relative overflow-hidden">
-                        <div className="absolute -top-6 -right-6 text-7xl opacity-10 rotate-12 select-none text-tet-gold-dark">🐎</div>
-                        <h3 className="text-tet-brown font-black uppercase text-xs mb-6 border-b-2 border-stone-100 pb-2 tracking-widest flex items-center gap-2">
-                             Cấu hình Dự Án
-                        </h3>
-                        
+                    <div className="bg-white/95 p-8 rounded-[32px] border-4 border-tet-gold/40 shadow-xl relative overflow-hidden">
+                        <h3 className="text-tet-brown font-black uppercase text-xs mb-6 border-b-2 border-stone-100 pb-2 tracking-widest">Cấu hình Dự Án</h3>
                         <div className="mb-5">
                             <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Tên Dự Án</label>
-                            <input type="text" name="projectName" value={formData.projectName} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-sm focus:border-tet-red font-bold text-stone-700" placeholder="VD: Tet_Doan_Vien" />
+                            <input type="text" name="projectName" value={formData.projectName} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-sm focus:border-tet-red font-bold" placeholder="VD: MV_Tet_2026" />
                         </div>
-
                         <div className="mb-5">
-                            <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Thời lượng (Max 15 phút)</label>
+                            <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Thời lượng (Phút/Giây)</label>
                             <div className="flex gap-2">
-                                <div className="relative flex-1 group">
-                                    <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} min="0" max="15" className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center pr-12 font-black text-xl text-stone-700 focus:border-tet-red transition" placeholder="0" />
-                                    <span className="absolute right-3 top-4 text-stone-400 text-[9px] uppercase font-bold pointer-events-none">Phút</span>
-                                </div>
-                                <div className="relative flex-1 group">
-                                    <input type="number" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} min="0" max="59" className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center pr-12 font-black text-xl text-stone-700 focus:border-tet-red transition" placeholder="00" />
-                                    <span className="absolute right-3 top-4 text-stone-400 text-[9px] uppercase font-bold pointer-events-none">Giây</span>
-                                </div>
+                                <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} className="w-1/2 bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center text-xl font-black" placeholder="Min" />
+                                <input type="number" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} className="w-1/2 bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center text-xl font-black" placeholder="Sec" />
                             </div>
                         </div>
-
-                        <div className="mb-5">
-                            <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Model AI</label>
-                            <select name="model" value={formData.model} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-sm focus:border-tet-red">
-                                <option value="gemini-3-flash-preview">Gemini 3 Flash (Mới nhất & Nhanh)</option>
-                                <option value="gemini-flash-lite-latest">Gemini 2.5 Flash Lite (Cơ bản)</option>
-                                <option value="gemini-flash-latest">Gemini 2.5 Flash (Sáng tạo hơn)</option>
-                            </select>
-                        </div>
-
-                        <div className="mb-8 bg-stone-50 p-3 rounded-2xl border-2 border-stone-100">
-                            <div className="flex justify-between mb-2">
-                                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Sáng tạo</label>
-                                <span className={`text-[9px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${formData.temperature < 0.5 ? 'bg-emerald-100 text-emerald-600' : formData.temperature < 0.8 ? 'bg-yellow-100 text-yellow-600' : 'bg-red-100 text-red-600'}`}>
-                                    {formData.temperature < 0.5 ? 'An toàn' : formData.temperature < 0.8 ? 'Cân bằng' : 'Đột phá'}
-                                </span>
-                            </div>
-                            <input type="range" name="temperature" min="0" max="1" step="0.1" value={formData.temperature} onChange={handleInputChange} className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-tet-red" />
-                        </div>
-
-                        {/* Li Xi Button */}
-                        <button 
-                            onClick={generatePrompts} 
-                            disabled={isLoading} 
-                            className="w-full py-4 bg-gradient-to-b from-tet-red to-tet-red-dark text-tet-gold font-black text-lg uppercase tracking-widest rounded-2xl shadow-xl hover:shadow-red-500/30 transform hover:-translate-y-1 transition-all disabled:opacity-50 disabled:transform-none flex items-center justify-center gap-3 border-4 border-tet-gold relative overflow-hidden group"
-                        >
-                            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/black-scales.png')] opacity-10"></div>
-                            <span className="relative flex items-center gap-2">
-                                {isLoading ? <LoaderIcon /> : '🧧 TẠO KỊCH BẢN'}
-                            </span>
+                        <button onClick={generatePrompts} disabled={isLoading} className="w-full py-4 bg-gradient-to-b from-tet-red to-tet-red-dark text-tet-gold font-black text-lg uppercase tracking-widest rounded-2xl shadow-xl border-4 border-tet-gold">
+                            {isLoading ? <LoaderIcon /> : '🧧 TẠO KỊCH BẢN'}
                         </button>
                     </div>
-
                     {generatedScenes.length > 0 && (
-                        <div className="bg-emerald-50 p-6 rounded-[32px] border-4 border-white animate-fade-in shadow-xl backdrop-blur-md">
-                            <div className="text-center mb-4">
-                                <div className="inline-block p-2 bg-white rounded-full mb-2 border-2 border-emerald-100"><span className="text-2xl drop-shadow-sm">✅</span></div>
-                                <h3 className="text-emerald-700 font-bold text-lg">Hoàn tất {generatedScenes.length} cảnh</h3>
-                            </div>
-                            <button 
-                                onClick={() => onGenerateSuccess(generatedScenes, formData)} 
-                                className="w-full py-3 bg-emerald-400 hover:bg-emerald-500 text-white font-bold rounded-2xl shadow-md transition flex items-center justify-center gap-2 uppercase tracking-wide text-sm transform hover:scale-105 border-2 border-white"
-                            >
-                                💾 Lưu & Theo dõi
-                            </button>
-                        </div>
+                        <button onClick={() => onGenerateSuccess(generatedScenes, formData)} className="w-full py-4 bg-emerald-400 text-white font-bold rounded-2xl shadow-md uppercase tracking-wide border-2 border-white">💾 Lưu & Theo dõi</button>
                     )}
                  </div>
             </div>
-            
             <Results scenes={generatedScenes} />
         </main>
     );
