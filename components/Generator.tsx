@@ -13,9 +13,10 @@ interface GeneratorProps {
     onSavePresets: (newPresets: Preset[]) => void;
     onGenerateSuccess: (scenes: Scene[], formData: FormData) => void;
     onFeedback: (feedback: { type: 'error' | 'success' | 'info', message: string } | null) => void;
+    apiKey?: string;
 }
 
-export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, onGenerateSuccess, onFeedback }) => {
+export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, onGenerateSuccess, onFeedback, apiKey }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
     const [newPresetName, setNewPresetName] = useState('');
@@ -152,6 +153,11 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
     };
 
     const generatePrompts = async () => {
+        if (!apiKey) {
+            onFeedback({ type: 'error', message: 'Vui lòng cấu hình API Key trong mục Quản lý API.' });
+            return;
+        }
+
         setIsLoading(true);
         onFeedback(null);
         setGeneratedScenes([]);
@@ -173,7 +179,7 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         }
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: formData.model,
                 contents: { parts },

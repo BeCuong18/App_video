@@ -1,18 +1,19 @@
 
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
-import { TrackedFile, VideoJob, Preset, FormData } from './types';
+import { TrackedFile, VideoJob, Preset, FormData, ApiKey } from './types';
 import { Activation } from './components/Activation';
 import { StatsModal, AdminLoginModal, AlertModal } from './components/AppModals';
 import { Generator } from './components/Generator';
 import { Tracker } from './components/Tracker';
-import { ChartIcon, ShieldIcon } from './components/Icons';
+import { ApiKeyManagerScreen } from './components/ApiKeyManager';
+import { ChartIcon, ShieldIcon, KeyIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron && (window as any).require ? (window as any).require('electron').ipcRenderer : null;
 
 const App: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'generator' | 'tracker'>('generator');
+    const [activeTab, setActiveTab] = useState<'generator' | 'tracker' | 'api-manager'>('generator');
     const [trackedFiles, setTrackedFiles] = useState<TrackedFile[]>([]);
     const [activeTrackerFileIndex, setActiveTrackerFileIndex] = useState(0);
     const [feedback, setFeedback] = useState<{ type: 'error' | 'success' | 'info', message: string } | null>(null);
@@ -26,30 +27,81 @@ const App: React.FC = () => {
     const [alertModal, setAlertModal] = useState<{title: string, message: string, type: 'completion' | 'update', onConfirm?: () => void} | null>(null);
     const [ffmpegFound, setFfmpegFound] = useState<boolean | null>(null);
     const [isCombining, setIsCombining] = useState(false);
+    
+    // API Key States
+    const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+    const [activeApiKeyId, setActiveApiKeyId] = useState<string>('');
 
     useEffect(() => {
-        if (!ipcRenderer) { setIsActivated(true); setConfigLoaded(true); return; }
-        ipcRenderer.invoke('get-app-config').then((config: any) => {
-            setMachineId(config.machineId || '');
-            setIsActivated(!!config.licenseKey);
-            if (config.presets) setPresets(config.presets);
+        const init = async () => {
+            if (ipcRenderer) {
+                const config = await ipcRenderer.invoke('get-app-config');
+                setMachineId(config.machineId || '');
+                setIsActivated(!!config.licenseKey);
+                if (config.presets) setPresets(config.presets);
+                
+                // Load API Keys from config
+                const savedKeys = config.apiKeys ? JSON.parse(config.apiKeys) : [];
+                setApiKeys(savedKeys);
+                setActiveApiKeyId(config.activeApiKeyId || (savedKeys[0]?.id || ''));
+                
+                if (savedKeys.length === 0) {
+                    setActiveTab('api-manager');
+                }
+            } else {
+                setIsActivated(true);
+            }
             setConfigLoaded(true);
-        });
-        
-        ipcRenderer.on('file-content-updated', (_:any, {path, content}:any) => {
-             const wb = XLSX.read(content, {type:'buffer'});
-             const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, blankrows:false}).slice(1) as any[][];
-             const jobs: VideoJob[] = data.map((r,i) => ({
-                 id: r[0]||`job_${i}`, prompt: r[1]||'', 
-                 imagePath: r[2]||'', imagePath2: r[3]||'', imagePath3: r[4]||'',
-                 status: r[5] as any || 'Pending',
-                 videoName: r[6]||'', typeVideo: r[7]||'', videoPath: r[8]||undefined
-             }));
-             setTrackedFiles(prev => prev.map(f => f.path === path ? { ...f, jobs } : f));
-        });
-        
-        ipcRenderer.invoke('check-ffmpeg').then((res:any) => setFfmpegFound(res.found));
+        };
+
+        init();
+
+        if (ipcRenderer) {
+            ipcRenderer.on('file-content-updated', (_:any, {path, content}:any) => {
+                 const wb = XLSX.read(content, {type:'buffer'});
+                 const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, blankrows:false}).slice(1) as any[][];
+                 const jobs: VideoJob[] = data.map((r,i) => ({
+                     id: r[0]||`job_${i}`, prompt: r[1]||'', 
+                     imagePath: r[2]||'', imagePath2: r[3]||'', imagePath3: r[4]||'',
+                     status: r[5] as any || 'Pending',
+                     videoName: r[6]||'', typeVideo: r[7]||'', videoPath: r[8]||undefined
+                 }));
+                 setTrackedFiles(prev => prev.map(f => f.path === path ? { ...f, jobs } : f));
+            });
+            ipcRenderer.invoke('check-ffmpeg').then((res:any) => setFfmpegFound(res.found));
+        }
     }, []); 
+
+    const saveApiConfig = async (newKeys: ApiKey[], activeId: string) => {
+        if (ipcRenderer) {
+            await ipcRenderer.invoke('save-app-config', {
+                apiKeys: JSON.stringify(newKeys),
+                activeApiKeyId: activeId
+            });
+        }
+    };
+
+    const handleKeySelect = (key: ApiKey) => {
+        setActiveApiKeyId(key.id);
+        saveApiConfig(apiKeys, key.id);
+        setActiveTab('generator');
+        setFeedback({ type: 'success', message: `Đã chọn API Key: ${key.name}` });
+        setTimeout(() => setFeedback(null), 2000);
+    };
+
+    const handleKeyAdd = (key: ApiKey) => {
+        const updated = [...apiKeys, key];
+        setApiKeys(updated);
+        if (!activeApiKeyId) setActiveApiKeyId(key.id);
+        saveApiConfig(updated, activeApiKeyId || key.id);
+    };
+
+    const handleKeyDelete = (id: string) => {
+        const updated = apiKeys.filter(k => k.id !== id);
+        setApiKeys(updated);
+        if (activeApiKeyId === id) setActiveApiKeyId(updated[0]?.id || '');
+        saveApiConfig(updated, activeApiKeyId === id ? (updated[0]?.id || '') : activeApiKeyId);
+    };
 
     const handleReloadVideos = async () => {
         if (!ipcRenderer) return;
@@ -80,7 +132,7 @@ const App: React.FC = () => {
             const res = await ipcRenderer.invoke('execute-ffmpeg-combine', {
                 jobs: completed, targetDuration: file.targetDurationSeconds, mode, excelFileName: file.name
             });
-            if (res.success) setFeedback({type:'success', message:'Ghép video thành công!'});
+            if (res.success) setFeedback({type: 'success', message:'Ghép video thành công!'});
             else if (res.error) setFeedback({type:'error', message: res.error});
             else setFeedback(null);
         } catch (e:any) { setFeedback({type:'error', message:e.message}); }
@@ -145,6 +197,7 @@ const App: React.FC = () => {
     if (!configLoaded) return <div className="h-screen bg-tet-cream flex items-center justify-center"><ShieldIcon className="animate-spin w-16 h-16 text-tet-red"/></div>;
     if (!isActivated) return <Activation machineId={machineId} onActivate={async () => true} />;
 
+    const activeApiKey = apiKeys.find(k => k.id === activeApiKeyId);
     const currentFile = trackedFiles[activeTrackerFileIndex];
     const stats = currentFile ? {
         completed: currentFile.jobs.filter(j => j.status === 'Completed').length,
@@ -165,20 +218,46 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button onClick={() => setShowStats(true)} className="p-3 bg-tet-gold text-tet-red-dark rounded-full shadow-md border-2 border-white"><ChartIcon className="w-5 h-5"/></button>
-                    <button onClick={() => setShowAdminLogin(true)} className="p-3 bg-tet-red text-white rounded-full shadow-md border-2 border-white"><ShieldIcon className="w-5 h-5"/></button>
+                    <div className="hidden md:block mr-2 text-right">
+                        <div className="text-[10px] text-white/70 font-bold uppercase tracking-widest">API Active</div>
+                        <div className="text-xs font-black text-tet-gold truncate max-w-[120px]">{activeApiKey?.name || 'Chưa chọn'}</div>
+                    </div>
+                    <button 
+                        onClick={() => setActiveTab(activeTab === 'api-manager' ? 'generator' : 'api-manager')} 
+                        className={`p-3 rounded-full shadow-md border-2 border-white transition-all transform hover:rotate-12 ${activeTab === 'api-manager' ? 'bg-white text-tet-red' : 'bg-tet-gold text-tet-red-dark hover:bg-white'}`} 
+                        title="Quản lý API Key"
+                    >
+                        <KeyIcon className="w-5 h-5"/>
+                    </button>
+                    <button onClick={() => setShowStats(true)} className="p-3 bg-tet-gold text-tet-red-dark rounded-full shadow-md border-2 border-white transition-transform hover:scale-110"><ChartIcon className="w-5 h-5"/></button>
+                    <button onClick={() => setShowAdminLogin(true)} className="p-3 bg-tet-red text-white rounded-full shadow-md border-2 border-white transition-transform hover:scale-110"><ShieldIcon className="w-5 h-5"/></button>
                 </div>
             </header>
 
-            <div className="flex justify-center gap-4 py-4 shrink-0">
-                <button onClick={() => setActiveTab('generator')} className={`px-8 py-3 rounded-full font-extrabold uppercase text-xs border-2 ${activeTab === 'generator' ? 'bg-tet-red text-white border-tet-gold' : 'bg-white text-tet-brown'}`}>✨ Kịch Bản Tết</button>
-                <button onClick={() => setActiveTab('tracker')} className={`px-8 py-3 rounded-full font-extrabold uppercase text-xs border-2 ${activeTab === 'tracker' ? 'bg-tet-green text-white border-tet-gold' : 'bg-white text-tet-brown'}`}>🎬 Xưởng Phim</button>
-            </div>
+            {activeTab !== 'api-manager' && (
+                <div className="flex justify-center gap-4 py-4 shrink-0">
+                    <button onClick={() => setActiveTab('generator')} className={`px-8 py-3 rounded-full font-extrabold uppercase text-xs border-2 ${activeTab === 'generator' ? 'bg-tet-red text-white border-tet-gold' : 'bg-white text-tet-brown'}`}>✨ Kịch Bản Tết</button>
+                    <button onClick={() => setActiveTab('tracker')} className={`px-8 py-3 rounded-full font-extrabold uppercase text-xs border-2 ${activeTab === 'tracker' ? 'bg-tet-green text-white border-tet-gold' : 'bg-white text-tet-brown'}`}>🎬 Xưởng Phim</button>
+                </div>
+            )}
 
             <div className="flex-1 p-6 overflow-hidden">
                 <div className="max-w-[1600px] mx-auto h-full overflow-y-auto custom-scrollbar">
-                    {activeTab === 'generator' ? (
-                        <Generator presets={presets} onSavePresets={p => setPresets(p)} onGenerateSuccess={handleGenerateSuccess} onFeedback={setFeedback} />
+                    {activeTab === 'api-manager' ? (
+                        <ApiKeyManagerScreen 
+                            apiKeys={apiKeys} 
+                            onKeySelect={handleKeySelect} 
+                            onKeyAdd={handleKeyAdd} 
+                            onKeyDelete={handleKeyDelete} 
+                        />
+                    ) : activeTab === 'generator' ? (
+                        <Generator 
+                            presets={presets} 
+                            onSavePresets={p => setPresets(p)} 
+                            onGenerateSuccess={handleGenerateSuccess} 
+                            onFeedback={setFeedback} 
+                            apiKey={activeApiKey?.value}
+                        />
                     ) : (
                         <Tracker 
                             trackedFiles={trackedFiles} activeFileIndex={activeTrackerFileIndex} setActiveFileIndex={setActiveTrackerFileIndex} 
@@ -244,7 +323,11 @@ const App: React.FC = () => {
                 </div>
             </div>
 
-            {feedback && <div className="fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-3xl shadow-2xl bg-white border-2 border-tet-gold z-[200]">{feedback.message}</div>}
+            {feedback && (
+                <div className="fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-3xl shadow-2xl bg-white border-2 border-tet-gold z-[200] animate-bounce-slow">
+                    <span className="font-bold">{feedback.message}</span>
+                </div>
+            )}
             {showStats && <StatsModal onClose={() => setShowStats(false)} isAdmin={isAdminLoggedIn} onDeleteAll={() => {}} onDeleteHistory={() => {}} />}
             {showAdminLogin && <AdminLoginModal onClose={() => setShowAdminLogin(false)} onLoginSuccess={() => setIsAdminLoggedIn(true)} />}
             {alertModal && <AlertModal {...alertModal} onClose={() => setAlertModal(null)} />}
