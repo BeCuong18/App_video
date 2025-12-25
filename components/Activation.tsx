@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { LoaderIcon, CopyIcon, CheckIcon } from './Icons';
 
 interface ActivationProps {
