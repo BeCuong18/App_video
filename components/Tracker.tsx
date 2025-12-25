@@ -97,8 +97,14 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
                             src={job.videoPath} 
                             className="w-full h-full object-cover" 
                             muted 
-                            onMouseOver={e => e.currentTarget.play().catch(()=>{})} 
-                            onMouseOut={e => { e.currentTarget.pause(); e.currentTarget.currentTime = 0; }}
+                            playsInline
+                            onMouseEnter={e => {
+                                e.currentTarget.play().catch(() => {});
+                            }} 
+                            onMouseLeave={e => { 
+                                e.currentTarget.pause(); 
+                                e.currentTarget.currentTime = 0; 
+                            }}
                         ></video>
                         <button 
                             onClick={() => props.onPlayVideo(job.videoPath!)} 

@@ -306,8 +306,11 @@ app.whenReady().then(() => {
     const now = Date.now();
     for (const [filePath, jobMap] of jobStateTimestamps.entries()) {
         const stuckIds = [];
-        for (const [id, state] of jobMap.entries()) if (['Processing', 'Generating'].includes(state.status) && (now - state.timestamp > 360000)) stuckIds.push(id);
-        if (stuckIds.length > 0) updateExcelStatus(filePath, stuckIds, '');
+        for (const [id, state] of jobMap.entries()) if (['Processing', 'Generating'].includes(state.status) && (now - state.timestamp > 300000)) stuckIds.push(id); // Giới hạn 5 phút (300,000ms)
+        if (stuckIds.length > 0) {
+            console.log(`Auto-resetting ${stuckIds.length} stuck jobs in ${filePath}`);
+            updateExcelStatus(filePath, stuckIds, '');
+        }
     }
   }, 60000);
 });
