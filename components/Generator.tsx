@@ -1,4 +1,3 @@
-
 import React, { useState, ChangeEvent, useEffect } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { FormData, Scene, MvGenre, Preset, StatsData } from '../types';
@@ -28,9 +27,9 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
     const [formData, setFormData] = useState<FormData>({
         idea: '', in2vAtmosphere: '', uploadedImages: [null, null, null], liveArtistName: '', liveArtist: '',
         songMinutes: '3', songSeconds: '30', projectName: '',
-        model: 'gemini-3-flash-preview', mvGenre: 'narrative', filmingStyle: 'auto',
+        model: 'gemini-3-pro-preview', mvGenre: 'narrative', filmingStyle: 'auto',
         country: 'Việt Nam', musicGenre: 'V-Pop', customMusicGenre: '',
-        characterConsistency: true, characterCount: 1, temperature: 0.3
+        characterConsistency: true, characterCount: 1, temperature: 0.7
     });
 
     const mvGenreOptions: { value: MvGenre, label: string }[] = [
@@ -193,10 +192,6 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
             onFeedback({ type: 'error', message: 'Vui lòng cấu hình API Key trong mục Quản lý API.' });
             return;
         }
-        if (modelUsageCount >= 20) {
-            onFeedback({ type: 'error', message: 'Bạn đã đạt giới hạn 20 lượt tạo Prompt cho Model này.' });
-            return;
-        }
 
         setIsLoading(true);
         onFeedback(null);
@@ -216,7 +211,7 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         const sceneCount = Math.max(3, Math.round(totalSeconds / 8));
         const systemPrompt = effectiveType === 'TEXT' ? storySystemPrompt : in2vSystemPrompt;
         
-        let userPrompt = `Idea: "${formData.idea.trim()}". Specs: Country: ${formData.country}, Genre: ${formData.mvGenre}, Music: ${formData.musicGenre}, Style: ${formData.filmingStyle}, Character Consistency: ${formData.characterConsistency}, Count: ${formData.characterCount}. Generate ${sceneCount} scenes.`;
+        let userPrompt = `Idea: "${formData.idea.trim()}". Specs: Country: ${formData.country}, Genre: ${formData.mvGenre}, Music: ${formData.musicGenre}, Style: ${formData.filmingStyle}, Character Consistency: ${formData.characterConsistency}, Count: ${formData.characterCount}. Generate exactly ${sceneCount} professionally formatted scenes for an AI video model.`;
 
         const parts: any[] = [{ text: userPrompt }];
         if (effectiveType === 'IN2V') {
@@ -233,6 +228,7 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                 config: {
                     systemInstruction: systemPrompt,
                     temperature: formData.temperature,
+                    thinkingConfig: { thinkingBudget: formData.model.includes('pro') ? 16000 : 0 },
                     responseMimeType: 'application/json',
                     responseSchema: {
                         type: Type.OBJECT,
@@ -282,9 +278,9 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                 <div className="flex flex-1 gap-3 items-center">
                      <div className="relative shrink-0">
                         <select name="model" value={formData.model} onChange={handleInputChange} className="rounded-2xl p-2 pr-20 text-[10px] border-2 border-stone-100 focus:border-tet-red bg-tet-cream font-black uppercase">
-                            <option value="gemini-3-flash-preview">Gemini 3 Flash</option>
+                            <option value="gemini-3-pro-preview">Gemini 3 Pro (Creative Expert)</option>
+                            <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
                             <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                            <option value="gemini-2.5-flash-lite-latest">Gemini 2.5 Flash Lite</option>
                         </select>
                         <div className={`absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-lg text-[8px] font-black ${modelUsageCount >= 18 ? 'bg-red-500 text-white' : 'bg-tet-gold text-tet-brown'} border border-white shadow-sm pointer-events-none`}>
                             {modelUsageCount}/20
@@ -402,7 +398,7 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                  <div className="xl:col-span-4 space-y-6 sticky top-4">
                     <div className="bg-white/95 p-8 rounded-[32px] border-4 border-tet-gold/40 shadow-xl relative">
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
-                            <span className="text-6xl">📊</span>
+                            <span className="text-6xl animate-pulse">📊</span>
                         </div>
                         <h3 className="text-tet-brown font-black uppercase text-[10px] mb-6 border-b-2 border-stone-100 pb-2 tracking-[0.2em]">THÔNG TIN DỰ ÁN</h3>
                         <div className="space-y-5 mb-8">
@@ -425,10 +421,11 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                         <div className="space-y-4">
                             <button 
                                 onClick={generatePrompts} 
-                                disabled={isLoading || modelUsageCount >= 20} 
-                                className="w-full py-5 bg-gradient-to-b from-tet-red to-tet-red-dark text-tet-gold font-black text-lg uppercase tracking-widest rounded-2xl shadow-xl border-4 border-tet-gold disabled:opacity-50 hover:brightness-110 active:scale-95 transition-all"
+                                disabled={isLoading} 
+                                className="w-full py-5 bg-gradient-to-b from-tet-red to-tet-red-dark text-tet-gold font-black text-lg uppercase tracking-widest rounded-2xl shadow-xl border-4 border-tet-gold disabled:opacity-50 hover:brightness-110 active:scale-95 transition-all relative overflow-hidden group"
                             >
-                                {isLoading ? <LoaderIcon /> : '🧧 TẠO KỊCH BẢN'}
+                                <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700"></div>
+                                {isLoading ? <div className="flex items-center justify-center gap-3"><LoaderIcon /><span className="text-xs">ĐANG SUY NGHĨ...</span></div> : '🧧 TẠO KỊCH BẢN'}
                             </button>
 
                             {generatedScenes.length > 0 && (
