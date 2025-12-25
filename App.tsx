@@ -74,6 +74,18 @@ const App: React.FC = () => {
                 const keysFromEncrypted = parseApiKeys(config.apiKeysEncrypted);
                 savedKeys = keysFromMain.length > 0 ? keysFromMain : keysFromEncrypted;
                 activeId = config.activeApiKeyId || (savedKeys[0]?.id || '');
+
+                // Đăng ký nhận thông báo Alert từ System (Ví dụ: Cập nhật ứng dụng)
+                ipcRenderer.on('show-alert-modal', (_: any, data: any) => {
+                    setAlertModal({
+                        title: data.title,
+                        message: data.message,
+                        type: data.type,
+                        onConfirm: data.type === 'update' ? () => {
+                            ipcRenderer.send('restart_app');
+                        } : undefined
+                    });
+                });
             }
 
             const localLicense = localStorage.getItem('license-key');
@@ -128,6 +140,14 @@ const App: React.FC = () => {
             });
             ipcRenderer.invoke('check-ffmpeg').then((res:any) => setFfmpegFound(res.found));
         }
+
+        // Cleanup listeners when unmount
+        return () => {
+            if (ipcRenderer) {
+                ipcRenderer.removeAllListeners('show-alert-modal');
+                ipcRenderer.removeAllListeners('file-content-updated');
+            }
+        };
     }, []); 
 
     const handleActivate = async (key: string) => {
