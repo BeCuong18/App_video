@@ -1,10 +1,11 @@
 
 import React, { useState, ChangeEvent, useEffect } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
+import * as XLSX from 'xlsx';
 import { FormData, Scene, MvGenre, Preset, StatsData } from '../types';
 import { storySystemPrompt, in2vSystemPrompt } from '../constants';
 import Results from './Results';
-import { LoaderIcon, TrashIcon, UploadIcon } from './Icons';
+import { LoaderIcon, TrashIcon, UploadIcon, FolderIcon } from './Icons';
 
 const ipcRenderer = (window as any).require ? (window as any).require('electron').ipcRenderer : null;
 
@@ -20,6 +21,7 @@ interface GeneratorProps {
 export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, onGenerateSuccess, onFeedback, apiKey, activeApiKeyId }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
+    const [lastDetectedType, setLastDetectedType] = useState<'TEXT' | 'IN2V'>('TEXT');
     const [newPresetName, setNewPresetName] = useState('');
     const [selectedPresetId, setSelectedPresetId] = useState('');
     const [modelUsageCount, setModelUsageCount] = useState(0);
@@ -98,13 +100,17 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         { value: 'International', label: 'Quốc tế / Không xác định' },
     ];
 
-    useEffect(() => {
+    const refreshUsageCount = () => {
         if (ipcRenderer && activeApiKeyId) {
             ipcRenderer.invoke('get-stats').then((stats: StatsData) => {
                 const count = stats.modelUsage?.[activeApiKeyId]?.[formData.model] || 0;
                 setModelUsageCount(count);
             });
         }
+    };
+
+    useEffect(() => {
+        refreshUsageCount();
     }, [formData.model, activeApiKeyId]);
 
     const handleInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -116,6 +122,18 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
           setFormData((prev) => ({ ...prev, [name]: parseInt(value, 10) || 1 }));
         } else if (name === 'temperature') {
           setFormData((prev) => ({ ...prev, [name]: parseFloat(value) }));
+        } else if (name === 'songMinutes') {
+          // Giới hạn từ 0 đến 15 phút
+          let val = parseInt(value, 10);
+          if (isNaN(val)) val = 0;
+          val = Math.max(0, Math.min(15, val));
+          setFormData((prev) => ({ ...prev, [name]: val.toString() }));
+        } else if (name === 'songSeconds') {
+          // Giới hạn từ 0 đến 59 giây
+          let val = parseInt(value, 10);
+          if (isNaN(val)) val = 0;
+          val = Math.max(0, Math.min(59, val));
+          setFormData((prev) => ({ ...prev, [name]: val.toString() }));
         } else {
           setFormData((prev) => ({ ...prev, [name]: value }));
         }
@@ -150,7 +168,6 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
 
     const handleSavePreset = () => {
         if (!newPresetName.trim()) return;
-        // Saves entire formData state (Artistic Direction, Time, Count, Consistency, etc.)
         const newPreset: Preset = { id: crypto.randomUUID(), name: newPresetName.trim(), settings: formData };
         onSavePresets([...presets, newPreset]);
         setNewPresetName('');
@@ -168,6 +185,11 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         setSelectedPresetId('');
     };
 
+    const handleManualSaveExcel = async () => {
+        if (generatedScenes.length === 0) return;
+        onGenerateSuccess(generatedScenes, formData, lastDetectedType);
+    };
+
     const generatePrompts = async () => {
         const currentApiKey = process.env.API_KEY || apiKey;
         if (!currentApiKey) {
@@ -183,11 +205,17 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         onFeedback(null);
         setGeneratedScenes([]);
 
-        // Detect mode automatically
         const hasImages = formData.uploadedImages.some(img => img !== null);
         const effectiveType: 'TEXT' | 'IN2V' = hasImages ? 'IN2V' : 'TEXT';
+        setLastDetectedType(effectiveType);
 
         const totalSeconds = (parseInt(formData.songMinutes) || 0) * 60 + (parseInt(formData.songSeconds) || 0);
+        if (totalSeconds <= 0) {
+            onFeedback({ type: 'error', message: 'Thời lượng kịch bản phải lớn hơn 0.' });
+            setIsLoading(false);
+            return;
+        }
+
         const sceneCount = Math.max(3, Math.round(totalSeconds / 8));
         const systemPrompt = effectiveType === 'TEXT' ? storySystemPrompt : in2vSystemPrompt;
         
@@ -234,11 +262,15 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
             const parsedData = JSON.parse(responseText);
             if (parsedData.prompts) {
                 setGeneratedScenes(parsedData.prompts);
+                
                 if (ipcRenderer && activeApiKeyId) {
                     const res = await ipcRenderer.invoke('increment-prompt-count', { modelName: formData.model, apiKeyId: activeApiKeyId });
-                    if (res.success) setModelUsageCount(res.count);
+                    if (res.success) {
+                        setModelUsageCount(res.count);
+                    } else {
+                        refreshUsageCount();
+                    }
                 }
-                onGenerateSuccess(parsedData.prompts, formData, effectiveType);
             }
         } catch (err: any) {
             onFeedback({ type: 'error', message: `Lỗi: ${err.message}` });
@@ -249,9 +281,7 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
 
     return (
         <main className="space-y-6">
-            {/* Top Bar: Model & Presets & Save Quick Preset */}
             <div className="flex flex-col xl:flex-row gap-4 justify-between items-stretch xl:items-center bg-white p-3 rounded-[32px] border-2 border-tet-gold shadow-md">
-                {/* Selection Section */}
                 <div className="flex flex-1 gap-3 items-center">
                      <div className="relative shrink-0">
                         <select name="model" value={formData.model} onChange={handleInputChange} className="rounded-2xl p-2 pr-20 text-[10px] border-2 border-stone-100 focus:border-tet-red bg-tet-cream font-black uppercase">
@@ -273,7 +303,6 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                     </div>
                 </div>
 
-                {/* Save Section - Moved up here near the selector */}
                 <div className="flex gap-2 p-1.5 bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200 items-center xl:w-[450px]">
                     <div className="relative flex-1">
                         <input 
@@ -296,7 +325,6 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
 
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                  <div className="xl:col-span-8 space-y-6">
-                     {/* 1. Core Idea */}
                      <div className="bg-white/95 p-8 rounded-[32px] shadow-lg border-2 border-tet-red relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
                             <span className="text-8xl">✍️</span>
@@ -306,7 +334,6 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                      </div>
 
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* 2. Artistic Direction */}
                         <div className="bg-white/95 p-8 rounded-[32px] shadow-lg border-2 border-tet-gold relative">
                             <h3 className="text-tet-brown font-black uppercase text-[10px] mb-6 tracking-[0.2em] border-b-2 border-dashed border-tet-gold/20 pb-2">2. ĐỊNH HƯỚNG NGHỆ THUẬT</h3>
                             <div className="space-y-4">
@@ -339,7 +366,6 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                             </div>
                         </div>
 
-                        {/* 3. Assets & Identity */}
                         <div className="bg-white/95 p-8 rounded-[32px] shadow-lg border-2 border-tet-green relative">
                             <h3 className="text-tet-green font-black uppercase text-[10px] mb-6 tracking-[0.2em] border-b-2 border-dashed border-tet-green/20 pb-2">3. HÌNH ẢNH GỐC (TỰ ĐỘNG I2V)</h3>
                             <div className="space-y-6">
@@ -376,7 +402,6 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                      </div>
                  </div>
 
-                 {/* Action Sidebar */}
                  <div className="xl:col-span-4 space-y-6 sticky top-4">
                     <div className="bg-white/95 p-8 rounded-[32px] border-4 border-tet-gold/40 shadow-xl relative">
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
@@ -391,17 +416,33 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                             <div className="flex gap-4">
                                 <div className="flex-1">
                                     <label className="block text-[8px] font-black text-stone-400 uppercase tracking-widest mb-2">Phút</label>
-                                    <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-stone-100 rounded-2xl p-4 text-center text-xl font-black" />
+                                    <input type="number" name="songMinutes" value={formData.songMinutes} min="0" max="15" onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-stone-100 rounded-2xl p-4 text-center text-xl font-black" />
                                 </div>
                                 <div className="flex-1">
                                     <label className="block text-[8px] font-black text-stone-400 uppercase tracking-widest mb-2">Giây</label>
-                                    <input type="number" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-stone-100 rounded-2xl p-4 text-center text-xl font-black" />
+                                    <input type="number" name="songSeconds" value={formData.songSeconds} min="0" max="59" onChange={handleInputChange} className="w-full bg-tet-cream border-2 border-stone-100 rounded-2xl p-4 text-center text-xl font-black" />
                                 </div>
                             </div>
                         </div>
-                        <button onClick={generatePrompts} disabled={isLoading || modelUsageCount >= 20} className="w-full py-5 bg-gradient-to-b from-tet-red to-tet-red-dark text-tet-gold font-black text-lg uppercase tracking-widest rounded-2xl shadow-xl border-4 border-tet-gold disabled:opacity-50 hover:brightness-110 active:scale-95 transition-all">
-                            {isLoading ? <LoaderIcon /> : '🧧 TẠO KỊCH BẢN'}
-                        </button>
+                        
+                        <div className="space-y-4">
+                            <button 
+                                onClick={generatePrompts} 
+                                disabled={isLoading || modelUsageCount >= 20} 
+                                className="w-full py-5 bg-gradient-to-b from-tet-red to-tet-red-dark text-tet-gold font-black text-lg uppercase tracking-widest rounded-2xl shadow-xl border-4 border-tet-gold disabled:opacity-50 hover:brightness-110 active:scale-95 transition-all"
+                            >
+                                {isLoading ? <LoaderIcon /> : '🧧 TẠO KỊCH BẢN'}
+                            </button>
+
+                            {generatedScenes.length > 0 && (
+                                <button 
+                                    onClick={handleManualSaveExcel}
+                                    className="w-full py-5 bg-tet-green hover:bg-emerald-700 text-white font-black text-lg uppercase tracking-widest rounded-2xl shadow-xl border-4 border-white transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-3 animate-fade-in"
+                                >
+                                    <FolderIcon className="w-6 h-6" /> XUẤT FILE EXCEL
+                                </button>
+                            )}
+                        </div>
                     </div>
                  </div>
             </div>

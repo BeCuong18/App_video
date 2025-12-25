@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Scene } from '../types';
-import { CopyIcon, CheckIcon } from './Icons';
+import { CopyIcon, CheckIcon, FolderIcon } from './Icons';
 
 interface SceneCardProps {
   scene: Scene;
@@ -16,7 +16,6 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Enhanced formatting for high-contrast labels and better structure
   const formattedText = scene.prompt_text
     .replace(/(\[SCENE_START\])/g, '<span class="text-tet-red font-black text-base">$1</span>')
     .replace(/(SCENE_HEADING:|CHARACTER:|CINEMATOGRAPHY:|LIGHTING:|ENVIRONMENT:|ACTION_EMOTION:|STYLE:)/g, 
@@ -24,7 +23,6 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene }) => {
 
   return (
     <div className="scene-card bg-white rounded-3xl p-6 border-2 border-tet-gold/30 transition-all transform hover:-translate-y-1 hover:shadow-2xl flex flex-col justify-between shadow-md relative overflow-hidden group">
-      {/* Decorative Corner Background */}
       <div className="absolute top-0 right-0 w-24 h-24 bg-tet-red/5 -translate-y-12 translate-x-12 rounded-full pointer-events-none group-hover:bg-tet-red/10 transition-colors"></div>
       
       <div className="relative z-10">
@@ -60,6 +58,7 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene }) => {
 
 interface ResultsProps {
   scenes: Scene[];
+  onSaveExcel?: () => void;
 }
 
 const Results: React.FC<ResultsProps> = ({ scenes }) => {
@@ -69,10 +68,16 @@ const Results: React.FC<ResultsProps> = ({ scenes }) => {
 
   return (
     <div className="mt-12 animate-fade-in pb-10">
-      <div className="flex items-center gap-6 mb-10">
-          <div className="h-1 bg-gradient-to-r from-transparent to-tet-gold flex-1 rounded-full"></div>
-          <h2 className="text-3xl font-black text-center text-tet-red-dark uppercase tracking-[0.2em] px-6 drop-shadow-sm">Kịch Bản Prompt</h2>
-          <div className="h-1 bg-gradient-to-l from-transparent to-tet-gold flex-1 rounded-full"></div>
+      {/* Header Container */}
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8 bg-white p-4 md:p-6 rounded-[40px] border-2 border-tet-gold/40 shadow-lg">
+          <div className="flex items-center gap-4 flex-1">
+             <div className="h-0.5 bg-gradient-to-r from-transparent to-tet-gold flex-1 rounded-full hidden lg:block"></div>
+             <div className="flex items-center gap-3 px-2">
+                <span className="text-3xl">🏮</span>
+                <h2 className="text-xl md:text-2xl font-black text-tet-red-dark uppercase tracking-widest whitespace-nowrap text-center w-full lg:w-auto">Kịch Bản Prompt Chi Tiết</h2>
+             </div>
+             <div className="h-0.5 bg-gradient-to-l from-transparent to-tet-gold flex-1 rounded-full hidden lg:block"></div>
+          </div>
       </div>
       
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
