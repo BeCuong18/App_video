@@ -422,12 +422,12 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                             <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Thời lượng (Max 15 phút)</label>
                             <div className="flex gap-2">
                                 <div className="relative flex-1 group">
-                                    <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} min="0" max="15" className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center font-black text-xl text-stone-700 focus:border-tet-red transition" placeholder="0" />
-                                    <span className="absolute right-3 top-4 text-stone-400 text-[9px] uppercase font-bold">Phút</span>
+                                    <input type="number" name="songMinutes" value={formData.songMinutes} onChange={handleInputChange} min="0" max="15" className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center pr-12 font-black text-xl text-stone-700 focus:border-tet-red transition" placeholder="0" />
+                                    <span className="absolute right-3 top-4 text-stone-400 text-[9px] uppercase font-bold pointer-events-none">Phút</span>
                                 </div>
                                 <div className="relative flex-1 group">
-                                    <input type="number" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} min="0" max="59" className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center font-black text-xl text-stone-700 focus:border-tet-red transition" placeholder="00" />
-                                    <span className="absolute right-3 top-4 text-stone-400 text-[9px] uppercase font-bold">Giây</span>
+                                    <input type="number" name="songSeconds" value={formData.songSeconds} onChange={handleInputChange} min="0" max="59" className="w-full bg-tet-cream border-2 border-tet-gold/50 rounded-2xl p-3 text-center pr-12 font-black text-xl text-stone-700 focus:border-tet-red transition" placeholder="00" />
+                                    <span className="absolute right-3 top-4 text-stone-400 text-[9px] uppercase font-bold pointer-events-none">Giây</span>
                                 </div>
                             </div>
                         </div>
