@@ -32,6 +32,16 @@ const App: React.FC = () => {
     const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
     const [activeApiKeyId, setActiveApiKeyId] = useState<string>('');
 
+    // Logic tự động ẩn thông báo sau 10 giây
+    useEffect(() => {
+        if (feedback) {
+            const timer = setTimeout(() => {
+                setFeedback(null);
+            }, 10000); // 10 giây
+            return () => clearTimeout(timer);
+        }
+    }, [feedback]);
+
     const parseApiKeys = (data: any): ApiKey[] => {
         if (!data) return [];
         if (Array.isArray(data)) return data;
@@ -147,7 +157,6 @@ const App: React.FC = () => {
         saveApiConfig(apiKeys, key.id);
         setActiveTab('generator');
         setFeedback({ type: 'success', message: `Đã chọn API Key: ${key.name}` });
-        setTimeout(() => setFeedback(null), 3000);
     };
 
     const handleKeyAdd = (key: ApiKey) => {
@@ -288,7 +297,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    {/* Thêm ô hiển thị tổng số file excel đang theo dõi */}
                     <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-2xl border-2 border-white/30 mr-2">
                         <FolderIcon className="w-5 h-5 text-tet-gold" />
                         <div className="text-left">
@@ -404,20 +412,35 @@ const App: React.FC = () => {
             </div>
 
             {feedback && (
-                <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-3xl shadow-2xl bg-white border-2 flex items-center gap-4 z-[200] animate-bounce-slow ${feedback.type === 'error' ? 'border-red-500' : 'border-tet-gold'}`}>
-                    <span className={`font-bold ${feedback.type === 'error' ? 'text-red-500' : 'text-stone-700'}`}>{feedback.message}</span>
-                    <button 
-                        onClick={() => setFeedback(null)} 
-                        className="p-1 hover:bg-stone-100 rounded-full transition-colors text-stone-400 font-bold ml-2"
-                        title="Đóng thông báo"
-                    >
-                        ✕
-                    </button>
+                <div className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-10 py-6 rounded-[40px] shadow-2xl bg-white border-4 flex flex-col items-center gap-4 z-[300] animate-fade-in ${feedback.type === 'error' ? 'border-red-500 shadow-red-100' : 'border-tet-gold shadow-yellow-50'}`}>
+                    <div className="flex items-center gap-4 w-full">
+                        <div className={`p-3 rounded-full ${feedback.type === 'error' ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-tet-gold-dark'}`}>
+                           {feedback.type === 'error' ? <span className="text-2xl font-black">!</span> : <span className="text-2xl">🏮</span>}
+                        </div>
+                        <span className={`font-black text-lg ${feedback.type === 'error' ? 'text-red-600' : 'text-stone-700'}`}>{feedback.message}</span>
+                        <button 
+                            onClick={() => setFeedback(null)} 
+                            className="p-2 hover:bg-stone-100 rounded-full transition-colors text-stone-400 font-bold ml-auto"
+                            title="Đóng thông báo"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <div className="w-full h-1 bg-stone-100 rounded-full mt-2 overflow-hidden">
+                        <div className={`h-full animate-[shrink_10s_linear_forwards] ${feedback.type === 'error' ? 'bg-red-500' : 'bg-tet-gold'}`}></div>
+                    </div>
                 </div>
             )}
             {showStats && <StatsModal onClose={() => setShowStats(false)} isAdmin={isAdminLoggedIn} activeApiKeyId={activeApiKeyId} />}
             {showAdminLogin && <AdminLoginModal onClose={() => setShowAdminLogin(false)} onLoginSuccess={() => setIsAdminLoggedIn(true)} />}
             {alertModal && <AlertModal {...alertModal} onClose={() => setAlertModal(null)} />}
+            
+            <style>{`
+                @keyframes shrink {
+                    from { width: 100%; }
+                    to { width: 0%; }
+                }
+            `}</style>
         </div>
     );
 };

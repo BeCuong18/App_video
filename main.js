@@ -81,12 +81,40 @@ function writeConfig(config) {
 function readStats() {
     try {
         if (fs.existsSync(statsPath)) {
-            return JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
+            const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
+            return checkAndResetModelUsage(stats);
         }
     } catch (e) {
         console.error("Error reading stats:", e);
     }
-    return { history: {}, promptCount: 0, modelUsage: {} }; 
+    return { history: {}, promptCount: 0, modelUsage: {}, lastResetModelUsage: new Date().toISOString() }; 
+}
+
+/**
+ * Reset modelUsage nếu đã qua mốc 17:00 (5h chiều) gần nhất
+ */
+function checkAndResetModelUsage(stats) {
+    const now = new Date();
+    const resetHour = 17; // 17:00 = 5 PM
+    
+    // Tìm mốc 17:00 gần nhất trước thời điểm hiện tại
+    let mostRecentReset = new Date();
+    mostRecentReset.setHours(resetHour, 0, 0, 0);
+    
+    // Nếu bây giờ chưa đến 17h, mốc reset gần nhất là 17h ngày hôm qua
+    if (now < mostRecentReset) {
+        mostRecentReset.setDate(mostRecentReset.getDate() - 1);
+    }
+    
+    const lastReset = stats.lastResetModelUsage ? new Date(stats.lastResetModelUsage) : new Date(0);
+    
+    if (lastReset < mostRecentReset) {
+        console.log("Đã qua 17:00. Reset giới hạn sử dụng Model...");
+        stats.modelUsage = {};
+        stats.lastResetModelUsage = now.toISOString();
+        writeStats(stats);
+    }
+    return stats;
 }
 
 function writeStats(stats) {
@@ -109,7 +137,7 @@ function incrementDailyStat() {
 }
 
 function incrementPromptCount(modelName, apiKeyId) {
-    const stats = readStats();
+    const stats = readStats(); // readStats đã bao gồm logic reset 5h chiều
     if (typeof stats.promptCount !== 'number') stats.promptCount = 0;
     stats.promptCount += 1;
 
@@ -269,7 +297,12 @@ app.whenReady().then(() => {
   ]));
   createWindow();
   autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  
+  // Timer định kỳ kiểm tra stuck jobs và reset giới hạn 5h chiều
   setInterval(() => {
+    // Tự động kiểm tra reset 5h chiều
+    readStats();
+
     const now = Date.now();
     for (const [filePath, jobMap] of jobStateTimestamps.entries()) {
         const stuckIds = [];
@@ -282,7 +315,7 @@ app.whenReady().then(() => {
 ipcMain.handle('get-app-config', () => readConfig());
 ipcMain.handle('save-app-config', async (e, cfg) => { writeConfig({ ...readConfig(), ...cfg }); return { success: true }; });
 ipcMain.handle('verify-admin', async (e, { username, password }) => (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) ? { success: true } : { success: false, error: 'Sai thông tin' });
-ipcMain.handle('delete-all-stats', async () => { writeStats({ history: {}, promptCount: 0, modelUsage: {} }); return { success: true }; });
+ipcMain.handle('delete-all-stats', async () => { writeStats({ history: {}, promptCount: 0, modelUsage: {}, lastResetModelUsage: new Date().toISOString() }); return { success: true }; });
 ipcMain.handle('get-stats', async () => {
     const stats = readStats(), config = readConfig();
     const history = Object.entries(stats.history || {}).map(([date, d]) => ({ date, count: d.count })).sort((a,b) => new Date(b.date) - new Date(a.date));
@@ -305,9 +338,11 @@ ipcMain.handle('increment-prompt-count', async (event, { modelName, apiKeyId }) 
 
 ipcMain.handle('save-file-dialog', async (event, { defaultPath, fileContent }) => {
     const res = await dialog.showSaveDialog(mainWindow, { title: 'Lưu Kịch Bản', defaultPath, filters: [{ name: 'Excel', extensions: ['xlsx'] }] });
-    if (res.canceled) return { success: false };
-    fs.writeFileSync(res.filePath, Buffer.from(fileContent));
-    return { success: true, filePath: res.filePath };
+    if (res.filePath) {
+        fs.writeFileSync(res.filePath, Buffer.from(fileContent));
+        return { success: true, filePath: res.filePath };
+    }
+    return { success: false };
 });
 
 ipcMain.handle('open-file-dialog', async () => {
