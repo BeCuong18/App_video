@@ -230,7 +230,7 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                 config: {
                     systemInstruction: systemPrompt,
                     temperature: formData.temperature,
-                    thinkingConfig: { thinkingBudget: formData.model.includes('pro') ? 16000 : 0 },
+                    thinkingConfig: { thinkingBudget: 0 },
                     responseMimeType: 'application/json',
                     responseSchema: {
                         type: Type.OBJECT,
@@ -280,9 +280,9 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                 <div className="flex flex-1 gap-3 items-center">
                      <div className="relative shrink-0">
                         <select name="model" value={formData.model} onChange={handleInputChange} className="rounded-2xl p-2 pr-20 text-[10px] border-2 border-stone-100 focus:border-tet-red bg-tet-cream font-black uppercase">
-                            <option value="gemini-3-flash-preview">Gemini 3 Flash (Miễn phí & Nhanh)</option>
-                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ổn định)</option>
-                            <option value="gemini-3-pro-preview">Gemini 3 Pro (Chất lượng cao - Trả phí)</option>
+                            <option value="gemini-3-flash-preview">Gemini 3 Flash (Mặc định)</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Tốc độ cao)</option>
+                            <option value="gemini-2.5-flash-lite-latest">Gemini 2.5 Flash Lite (Tiết kiệm nhất)</option>
                         </select>
                         <div className={`absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-lg text-[8px] font-black ${modelUsageCount >= 18 ? 'bg-red-500 text-white' : 'bg-tet-gold text-tet-brown'} border border-white shadow-sm pointer-events-none`}>
                             {modelUsageCount}/20
@@ -324,7 +324,7 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
                             <span className="text-8xl">✍️</span>
                         </div>
-                        <h3 className="text-tet-red-dark font-black uppercase text-[10px] mb-6 tracking-[0.2em] border-b-2 border-dashed border-tet-red/20 pb-2">1. Ý TƯỞNG CỐT LÕI (LYRICS / STORY)</h3>
+                        <h3 className="text-tet-red-dark font-black uppercase text-[10px] mb-6 tracking-[0.2em] border-b-2 border-dashed border-tet-red/20 pb-2">1. Ý TƯỞONG CỐT LÕI (LYRICS / STORY)</h3>
                         <textarea name="idea" value={formData.idea} onChange={handleInputChange} rows={6} className="w-full p-5 transition resize-none shadow-inner text-sm leading-relaxed border-2 border-tet-gold/30 focus:border-tet-red bg-tet-cream font-bold" placeholder="Nhập lời bài hát hoặc kịch bản chi tiết. Nếu up ảnh bên dưới, AI sẽ tự động chuyển sang chế độ I2V..." />
                      </div>
 
