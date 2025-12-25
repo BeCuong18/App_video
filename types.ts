@@ -1,6 +1,6 @@
 
 export type MvGenre = 'narrative' | 'cinematic-short-film' | 'performance' | 'dance-choreography' | 'lyrical' | 'conceptual' | 'abstract-visualizer' | 'scenic' | 'animation' | 'one-take' | 'surreal' | 'sci-fi' | 'horror' | 'historical-period' | 'retro-futurism' | 'social-commentary' | 'documentary';
-export type VideoType = 'story' | 'live';
+export type VideoType = 'story' | 'in2v';
 export type ActiveTab = 'generator' | 'tracker';
 export type JobStatus = 'Pending' | 'Processing' | 'Generating' | 'Completed' | 'Failed';
 
@@ -17,12 +17,15 @@ export type Scene = ScenePrompt;
 export interface UploadedImage {
   base64: string;
   mimeType: string;
+  name: string;
 }
 
 export interface FormData {
   idea: string;
-  liveAtmosphere: string;
-  liveArtistImage: UploadedImage | null;
+  in2vAtmosphere: string;
+  uploadedImages: (UploadedImage | null)[]; // Supporting up to 3 images
+  // Fix: Added videoType property to resolve 'Property videoType does not exist on type FormData' error
+  videoType: VideoType;
   liveArtistName: string;
   liveArtist: string;
   songMinutes: string;

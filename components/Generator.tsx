@@ -1,23 +1,23 @@
 
 import React, { useState, ChangeEvent } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
-import { FormData, VideoType, Scene, ApiKey, MvGenre, Preset } from '../types';
-import { storySystemPrompt, liveSystemPrompt } from '../constants';
+import { FormData, VideoType, Scene, ApiKey, MvGenre, Preset, UploadedImage } from '../types';
+import { storySystemPrompt, in2vSystemPrompt } from '../constants';
 import Results from './Results';
 import { LoaderIcon, TrashIcon } from './Icons';
 
 const ipcRenderer = (window as any).require ? (window as any).require('electron').ipcRenderer : null;
 
 interface GeneratorProps {
-    activeApiKey: ApiKey | null;
+    // Fix: Removed activeApiKey prop to comply with Gemini API security guidelines (exclusive use of process.env.API_KEY)
     presets: Preset[];
     onSavePresets: (newPresets: Preset[]) => void;
     onGenerateSuccess: (scenes: Scene[], formData: FormData) => void;
     onFeedback: (feedback: { type: 'error' | 'success' | 'info', message: string } | null) => void;
 }
 
-export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onSavePresets, onGenerateSuccess, onFeedback }) => {
-    const [videoType, setVideoType] = useState<VideoType>('story');
+export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, onGenerateSuccess, onFeedback }) => {
+    // Fix: Merged standalone videoType state into formData to fix Property 'videoType' does not exist error
     const [isLoading, setIsLoading] = useState(false);
     const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
     
@@ -25,11 +25,13 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
     const [selectedPresetId, setSelectedPresetId] = useState('');
 
     const [formData, setFormData] = useState<FormData>({
-        idea: '', liveAtmosphere: '', liveArtistImage: null, liveArtistName: '', liveArtist: '',
+        idea: '', in2vAtmosphere: '', uploadedImages: [null, null, null], liveArtistName: '', liveArtist: '',
         songMinutes: '3', songSeconds: '30', projectName: '',
         model: 'gemini-3-flash-preview', mvGenre: 'narrative', filmingStyle: 'auto',
         country: 'Vietnamese', musicGenre: 'v-pop', customMusicGenre: '',
         characterConsistency: true, characterCount: 1, temperature: 0.3,
+        // Added videoType to initial formData state
+        videoType: 'story',
     });
 
     const mvGenreOptions: { value: MvGenre, label: string }[] = [
@@ -116,14 +118,27 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
         }
     };
 
-    const handleImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const handleMultiImageUpload = (index: number) => (e: ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file) { setFormData((prev) => ({ ...prev, liveArtistImage: null })); return; }
+        if (!file) {
+            setFormData(prev => {
+                const updated = [...prev.uploadedImages];
+                updated[index] = null;
+                return { ...prev, uploadedImages: updated };
+            });
+            return;
+        }
         const reader = new FileReader();
         reader.onloadend = () => {
           if (reader.result && typeof reader.result === 'string') {
             const base64Data = reader.result.split(',')[1];
-            if (base64Data) setFormData((prev) => ({ ...prev, liveArtistImage: { base64: base64Data, mimeType: file.type } }));
+            if (base64Data) {
+                setFormData(prev => {
+                    const updated = [...prev.uploadedImages];
+                    updated[index] = { base64: base64Data, mimeType: file.type, name: file.name };
+                    return { ...prev, uploadedImages: updated };
+                });
+            }
           }
         };
         reader.readAsDataURL(file);
@@ -154,7 +169,7 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
     };
 
     const generatePrompts = async () => {
-        if (!activeApiKey) { onFeedback({ type: 'error', message: 'Vui lòng chọn API Key.' }); return; }
+        // Fix: Relying on process.env.API_KEY as per GenAI guidelines instead of manual prop checking
         setIsLoading(true);
         onFeedback(null);
         setGeneratedScenes([]);
@@ -167,25 +182,36 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
         }
 
         let sceneCount = Math.max(3, Math.round(totalSeconds / 8));
-        const systemPrompt = videoType === 'story' ? storySystemPrompt : liveSystemPrompt;
-        let userPrompt = `Generate prompts for a music video.`;
+        const systemPrompt = formData.videoType === 'story' ? storySystemPrompt : in2vSystemPrompt;
+        
+        let userPrompt = `Generate prompts for a music video. Mode: ${formData.videoType === 'story' ? 'Text-to-Video' : 'Image-to-Video'}.`;
+        const genre = formData.musicGenre === 'other' ? formData.customMusicGenre : formData.musicGenre;
 
-        if (videoType === 'story') {
+        if (formData.videoType === 'story') {
             if (!formData.idea.trim()) { onFeedback({type: 'error', message: 'Thiếu ý tưởng.'}); setIsLoading(false); return; }
-            const genre = formData.musicGenre === 'other' ? formData.customMusicGenre : formData.musicGenre;
             userPrompt += ` Input: "${formData.idea.trim()}". Specs: Nationality: ${formData.country}, Genre: ${formData.mvGenre}, Style: ${formData.filmingStyle}, Consistent: ${formData.characterConsistency}, Music Genre: ${genre}`;
         } else {
-             userPrompt += ` Live Atmosphere: ${formData.liveAtmosphere}. Artist: ${formData.liveArtist}`;
+             userPrompt += ` Input Lyrics/Idea: "${formData.idea.trim()}". Reference Images analyzed below. Environment/Atmosphere: ${formData.in2vAtmosphere}. Specs: Nationality: ${formData.country}, Genre: ${formData.mvGenre}, Style: ${formData.filmingStyle}, Music Genre: ${genre}`;
         }
         userPrompt += ` Create exactly ${sceneCount} scenes.`;
 
         const parts: any[] = [{ text: userPrompt }];
-        if (videoType === 'live' && formData.liveArtistImage) {
-            parts.push({ inlineData: { mimeType: formData.liveArtistImage.mimeType, data: formData.liveArtistImage.base64 } });
+        
+        // Handle images for Story mode (Character Consistency) or IN2V mode (Multi-Image)
+        if (formData.videoType === 'story' && formData.characterConsistency && formData.uploadedImages[0]) {
+            parts.push({ inlineData: { mimeType: formData.uploadedImages[0].mimeType, data: formData.uploadedImages[0].base64 } });
+        } else if (formData.videoType === 'in2v') {
+            formData.uploadedImages.forEach((img, idx) => {
+                if (img) {
+                    parts.push({ text: `Analysis for Reference Image ${idx + 1}:` });
+                    parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+                }
+            });
         }
 
         try {
-            const ai = new GoogleGenAI({ apiKey: activeApiKey.value });
+            // Fix: Use process.env.API_KEY directly as per GenAI guidelines
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: formData.model,
                 contents: { parts: parts },
@@ -245,8 +271,9 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                 </div>
 
                 <div className="flex p-1.5 bg-white rounded-full border-2 border-tet-gold shadow-sm self-center xl:self-auto">
-                    <button onClick={() => setVideoType('story')} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${videoType === 'story' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>MV Kể Chuyện</button>
-                    <button onClick={() => setVideoType('live')} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${videoType === 'live' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>Live Acoustic</button>
+                    {/* Fix: Updated buttons to modify videoType within formData state */}
+                    <button onClick={() => setFormData(prev => ({ ...prev, videoType: 'story' }))} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${formData.videoType === 'story' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>MV Kể Chuyện</button>
+                    <button onClick={() => setFormData(prev => ({ ...prev, videoType: 'in2v' }))} className={`px-6 py-2.5 rounded-full font-bold transition text-xs uppercase tracking-wide ${formData.videoType === 'in2v' ? 'bg-tet-red text-white shadow-lg' : 'text-stone-400 hover:text-tet-red'}`}>MV Image to Video</button>
                 </div>
             </div>
 
@@ -270,29 +297,20 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                         <h3 className="text-tet-red-dark font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-tet-red/30 pb-2">
                              1. Nội Dung Cốt Lõi
                         </h3>
-                        {videoType === 'story' ? (
-                             <div>
+                        
+                        <div className="space-y-4">
+                            <div>
                                 <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Ý Tưởng / Lời Bài Hát</label>
                                 <textarea name="idea" value={formData.idea} onChange={handleInputChange} rows={6} className="w-full p-4 transition resize-none shadow-inner text-sm leading-relaxed border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="Nhập lời bài hát hoặc mô tả chi tiết ý tưởng MV..." />
-                             </div>
-                        ) : (
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Không khí / Bối cảnh Live</label>
-                                    <textarea name="liveAtmosphere" value={formData.liveAtmosphere} onChange={handleInputChange} rows={3} className="w-full p-4 transition text-sm border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="VD: Sân thượng lúc hoàng hôn, phòng thu ấm cúng với nến..." />
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Tên Ca Sĩ</label>
-                                        <input type="text" name="liveArtist" value={formData.liveArtist} onChange={handleInputChange} className="w-full p-3 text-sm border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="Tên nghệ sĩ..." />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Ảnh Ca Sĩ (AI nhận diện)</label>
-                                        <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full p-2 text-stone-500 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-tet-red file:text-white hover:file:bg-tet-red-dark border-2 border-tet-gold/50 bg-tet-cream" />
-                                    </div>
-                                </div>
                             </div>
-                        )}
+                            
+                            {formData.videoType === 'in2v' && (
+                                <div className="animate-fade-in">
+                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Bối cảnh / Không khí chủ đạo</label>
+                                    <textarea name="in2vAtmosphere" value={formData.in2vAtmosphere} onChange={handleInputChange} rows={2} className="w-full p-4 transition text-sm border-2 border-tet-gold/50 focus:border-tet-red bg-tet-cream" placeholder="VD: Rừng thông mờ ảo, phố cổ Hội An đêm rằm..." />
+                                </div>
+                            )}
+                        </div>
                      </div>
 
                      {/* CARD 2: ARTISTIC DIRECTION */}
@@ -308,101 +326,144 @@ export const Generator: React.FC<GeneratorProps> = ({ activeApiKey, presets, onS
                         <h3 className="text-tet-brown font-black uppercase text-xs mb-6 tracking-widest flex items-center gap-2 border-b-2 border-dashed border-tet-gold/40 pb-2">
                              2. Định Hướng Nghệ Thuật
                         </h3>
-                        {videoType === 'story' ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                                <div>
-                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Quốc Gia</label>
-                                    <select name="country" value={formData.country} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
-                                        {countryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Nhạc nền</label>
-                                    <select name="musicGenre" value={formData.musicGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
-                                        {musicGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                    </select>
-                                    {formData.musicGenre === 'other' && (
-                                        <div className="mt-3 animate-fade-in relative">
-                                            <input 
-                                                type="text" 
-                                                name="customMusicGenre"
-                                                value={formData.customMusicGenre}
-                                                onChange={handleInputChange}
-                                                className="w-full p-3 text-sm border-4 border-tet-red/20 focus:border-tet-red bg-white rounded-2xl font-bold placeholder-stone-300 shadow-inner" 
-                                                placeholder="Nhập thể loại nhạc cụ thể..." 
-                                            />
-                                            <span className="absolute -top-2 right-2 text-xl animate-bounce-slow">🎵</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Thể Loại MV</label>
-                                    <select name="mvGenre" value={formData.mvGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
-                                        {mvGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Phong Cách Quay</label>
-                                    <select name="filmingStyle" value={formData.filmingStyle} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
-                                        {filmingStyleOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                                    </select>
-                                </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Quốc Gia</label>
+                                <select name="country" value={formData.country} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
+                                    {countryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
                             </div>
-                        ) : (
-                            <div className="text-center py-4 text-stone-400 italic text-sm">
-                                Phong cách Live Acoustic được tối ưu hóa tự động bởi AI.
-                            </div>
-                        )}
-                     </div>
-
-                     {/* CARD 3: CAST & CHARACTER */}
-                     {videoType === 'story' && (
-                        <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-green relative overflow-hidden group">
-                             {/* Corner Accents */}
-                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-tet-gold rounded-tl-2xl"></div>
-                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-tet-gold rounded-tr-2xl"></div>
-                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-tet-gold rounded-bl-2xl"></div>
-                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-tet-gold rounded-br-2xl"></div>
-
-                            <div className="absolute top-0 left-0 w-1 h-full bg-tet-green"></div>
-                            <div className="absolute -top-4 -right-4 text-7xl opacity-10 rotate-45 select-none text-tet-green">🧧</div>
-                            <div className="flex items-center justify-between mb-2 border-b-2 border-dashed border-tet-green/20 pb-2">
-                                <h3 className="text-tet-green font-black uppercase text-xs tracking-widest">
-                                    3. Nhân Vật & Diễn Viên
-                                </h3>
-                            </div>
-                            <div className="flex flex-col md:flex-row items-center justify-between gap-4 mt-4">
-                                <div className="flex items-center gap-3">
-                                    <input 
-                                        type="checkbox" 
-                                        id="charConsistency"
-                                        name="characterConsistency" 
-                                        checked={formData.characterConsistency} 
-                                        onChange={handleInputChange} 
-                                        className="w-6 h-6 rounded-lg text-tet-red focus:ring-tet-red border-tet-gold cursor-pointer" 
-                                    />
-                                    <div>
-                                        <label htmlFor="charConsistency" className="text-sm font-bold text-stone-700 cursor-pointer select-none tracking-wide block">Đồng nhất nhân vật</label>
-                                        <span className="text-[10px] text-stone-400">AI sẽ giữ ngoại hình nhân vật giống nhau xuyên suốt video.</span>
-                                    </div>
-                                </div>
-                                {formData.characterConsistency && (
-                                    <div className="flex items-center gap-3 bg-tet-cream px-4 py-2 rounded-2xl border-2 border-tet-gold/20">
-                                        <label className="text-[10px] text-stone-500 uppercase font-bold tracking-wider">Số lượng nhân vật:</label>
+                            <div>
+                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Nhạc nền</label>
+                                <select name="musicGenre" value={formData.musicGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
+                                    {musicGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
+                                {formData.musicGenre === 'other' && (
+                                    <div className="mt-3 animate-fade-in relative">
                                         <input 
-                                            type="number" 
-                                            name="characterCount" 
-                                            value={formData.characterCount} 
-                                            onChange={handleInputChange} 
-                                            min={1} 
-                                            max={3} 
-                                            className="w-14 bg-white border-2 border-white rounded-xl p-1 text-center text-tet-red font-black text-xl focus:border-tet-gold" 
+                                            type="text" 
+                                            name="customMusicGenre"
+                                            value={formData.customMusicGenre}
+                                            onChange={handleInputChange}
+                                            className="w-full p-3 text-sm border-4 border-tet-red/20 focus:border-tet-red bg-white rounded-2xl font-bold placeholder-stone-300 shadow-inner" 
+                                            placeholder="Nhập thể loại nhạc cụ thể..." 
                                         />
+                                        <span className="absolute -top-2 right-2 text-xl animate-bounce-slow">🎵</span>
                                     </div>
                                 )}
                             </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Thể Loại MV</label>
+                                <select name="mvGenre" value={formData.mvGenre} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
+                                    {mvGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Phong Cách Quay</label>
+                                <select name="filmingStyle" value={formData.filmingStyle} onChange={handleInputChange} className="w-full p-3 text-sm focus:border-tet-red border-2 border-tet-gold/50 bg-tet-cream">
+                                    {filmingStyleOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                                </select>
+                            </div>
                         </div>
-                     )}
+                     </div>
+
+                     {/* CARD 3: CAST & CHARACTER / IMAGE ASSETS */}
+                     <div className="bg-white/90 p-8 rounded-[32px] shadow-lg border-2 border-tet-green relative overflow-hidden group">
+                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-tet-gold rounded-tl-2xl"></div>
+                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-tet-gold rounded-tr-2xl"></div>
+                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-tet-gold rounded-bl-2xl"></div>
+                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-tet-gold rounded-br-2xl"></div>
+
+                        <div className="absolute top-0 left-0 w-1 h-full bg-tet-green"></div>
+                        <div className="absolute -top-4 -right-4 text-7xl opacity-10 rotate-45 select-none text-tet-green">🧧</div>
+                        
+                        <h3 className="text-tet-green font-black uppercase text-xs tracking-widest mb-6 border-b-2 border-dashed border-tet-green/20 pb-2">
+                            3. {formData.videoType === 'story' ? 'Nhân Vật & Diễn Viên' : 'Dữ Liệu Hình Ảnh (Tối đa 3)'}
+                        </h3>
+
+                        <div className="space-y-6 mt-4">
+                            {formData.videoType === 'story' && (
+                                <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <input 
+                                            type="checkbox" 
+                                            id="charConsistency"
+                                            name="characterConsistency" 
+                                            checked={formData.characterConsistency} 
+                                            onChange={handleInputChange} 
+                                            className="w-6 h-6 rounded-lg text-tet-red focus:ring-tet-red border-tet-gold cursor-pointer" 
+                                        />
+                                        <div>
+                                            <label htmlFor="charConsistency" className="text-sm font-bold text-stone-700 cursor-pointer select-none tracking-wide block">Đồng nhất nhân vật</label>
+                                            <span className="text-[10px] text-stone-400">AI sẽ giữ ngoại hình nhân vật giống nhau xuyên suốt video.</span>
+                                        </div>
+                                    </div>
+                                    {formData.characterConsistency && (
+                                        <div className="flex items-center gap-3 bg-tet-cream px-4 py-2 rounded-2xl border-2 border-tet-gold/20">
+                                            <label className="text-[10px] text-stone-500 uppercase font-bold tracking-wider">Số lượng nhân vật:</label>
+                                            <input 
+                                                type="number" 
+                                                name="characterCount" 
+                                                value={formData.characterCount} 
+                                                onChange={handleInputChange} 
+                                                min={1} 
+                                                max={3} 
+                                                className="w-14 bg-white border-2 border-white rounded-xl p-1 text-center text-tet-red font-black text-xl focus:border-tet-gold" 
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Image Upload Area */}
+                            {(formData.videoType === 'in2v' || (formData.videoType === 'story' && formData.characterConsistency)) && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
+                                    {[0, 1, 2].map((idx) => {
+                                        // For story mode, only show first upload
+                                        if (formData.videoType === 'story' && idx > 0) return null;
+                                        
+                                        return (
+                                            <div key={idx} className="relative group">
+                                                <label className="block text-[10px] font-bold text-tet-brown uppercase tracking-widest mb-2">Ảnh {idx + 1}</label>
+                                                <div className="relative border-2 border-dashed border-tet-gold/50 rounded-2xl p-2 bg-tet-cream hover:border-tet-red transition-colors">
+                                                    {formData.uploadedImages[idx] ? (
+                                                        <div className="relative aspect-square rounded-xl overflow-hidden shadow-sm">
+                                                            <img src={`data:${formData.uploadedImages[idx]!.mimeType};base64,${formData.uploadedImages[idx]!.base64}`} className="w-full h-full object-cover" />
+                                                            <button 
+                                                                onClick={() => setFormData(prev => {
+                                                                    const updated = [...prev.uploadedImages];
+                                                                    updated[idx] = null;
+                                                                    return { ...prev, uploadedImages: updated };
+                                                                })}
+                                                                className="absolute top-1 right-1 bg-tet-red text-white p-1 rounded-full shadow-lg hover:scale-110 transition"
+                                                            >
+                                                                <TrashIcon className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="aspect-square flex flex-col items-center justify-center text-stone-300">
+                                                            <span className="text-2xl mb-1">📸</span>
+                                                            <span className="text-[9px] font-bold uppercase">Tải ảnh</span>
+                                                            <input 
+                                                                type="file" 
+                                                                accept="image/*" 
+                                                                onChange={handleMultiImageUpload(idx)} 
+                                                                className="absolute inset-0 opacity-0 cursor-pointer"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {formData.videoType === 'in2v' && (
+                                <p className="text-[9px] text-stone-400 italic text-center">* AI sẽ tự động nhận diện nhân vật, bối cảnh trong các ảnh để kết nối kịch bản.</p>
+                            )}
+                        </div>
+                     </div>
                  </div>
 
                  {/* RIGHT COLUMN: CONFIGURATION (4 cols) */}

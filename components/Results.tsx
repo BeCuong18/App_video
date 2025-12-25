@@ -16,39 +16,40 @@ const SceneCard: React.FC<SceneCardProps> = ({ scene }) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Improved formatting with high contrast labels
+  // Enhanced formatting for high-contrast labels and better structure
   const formattedText = scene.prompt_text
-    .replace(/(\[SCENE_START\])/g, '<span class="text-tet-red font-black">$1</span>')
-    .replace(/(SCENE_HEADING:|CHARACTER:|CINEMATOGRAPHY:|LIGHTING:|ENVIRONMENT:|ACTION_EMOTION:|STYLE:)/g, '\n<strong class="text-tet-red-dark border-b border-tet-gold/30">$&</strong>');
+    .replace(/(\[SCENE_START\])/g, '<span class="text-tet-red font-black text-base">$1</span>')
+    .replace(/(SCENE_HEADING:|CHARACTER:|CINEMATOGRAPHY:|LIGHTING:|ENVIRONMENT:|ACTION_EMOTION:|STYLE:)/g, 
+      '\n<strong class="text-tet-red-dark bg-tet-gold/10 px-1 border-b-2 border-tet-gold/40">$&</strong>');
 
   return (
-    <div className="scene-card bg-white rounded-3xl p-6 border-2 border-tet-gold/30 transition-all transform hover:-translate-y-1 hover:shadow-xl flex flex-col justify-between shadow-sm relative overflow-hidden group">
-      {/* Decorative Corner */}
-      <div className="absolute top-0 left-0 w-12 h-12 bg-tet-gold/5 -translate-x-6 -translate-y-6 rotate-45 pointer-events-none"></div>
+    <div className="scene-card bg-white rounded-3xl p-6 border-2 border-tet-gold/30 transition-all transform hover:-translate-y-1 hover:shadow-2xl flex flex-col justify-between shadow-md relative overflow-hidden group">
+      {/* Decorative Corner Background */}
+      <div className="absolute top-0 right-0 w-24 h-24 bg-tet-red/5 -translate-y-12 translate-x-12 rounded-full pointer-events-none group-hover:bg-tet-red/10 transition-colors"></div>
       
       <div className="relative z-10">
-        <div className="flex justify-between items-start mb-4">
-          <h3 className="font-black text-lg text-tet-brown flex items-center gap-2">
-            <span className="bg-tet-red text-white w-8 h-8 rounded-full flex items-center justify-center text-xs shrink-0">{scene.scene_number}</span>
-            <span className="truncate">{scene.scene_title}</span>
+        <div className="flex justify-between items-start mb-5 border-b-2 border-stone-50 pb-3">
+          <h3 className="font-black text-lg text-tet-brown flex items-center gap-3">
+            <span className="bg-tet-red text-white w-10 h-10 rounded-full flex items-center justify-center text-sm shrink-0 shadow-sm border-2 border-white">{scene.scene_number}</span>
+            <span className="truncate max-w-[200px] xl:max-w-none">{scene.scene_title}</span>
           </h3>
           <button 
             onClick={handleCopy}
-            className={`p-2 rounded-xl transition-all border-2 ${copied ? 'bg-tet-green text-white border-white' : 'bg-tet-cream text-tet-brown border-tet-gold/20 hover:border-tet-red'}`}
+            className={`p-2.5 rounded-2xl transition-all border-2 shadow-sm ${copied ? 'bg-tet-green text-white border-white scale-110' : 'bg-tet-cream text-tet-brown border-tet-gold/20 hover:border-tet-red hover:bg-white hover:text-tet-red'}`}
             title="Copy Prompt"
           >
-            {copied ? <CheckIcon className="w-4 h-4" /> : <CopyIcon className="w-4 h-4" />}
+            {copied ? <CheckIcon className="w-5 h-5" /> : <CopyIcon className="w-5 h-5" />}
           </button>
         </div>
         
         <div className="relative">
             <pre 
-              className="text-tet-brown mt-2 text-sm bg-tet-cream/50 p-4 rounded-2xl font-mono break-words whitespace-pre-wrap border-2 border-stone-100 leading-relaxed shadow-inner max-h-96 overflow-y-auto custom-scrollbar"
+              className="text-tet-brown mt-2 text-xs md:text-sm bg-stone-50 p-5 rounded-2xl font-mono break-words whitespace-pre-wrap border-2 border-stone-100 leading-relaxed shadow-inner max-h-[500px] overflow-y-auto custom-scrollbar"
               dangerouslySetInnerHTML={{ __html: formattedText }}
             />
             {copied && (
-                <div className="absolute top-2 right-2 px-3 py-1 bg-tet-green text-white text-[10px] font-bold rounded-full animate-fade-in shadow-sm">
-                    Đã copy!
+                <div className="absolute top-3 right-3 px-4 py-1.5 bg-tet-green text-white text-[10px] font-extrabold rounded-full animate-fade-in shadow-lg border-2 border-white z-20">
+                    ĐÃ SAO CHÉP
                 </div>
             )}
         </div>
@@ -67,14 +68,14 @@ const Results: React.FC<ResultsProps> = ({ scenes }) => {
   }
 
   return (
-    <div className="mt-12 animate-fade-in">
-      <div className="flex items-center gap-4 mb-8">
-          <div className="h-px bg-tet-gold flex-1"></div>
-          <h2 className="text-2xl font-black text-center text-tet-red-dark uppercase tracking-widest px-4">Kịch Bản Prompt</h2>
-          <div className="h-px bg-tet-gold flex-1"></div>
+    <div className="mt-12 animate-fade-in pb-10">
+      <div className="flex items-center gap-6 mb-10">
+          <div className="h-1 bg-gradient-to-r from-transparent to-tet-gold flex-1 rounded-full"></div>
+          <h2 className="text-3xl font-black text-center text-tet-red-dark uppercase tracking-[0.2em] px-6 drop-shadow-sm">Kịch Bản Prompt</h2>
+          <div className="h-1 bg-gradient-to-l from-transparent to-tet-gold flex-1 rounded-full"></div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
         {scenes.map(s => (
           <SceneCard 
             key={s.scene_number} 

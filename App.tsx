@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import CryptoJS from 'crypto-js';
-import { AppConfig, ApiKey, TrackedFile, VideoJob, Preset } from './types';
+import { AppConfig, ApiKey, TrackedFile, VideoJob, Preset, FormData } from './types';
 import { Activation } from './components/Activation';
 import { ApiKeyManagerScreen } from './components/ApiKeyManager';
 import { StatsModal, AdminLoginModal, AlertModal } from './components/AppModals';
@@ -25,9 +25,7 @@ const App: React.FC = () => {
     const [isActivated, setIsActivated] = useState(false);
     const [machineId, setMachineId] = useState('');
     const [configLoaded, setConfigLoaded] = useState(false);
-    const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-    const [activeApiKey, setActiveApiKey] = useState<ApiKey | null>(null);
-    const [isManagingKeys, setIsManagingKeys] = useState(false);
+    // Removed API Key state as per Gemini API guidelines (exclusive use of process.env.API_KEY)
     const [presets, setPresets] = useState<Preset[]>([]);
 
     // --- Modal State ---
@@ -64,14 +62,6 @@ const App: React.FC = () => {
             } catch {}
             setIsActivated(valid);
 
-            // Load Keys
-            try {
-                const keysStr = decrypt(config.apiKeysEncrypted || '', mid);
-                const keys = keysStr ? JSON.parse(keysStr) : [];
-                setApiKeys(keys);
-                if (config.activeApiKeyId) setActiveApiKey(keys.find((k:ApiKey) => k.id === config.activeApiKeyId) || null);
-            } catch {}
-
             // Load Presets
             if (config.presets) setPresets(config.presets);
             setConfigLoaded(true);
@@ -82,7 +72,8 @@ const App: React.FC = () => {
              const wb = XLSX.read(content, {type:'buffer'});
              const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, blankrows:false}).slice(1) as any[][];
              const jobs: VideoJob[] = data.map((r,i) => ({
-                 id: r[0]||`job_${i}`, prompt: r[1]||'', imagePath:'', imagePath2:'', imagePath3:'',
+                 id: r[0]||`job_${i}`, prompt: r[1]||'', 
+                 imagePath: r[2]||'', imagePath2: r[3]||'', imagePath3: r[4]||'',
                  status: (['Pending','Processing','Generating','Completed','Failed'].includes(r[5])?r[5]:'Pending') as any,
                  videoName: r[6]||'', typeVideo: r[7]||'', videoPath: r[8]||undefined
              })).filter(j => j.id);
@@ -119,21 +110,40 @@ const App: React.FC = () => {
         return false;
     };
 
-    const handleKeyUpdate = (keys: ApiKey[], activeId: string | null) => {
-        setApiKeys(keys);
-        if (activeId) setActiveApiKey(keys.find(k => k.id === activeId) || null);
-        else setActiveApiKey(null);
-        if (ipcRenderer) ipcRenderer.invoke('save-app-config', { apiKeysEncrypted: encrypt(JSON.stringify(keys)), activeApiKeyId: activeId });
-    };
-
-    const handleGenerateSuccess = async (scenes: any[], formData: any) => {
+    const handleGenerateSuccess = async (scenes: any[], formData: FormData) => {
         const safeName = (formData.projectName || 'MV').replace(/[^a-z0-9_]/gi, '_');
+        
+        // Fill image paths based on the uploaded files
+        const img1 = formData.uploadedImages[0]?.name || '';
+        const img2 = formData.uploadedImages[1]?.name || '';
+        const img3 = formData.uploadedImages[2]?.name || '';
+        // Fix: formData.videoType is now defined in the updated FormData interface
+        const typeVideo = formData.videoType === 'in2v' ? 'IN2V' : '';
+
         const jobs: VideoJob[] = scenes.map((p:any,i:number) => ({
-            id: `Job_${i+1}`, prompt: p.prompt_text, status: 'Pending', videoName: `${safeName}_${i+1}`, typeVideo: '', imagePath:'', imagePath2:'', imagePath3:''
+            id: `Job_${i+1}`, 
+            prompt: p.prompt_text, 
+            status: 'Pending', 
+            videoName: `${safeName}_${i+1}`, 
+            typeVideo: typeVideo, 
+            imagePath: img1, 
+            imagePath2: img2, 
+            imagePath3: img3
         }));
         
         const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.json_to_sheet(jobs.map(j=>({JOB_ID:j.id, PROMPT:j.prompt, IMAGE_PATH:'', IMAGE_PATH_2:'', IMAGE_PATH_3:'', STATUS:'', VIDEO_NAME:j.videoName, TYPE_VIDEO:''})));
+        const wsData = jobs.map(j => ({
+            JOB_ID: j.id, 
+            PROMPT: j.prompt, 
+            IMAGE_PATH: j.imagePath, 
+            IMAGE_PATH_2: j.imagePath2, 
+            IMAGE_PATH_3: j.imagePath3, 
+            STATUS: '', 
+            VIDEO_NAME: j.videoName, 
+            TYPE_VIDEO: j.typeVideo
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(wsData);
         XLSX.utils.book_append_sheet(wb, ws, 'Prompts');
         const content = XLSX.write(wb, {bookType:'xlsx', type:'array'});
         
@@ -213,8 +223,8 @@ const App: React.FC = () => {
     
     if (!isActivated && machineId) return <Activation machineId={machineId} onActivate={handleActivate} />;
     
-    if (isActivated && (!activeApiKey || isManagingKeys)) return <ApiKeyManagerScreen apiKeys={apiKeys} onKeyAdd={k => handleKeyUpdate([...apiKeys, k], activeApiKey?.id||null)} onKeyDelete={id => handleKeyUpdate(apiKeys.filter(k=>k.id!==id), activeApiKey?.id===id?null:activeApiKey?.id||null)} onKeySelect={k => {handleKeyUpdate(apiKeys, k.id); setIsManagingKeys(false);}} />;
-
+    // Fix: Removed API Key selection screen requirement to follow GenAI security guidelines
+    
     const currentFile = trackedFiles[activeTrackerFileIndex];
     const stats = currentFile ? {
         completed: currentFile.jobs.filter(j => j.status === 'Completed').length,
@@ -246,12 +256,7 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    {activeApiKey && (
-                        <div onClick={() => setIsManagingKeys(true)} className="flex items-center gap-2 bg-red-900/50 hover:bg-red-800/80 px-4 py-2 rounded-full cursor-pointer transition border border-tet-gold/30 hover:border-tet-gold shadow-sm group">
-                            <KeyIcon className="w-4 h-4 text-tet-gold group-hover:text-white transition-colors" />
-                            <span className="text-xs font-bold text-tet-gold group-hover:text-white uppercase tracking-wide">{activeApiKey.name}</span>
-                        </div>
-                    )}
+                    {/* Removed manual KeyIcon/ApiKey management UI in compliance with GenAI guidelines */}
                     <button onClick={() => setShowStats(true)} className="p-3 bg-tet-gold hover:bg-white text-tet-red-dark hover:text-tet-red rounded-full transition shadow-md hover:shadow-lg transform hover:rotate-12 border-2 border-white" title="Thống Kê"><ChartIcon className="w-5 h-5"/></button>
                     <button onClick={() => setShowAdminLogin(true)} className="p-3 bg-tet-red hover:bg-white text-white hover:text-tet-red rounded-full transition shadow-md hover:shadow-lg transform hover:rotate-12 border-2 border-white" title="Admin"><ShieldIcon className="w-5 h-5"/></button>
                 </div>
@@ -286,7 +291,7 @@ const App: React.FC = () => {
                             
                             <div className="glass-card p-8 rounded-[40px] shadow-2xl animate-fade-in border-4 border-tet-gold/30 mb-8 bg-white/95 relative overflow-hidden">
                                 <Generator 
-                                    activeApiKey={activeApiKey} presets={presets} 
+                                    presets={presets} 
                                     onSavePresets={p => { setPresets(p); if(ipcRenderer) ipcRenderer.invoke('save-app-config', {presets:p}); }}
                                     onGenerateSuccess={handleGenerateSuccess}
                                     onFeedback={setFeedback}
@@ -309,7 +314,14 @@ const App: React.FC = () => {
                                         const newFiles = res.files.map((f:any) => {
                                             const wb = XLSX.read(f.content, {type:'buffer'});
                                             const jobs = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}).slice(1).map((r:any,i:number)=>({
-                                                id: r[0]||`Job_${i}`, status: r[5]||'Pending', videoName: r[6]||'', prompt: r[1]
+                                                id: r[0]||`Job_${i}`, 
+                                                prompt: r[1],
+                                                imagePath: r[2]||'', 
+                                                imagePath2: r[3]||'', 
+                                                imagePath3: r[4]||'',
+                                                status: r[5]||'Pending', 
+                                                videoName: r[6]||'',
+                                                typeVideo: r[7]||''
                                             }));
                                             ipcRenderer.send('start-watching-file', f.path);
                                             return { name: f.name, path: f.path, jobs };
