@@ -13,7 +13,7 @@ autoUpdater.logger = require('electron-log');
 autoUpdater.logger.transports.file.level = 'info';
 
 const fileWatchers = new Map();
-const jobStateTimestamps = new Map(); // Map<filePath, Map<jobId, { status, timestamp }>>
+const jobStateTimestamps = new Map(); 
 const fileJobStates = new Map();
 
 const userDataPath = app.getPath('userData');
@@ -21,28 +21,23 @@ const configPath = path.join(userDataPath, 'app-config.json');
 const statsPath = path.join(userDataPath, 'stats.json'); 
 let mainWindow;
 
-// --- Admin Credentials ---
 const ADMIN_CREDENTIALS = {
     username: 'bescuong',
     password: '285792684'
 };
 
 /**
- * ORIGINAL MECHANISM: Get Stable Hardware ID
- * This version uses native OS commands to retrieve a persistent UUID.
+ * CƠ CHẾ GỐC: Lấy UUID phần cứng để làm Machine ID ổn định
  */
 function getSystemId() {
     try {
         let id = '';
         if (process.platform === 'win32') {
-            // Get UUID via WMIC on Windows
             const output = execSync('wmic csproduct get uuid').toString();
             id = output.split('\n')[1]?.trim();
         } else if (process.platform === 'darwin') {
-            // Get UUID via ioreg on macOS
             id = execSync("ioreg -rd1 -c IOPlatformExpertDevice | grep -E 'IOPlatformUUID' | awk '{print $3}' | tr -d '\"'").toString().trim();
         } else {
-            // Fallback for Linux/Other
             id = execSync('cat /var/lib/dbus/machine-id || cat /etc/machine-id').toString().trim();
         }
         return id || null;
@@ -57,7 +52,6 @@ function readConfig() {
     const hardwareId = getSystemId();
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      // Always prioritize the current hardware ID to ensure stability across reinstalls
       if (hardwareId) {
           config.machineId = hardwareId;
       } else if (!config.machineId) {
@@ -175,37 +169,30 @@ function scanVideosInternal(jobs, excelFilePath) {
 }
 
 function syncStatsAndState(filePath, jobs, explicitInit = false) {
-    let isFirstTimeSeeingFile = false;
     if (!fileJobStates.has(filePath)) {
         fileJobStates.set(filePath, new Set());
-        isFirstTimeSeeingFile = true;
     }
     const knownCompletedSet = fileJobStates.get(filePath);
     const updatedJobs = scanVideosInternal(jobs, filePath);
-    let newCompletionCount = 0;
     updatedJobs.forEach(job => {
         const hasVideo = !!job.videoPath;
         const jobId = job.id;
         if (hasVideo) {
             if (!knownCompletedSet.has(jobId)) {
                 knownCompletedSet.add(jobId);
-                if (!explicitInit && !isFirstTimeSeeingFile) {
-                    incrementDailyStat();
-                    newCompletionCount++;
-                }
+                if (!explicitInit) incrementDailyStat();
             }
         } else {
             if (knownCompletedSet.has(jobId)) knownCompletedSet.delete(jobId);
         }
     });
-    return { updatedJobs, newCompletionCount };
+    return { updatedJobs };
 }
 
-const isPackaged = app.isPackaged;
 function getFfmpegPath() {
     const binary = 'ffmpeg';
     const binaryName = process.platform === 'win32' ? `${binary}.exe` : binary;
-    const basePath = isPackaged ? path.join(process.resourcesPath, 'ffmpeg') : path.join(__dirname, 'resources', 'ffmpeg');
+    const basePath = app.isPackaged ? path.join(process.resourcesPath, 'ffmpeg') : path.join(__dirname, 'resources', 'ffmpeg');
     const platformFolder = process.platform === 'win32' ? 'win' : 'mac';
     return path.join(basePath, platformFolder, binaryName);
 }
@@ -213,7 +200,6 @@ function getFfmpegPath() {
 function parseExcelData(data) {
     try {
         const workbook = XLSX.read(data, { type: 'buffer' });
-        if (!workbook.SheetNames || workbook.SheetNames.length === 0) return [];
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const dataAsArrays = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false });
         if (!dataAsArrays || dataAsArrays.length < 2) return [];
