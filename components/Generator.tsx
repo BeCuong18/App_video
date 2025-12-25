@@ -1,3 +1,4 @@
+
 import React, { useState, ChangeEvent, useEffect } from 'react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { FormData, Scene, MvGenre, Preset, StatsData } from '../types';
@@ -27,7 +28,8 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
     const [formData, setFormData] = useState<FormData>({
         idea: '', in2vAtmosphere: '', uploadedImages: [null, null, null], liveArtistName: '', liveArtist: '',
         songMinutes: '3', songSeconds: '30', projectName: '',
-        model: 'gemini-3-pro-preview', mvGenre: 'narrative', filmingStyle: 'auto',
+        model: 'gemini-3-flash-preview', 
+        mvGenre: 'narrative', filmingStyle: 'auto',
         country: 'Việt Nam', musicGenre: 'V-Pop', customMusicGenre: '',
         characterConsistency: true, characterCount: 1, temperature: 0.7
     });
@@ -278,9 +280,9 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                 <div className="flex flex-1 gap-3 items-center">
                      <div className="relative shrink-0">
                         <select name="model" value={formData.model} onChange={handleInputChange} className="rounded-2xl p-2 pr-20 text-[10px] border-2 border-stone-100 focus:border-tet-red bg-tet-cream font-black uppercase">
-                            <option value="gemini-3-pro-preview">Gemini 3 Pro (Creative Expert)</option>
-                            <option value="gemini-3-flash-preview">Gemini 3 Flash (Fast)</option>
-                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                            <option value="gemini-3-flash-preview">Gemini 3 Flash (Miễn phí & Nhanh)</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Ổn định)</option>
+                            <option value="gemini-3-pro-preview">Gemini 3 Pro (Chất lượng cao - Trả phí)</option>
                         </select>
                         <div className={`absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 rounded-lg text-[8px] font-black ${modelUsageCount >= 18 ? 'bg-red-500 text-white' : 'bg-tet-gold text-tet-brown'} border border-white shadow-sm pointer-events-none`}>
                             {modelUsageCount}/20
