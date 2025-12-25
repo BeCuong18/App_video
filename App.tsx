@@ -7,7 +7,7 @@ import { StatsModal, AdminLoginModal, AlertModal } from './components/AppModals'
 import { Generator } from './components/Generator';
 import { Tracker } from './components/Tracker';
 import { ApiKeyManagerScreen } from './components/ApiKeyManager';
-import { ChartIcon, ShieldIcon, KeyIcon } from './components/Icons';
+import { ChartIcon, ShieldIcon, KeyIcon, FolderIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron && (window as any).require ? (window as any).require('electron').ipcRenderer : null;
@@ -66,7 +66,6 @@ const App: React.FC = () => {
                 activeId = config.activeApiKeyId || (savedKeys[0]?.id || '');
             }
 
-            // MIGRATION: Kiểm tra dữ liệu cũ từ localStorage
             const localLicense = localStorage.getItem('license-key');
             if (!currentLicense && localLicense) {
                 currentLicense = localLicense;
@@ -239,13 +238,12 @@ const App: React.FC = () => {
             prompt: p.prompt_text, 
             status: 'Pending', 
             videoName: `${safeName}_${i+1}`, 
-            typeVideo: detectedType,
+            typeVideo: detectedType === 'IN2V' ? 'IN2V' : '', 
             imagePath: formData.uploadedImages[0]?.name || '', 
             imagePath2: formData.uploadedImages[1]?.name || '', 
             imagePath3: formData.uploadedImages[2]?.name || ''
         }));
         
-        // Cập nhật: STATUS được để trống '' thay vì 'Pending' trong file Excel
         const wsData = jobs.map(j => ({
             JOB_ID: j.id, PROMPT: j.prompt, IMAGE_PATH: j.imagePath, IMAGE_PATH_2: j.imagePath2, IMAGE_PATH_3: j.imagePath3, 
             STATUS: '', VIDEO_NAME: j.videoName, TYPE_VIDEO: j.typeVideo
@@ -290,6 +288,15 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
+                    {/* Thêm ô hiển thị tổng số file excel đang theo dõi */}
+                    <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-2xl border-2 border-white/30 mr-2">
+                        <FolderIcon className="w-5 h-5 text-tet-gold" />
+                        <div className="text-left">
+                            <div className="text-[8px] text-white/70 font-black uppercase tracking-widest">Dự án theo dõi</div>
+                            <div className="text-sm font-black text-white leading-none">{trackedFiles.length} File Excel</div>
+                        </div>
+                    </div>
+
                     <div className="hidden md:block mr-2 text-right">
                         <div className="text-[10px] text-white/70 font-bold uppercase tracking-widest">API Active</div>
                         <div className="text-xs font-black text-tet-gold truncate max-w-[120px]">{activeApiKey?.name || 'Chưa chọn'}</div>

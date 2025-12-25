@@ -195,12 +195,12 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
                     </div>
                 </div>
 
-                {/* Combine Actions */}
+                {/* Combine Actions - Tăng kích thước các nút */}
                 {props.ffmpegFound && (
-                    <div className="px-6 py-2 bg-white/40 border-b border-stone-200 flex gap-2 overflow-x-auto">
-                        <button onClick={() => props.onCombine('normal')} disabled={props.isCombining} className="bg-tet-green text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm hover:brightness-110 disabled:opacity-50 transition whitespace-nowrap">Ghép Thường</button>
-                        <button onClick={() => props.onCombine('timed')} disabled={props.isCombining} className="bg-blue-500 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm hover:brightness-110 disabled:opacity-50 transition whitespace-nowrap">Ghép Theo Nhạc</button>
-                        <button onClick={props.onCombineAll} disabled={props.isCombining} className="bg-tet-gold text-tet-brown px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm hover:brightness-110 disabled:opacity-50 transition whitespace-nowrap">Ghép Tất Cả</button>
+                    <div className="px-8 py-4 bg-white/40 border-b border-stone-200 flex gap-4 overflow-x-auto items-center">
+                        <button onClick={() => props.onCombine('normal')} disabled={props.isCombining} className="bg-tet-green text-white px-8 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-md hover:brightness-110 disabled:opacity-50 transition-all transform hover:scale-[1.02] active:scale-95 whitespace-nowrap border-2 border-white">🧧 Ghép Thường</button>
+                        <button onClick={() => props.onCombine('timed')} disabled={props.isCombining} className="bg-blue-500 text-white px-8 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-md hover:brightness-110 disabled:opacity-50 transition-all transform hover:scale-[1.02] active:scale-95 whitespace-nowrap border-2 border-white">🎶 Ghép Theo Nhạc</button>
+                        <button onClick={props.onCombineAll} disabled={props.isCombining} className="bg-tet-gold text-tet-brown px-8 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-md hover:brightness-110 disabled:opacity-50 transition-all transform hover:scale-[1.02] active:scale-95 whitespace-nowrap border-2 border-white">🔥 Ghép Tất Cả</button>
                     </div>
                 )}
 
