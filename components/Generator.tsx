@@ -213,7 +213,9 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         const sceneCount = Math.max(3, Math.round(totalSeconds / 8));
         const systemPrompt = effectiveType === 'TEXT' ? storySystemPrompt : in2vSystemPrompt;
         
-        let userPrompt = `Idea: "${formData.idea.trim()}". Specs: Country: ${formData.country}, Genre: ${formData.mvGenre}, Music: ${formData.musicGenre}, Style: ${formData.filmingStyle}, Character Consistency: ${formData.characterConsistency}, Count: ${formData.characterCount}. Generate exactly ${sceneCount} professionally formatted scenes for an AI video model.`;
+        const musicGenreDisplay = formData.musicGenre === 'Custom' ? formData.customMusicGenre : formData.musicGenre;
+        
+        let userPrompt = `Idea: "${formData.idea.trim()}". Specs: Country: ${formData.country}, Genre: ${formData.mvGenre}, Music: ${musicGenreDisplay}, Style: ${formData.filmingStyle}, Character Consistency: ${formData.characterConsistency}, Count: ${formData.characterCount}. Generate exactly ${sceneCount} professionally formatted scenes for an AI video model.`;
 
         const parts: any[] = [{ text: userPrompt }];
         if (effectiveType === 'IN2V') {
@@ -344,6 +346,16 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
                                         <select name="musicGenre" value={formData.musicGenre} onChange={handleInputChange} className="w-full p-3 text-xs focus:border-tet-red border-2 border-stone-100 bg-tet-cream">
                                             {musicGenreOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                         </select>
+                                        {formData.musicGenre === 'Custom' && (
+                                            <input 
+                                                type="text" 
+                                                name="customMusicGenre" 
+                                                value={formData.customMusicGenre} 
+                                                onChange={handleInputChange} 
+                                                className="w-full mt-2 p-2 text-[10px] border-2 border-tet-gold/40 rounded-xl focus:border-tet-red bg-white font-bold" 
+                                                placeholder="Nhập thể loại nhạc thủ công..."
+                                            />
+                                        )}
                                     </div>
                                 </div>
                                 <div>
