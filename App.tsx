@@ -32,33 +32,74 @@ const App: React.FC = () => {
     const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
     const [activeApiKeyId, setActiveApiKeyId] = useState<string>('');
 
+    const parseApiKeys = (data: any): ApiKey[] => {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        if (typeof data === 'string') {
+            try {
+                const parsed = JSON.parse(data);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+                return [];
+            }
+        }
+        return [];
+    };
+
     useEffect(() => {
         const init = async () => {
+            let savedKeys: ApiKey[] = [];
+            let activeId = '';
+            let currentMachineId = '';
+            let currentLicense = '';
+
             if (ipcRenderer) {
                 const config = await ipcRenderer.invoke('get-app-config');
-                setMachineId(config.machineId || '');
-                setIsActivated(!!config.licenseKey);
+                currentMachineId = config.machineId || '';
+                currentLicense = config.licenseKey || '';
+                
                 if (config.presets) setPresets(config.presets);
                 
-                // Load API Keys from config
-                const savedKeys = config.apiKeys ? JSON.parse(config.apiKeys) : [];
-                setApiKeys(savedKeys);
-                setActiveApiKeyId(config.activeApiKeyId || (savedKeys[0]?.id || ''));
-                
-                // Quyết định tab khởi đầu dựa trên việc có API Key hay chưa
-                if (savedKeys.length === 0) {
-                    setActiveTab('api-manager');
-                } else {
-                    setActiveTab('generator');
-                }
-            } else {
-                // Mock mode (browser)
-                setIsActivated(true);
-                // Nếu không có API Key trong mock mode cũng chuyển sang manager
-                if (apiKeys.length === 0) {
-                    setActiveTab('api-manager');
+                const keysFromMain = parseApiKeys(config.apiKeys);
+                const keysFromEncrypted = parseApiKeys(config.apiKeysEncrypted);
+                savedKeys = keysFromMain.length > 0 ? keysFromMain : keysFromEncrypted;
+                activeId = config.activeApiKeyId || (savedKeys[0]?.id || '');
+            }
+
+            // MIGRATION: Kiểm tra dữ liệu cũ từ localStorage
+            const localLicense = localStorage.getItem('license-key');
+            if (!currentLicense && localLicense) {
+                currentLicense = localLicense;
+                if (ipcRenderer) {
+                    await ipcRenderer.invoke('save-app-config', { licenseKey: currentLicense });
                 }
             }
+
+            if (savedKeys.length === 0) {
+                const localKeys = parseApiKeys(localStorage.getItem('api-keys'));
+                if (localKeys.length > 0) {
+                    savedKeys = localKeys;
+                    activeId = savedKeys[0].id;
+                    if (ipcRenderer) {
+                        await ipcRenderer.invoke('save-app-config', {
+                            apiKeys: JSON.stringify(savedKeys),
+                            activeApiKeyId: activeId
+                        });
+                    }
+                }
+            }
+
+            setMachineId(currentMachineId);
+            setIsActivated(!!currentLicense);
+            setApiKeys(savedKeys);
+            setActiveApiKeyId(activeId);
+            
+            if (savedKeys.length === 0) {
+                setActiveTab('api-manager');
+            } else {
+                setActiveTab('generator');
+            }
+            
             setConfigLoaded(true);
         };
 
@@ -80,6 +121,20 @@ const App: React.FC = () => {
         }
     }, []); 
 
+    const handleActivate = async (key: string) => {
+        // Thực hiện logic kiểm tra key đơn giản hoặc gửi về server nếu có
+        // Ở đây chúng ta giả định mọi key > 5 ký tự là hợp lệ và lưu lại
+        if (key && key.trim().length > 5) {
+            if (ipcRenderer) {
+                await ipcRenderer.invoke('save-app-config', { licenseKey: key.trim() });
+                setIsActivated(true);
+                localStorage.setItem('license-key', key.trim());
+                return true;
+            }
+        }
+        return false;
+    };
+
     const saveApiConfig = async (newKeys: ApiKey[], activeId: string) => {
         if (ipcRenderer) {
             await ipcRenderer.invoke('save-app-config', {
@@ -87,6 +142,7 @@ const App: React.FC = () => {
                 activeApiKeyId: activeId
             });
         }
+        localStorage.setItem('api-keys', JSON.stringify(newKeys));
     };
 
     const handleKeySelect = (key: ApiKey) => {
@@ -100,15 +156,17 @@ const App: React.FC = () => {
     const handleKeyAdd = (key: ApiKey) => {
         const updated = [...apiKeys, key];
         setApiKeys(updated);
-        if (!activeApiKeyId) setActiveApiKeyId(key.id);
-        saveApiConfig(updated, activeApiKeyId || key.id);
+        const newActiveId = activeApiKeyId || key.id;
+        if (!activeApiKeyId) setActiveApiKeyId(newActiveId);
+        saveApiConfig(updated, newActiveId);
     };
 
     const handleKeyDelete = (id: string) => {
         const updated = apiKeys.filter(k => k.id !== id);
         setApiKeys(updated);
-        if (activeApiKeyId === id) setActiveApiKeyId(updated[0]?.id || '');
-        saveApiConfig(updated, activeApiKeyId === id ? (updated[0]?.id || '') : activeApiKeyId);
+        const newActiveId = activeApiKeyId === id ? (updated[0]?.id || '') : activeApiKeyId;
+        setActiveApiKeyId(newActiveId);
+        saveApiConfig(updated, newActiveId);
     };
 
     const handleReloadVideos = async () => {
@@ -203,7 +261,7 @@ const App: React.FC = () => {
     };
 
     if (!configLoaded) return <div className="h-screen bg-tet-cream flex items-center justify-center"><ShieldIcon className="animate-spin w-16 h-16 text-tet-red"/></div>;
-    if (!isActivated) return <Activation machineId={machineId} onActivate={async () => true} />;
+    if (!isActivated) return <Activation machineId={machineId} onActivate={handleActivate} />;
 
     const activeApiKey = apiKeys.find(k => k.id === activeApiKeyId);
     const currentFile = trackedFiles[activeTrackerFileIndex];
@@ -283,7 +341,9 @@ const App: React.FC = () => {
                                                 imagePath2: r[3]||'', 
                                                 imagePath3: r[4]||'',
                                                 status: r[5]||'Pending', 
+                                                // @ts-ignore
                                                 videoName: r[6]||'',
+                                                // @ts-ignore
                                                 typeVideo: r[7]||''
                                             }));
                                             ipcRenderer.send('start-watching-file', f.path);
