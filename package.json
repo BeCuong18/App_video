@@ -1,3 +1,4 @@
+
 {
   "name": "prompt-generator-pro",
   "version": "1.2.0",
@@ -6,7 +7,7 @@
   "homepage": "./",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npx tsc && vite build",
     "preview": "vite preview",
     "start": "npm run build && electron .",
     "dist": "npm run build && electron-builder --publish always"
@@ -14,9 +15,9 @@
   "author": "Prompt Generator Pro",
   "license": "UNLICENSED",
   "dependencies": {
-    "@google/genai": "^1.28.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "@google/genai": "^1.30.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
     "crypto-js": "^4.2.0",
     "xlsx": "^0.18.5",
     "electron-updater": "^6.1.8",
@@ -24,8 +25,8 @@
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
-    "@types/react": "^18.2.48",
-    "@types/react-dom": "^18.2.18",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.2.1",
     "electron": "^29.1.0",
     "electron-builder": "^24.13.3",

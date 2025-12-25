@@ -1,6 +1,6 @@
 
 // main.js
-const { app, BrowserWindow, ipcMain, dialog, shell, Menu, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
@@ -29,20 +29,25 @@ const ADMIN_CREDENTIALS = {
 
 /**
  * ORIGINAL MECHANISM: Get Stable Hardware ID
+ * This version uses native OS commands to retrieve a persistent UUID.
  */
 function getSystemId() {
     try {
         let id = '';
         if (process.platform === 'win32') {
-            id = execSync('wmic csproduct get uuid').toString().split('\n')[1].trim();
+            // Get UUID via WMIC on Windows
+            const output = execSync('wmic csproduct get uuid').toString();
+            id = output.split('\n')[1]?.trim();
         } else if (process.platform === 'darwin') {
+            // Get UUID via ioreg on macOS
             id = execSync("ioreg -rd1 -c IOPlatformExpertDevice | grep -E 'IOPlatformUUID' | awk '{print $3}' | tr -d '\"'").toString().trim();
         } else {
+            // Fallback for Linux/Other
             id = execSync('cat /var/lib/dbus/machine-id || cat /etc/machine-id').toString().trim();
         }
-        return id || 'UNKNOWN_HARDWARE_ID';
+        return id || null;
     } catch (e) {
-        console.error("Failed to get hardware ID, falling back to random/file ID", e);
+        console.error("Failed to get hardware ID", e);
         return null;
     }
 }
@@ -52,7 +57,7 @@ function readConfig() {
     const hardwareId = getSystemId();
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      // If we have a hardware ID, we always prioritize it to keep it "original" and stable
+      // Always prioritize the current hardware ID to ensure stability across reinstalls
       if (hardwareId) {
           config.machineId = hardwareId;
       } else if (!config.machineId) {
@@ -72,6 +77,7 @@ function readConfig() {
 
 function writeConfig(config) {
   try {
+    if (!fs.existsSync(userDataPath)) fs.mkdirSync(userDataPath, { recursive: true });
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
   } catch (error) {
     console.error('Error writing config file:', error);
@@ -91,6 +97,7 @@ function readStats() {
 
 function writeStats(stats) {
     try {
+        if (!fs.existsSync(userDataPath)) fs.mkdirSync(userDataPath, { recursive: true });
         fs.writeFileSync(statsPath, JSON.stringify(stats, null, 2));
     } catch (e) {
         console.error("Error writing stats:", e);
@@ -112,7 +119,6 @@ function incrementPromptCount(modelName, apiKeyId) {
     if (typeof stats.promptCount !== 'number') stats.promptCount = 0;
     stats.promptCount += 1;
 
-    // Track per model & per key
     if (!stats.modelUsage) stats.modelUsage = {};
     if (!stats.modelUsage[apiKeyId]) stats.modelUsage[apiKeyId] = {};
     if (!stats.modelUsage[apiKeyId][modelName]) stats.modelUsage[apiKeyId][modelName] = 0;
