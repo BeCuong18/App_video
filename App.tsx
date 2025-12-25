@@ -51,6 +51,64 @@ const App: React.FC = () => {
         ipcRenderer.invoke('check-ffmpeg').then((res:any) => setFfmpegFound(res.found));
     }, []); 
 
+    const handleReloadVideos = async () => {
+        if (!ipcRenderer) return;
+        setTrackedFiles(prev => {
+            prev.forEach(file => {
+                if (file.path) {
+                    ipcRenderer.invoke('find-videos-for-jobs', { jobs: file.jobs, excelFilePath: file.path })
+                        .then((res:any) => {
+                             if(res.success && JSON.stringify(res.jobs) !== JSON.stringify(file.jobs)) {
+                                 setTrackedFiles(curr => curr.map(f => f.path === file.path ? {...f, jobs: res.jobs} : f));
+                             }
+                        });
+                }
+            });
+            return prev;
+        });
+    };
+
+    const handleCombine = async (mode: 'normal' | 'timed') => {
+        const file = trackedFiles[activeTrackerFileIndex];
+        if (!file || !file.path || !ipcRenderer) return;
+        setIsCombining(true);
+        setFeedback({type:'info', message:'Đang ghép video...'});
+        const completed = file.jobs.filter(j => j.status === 'Completed' && j.videoPath);
+        if (completed.length === 0) { setIsCombining(false); setFeedback({type:'error', message:'Chưa có video nào hoàn thành'}); return; }
+        
+        try {
+            const res = await ipcRenderer.invoke('execute-ffmpeg-combine', {
+                jobs: completed, targetDuration: file.targetDurationSeconds, mode, excelFileName: file.name
+            });
+            if (res.success) setFeedback({type:'success', message:'Ghép video thành công!'});
+            else if (res.error) setFeedback({type:'error', message: res.error});
+            else setFeedback(null);
+        } catch (e:any) { setFeedback({type:'error', message:e.message}); }
+        setIsCombining(false);
+    };
+
+    const handleCombineAll = async () => {
+        if (!ipcRenderer) return;
+        setIsCombining(true);
+        const filesToProcess = trackedFiles.filter(f => f.jobs.some(j => j.status === 'Completed' && j.videoPath))
+            .map(f => ({ name: f.name, jobs: f.jobs.filter(j=>j.status==='Completed' && j.videoPath) }));
+        
+        const res = await ipcRenderer.invoke('execute-ffmpeg-combine-all', filesToProcess);
+        if (!res.canceled) {
+            setFeedback({ type: res.failures.length ? 'error' : 'success', message: `Đã ghép xong. Thành công: ${res.successes.length}, Lỗi: ${res.failures.length}` });
+        } else setFeedback({type:'info', message:'Đã hủy'});
+        setIsCombining(false);
+    };
+
+    const handleSetToolFlowPath = async () => {
+        if (ipcRenderer) {
+            const res = await ipcRenderer.invoke('set-tool-flow-path');
+            if (res.success) {
+                setFeedback({type:'success', message:'Đã cập nhật đường dẫn ToolFlows'});
+            }
+        }
+    };
+
     const handleGenerateSuccess = async (scenes: any[], formData: FormData) => {
         const safeName = (formData.projectName || 'MV').replace(/[^a-z0-9_]/gi, '_');
         const jobs: VideoJob[] = scenes.map((p,i) => ({
@@ -87,6 +145,13 @@ const App: React.FC = () => {
     if (!configLoaded) return <div className="h-screen bg-tet-cream flex items-center justify-center"><ShieldIcon className="animate-spin w-16 h-16 text-tet-red"/></div>;
     if (!isActivated) return <Activation machineId={machineId} onActivate={async () => true} />;
 
+    const currentFile = trackedFiles[activeTrackerFileIndex];
+    const stats = currentFile ? {
+        completed: currentFile.jobs.filter(j => j.status === 'Completed').length,
+        inProgress: currentFile.jobs.filter(j => ['Processing','Generating'].includes(j.status)).length,
+        total: currentFile.jobs.length
+    } : null;
+
     return (
         <div className="h-screen overflow-hidden flex flex-col font-sans text-tet-brown">
             <header className="px-8 py-3 bg-gradient-to-r from-tet-red-dark via-tet-red to-tet-red-dark border-b-4 border-tet-gold shadow-lg flex justify-between items-center z-50 rounded-b-[40px] mx-4 mt-2 shrink-0">
@@ -117,10 +182,63 @@ const App: React.FC = () => {
                     ) : (
                         <Tracker 
                             trackedFiles={trackedFiles} activeFileIndex={activeTrackerFileIndex} setActiveFileIndex={setActiveTrackerFileIndex} 
-                            onOpenFile={() => {}} onCloseFile={() => {}} stats={{}} ffmpegFound={ffmpegFound} isCombining={isCombining}
-                            onPlayVideo={() => {}} onShowFolder={() => {}} onOpenToolFlows={() => {}} onSetToolFlowPath={() => {}}
-                            onReloadVideos={() => {}} onRetryStuck={() => {}} onRetryJob={() => {}} onDeleteVideo={() => {}}
-                            onCombine={() => {}} onCombineAll={() => {}} onLinkVideo={() => {}}
+                            onOpenFile={async () => {
+                                if(ipcRenderer) {
+                                    const res = await ipcRenderer.invoke('open-file-dialog');
+                                    if(res.success) {
+                                        const newFiles = res.files.map((f:any) => {
+                                            const wb = XLSX.read(f.content, {type:'buffer'});
+                                            const jobs = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}).slice(1).map((r:any,i:number)=>({
+                                                id: r[0]||`Job_${i}`, 
+                                                prompt: r[1],
+                                                imagePath: r[2]||'', 
+                                                imagePath2: r[3]||'', 
+                                                imagePath3: r[4]||'',
+                                                status: r[5]||'Pending', 
+                                                videoName: r[6]||'',
+                                                typeVideo: r[7]||''
+                                            }));
+                                            ipcRenderer.send('start-watching-file', f.path);
+                                            return { name: f.name, path: f.path, jobs };
+                                        });
+                                        setTrackedFiles(prev => [...prev, ...newFiles]);
+                                    }
+                                }
+                            }} 
+                            onCloseFile={(idx) => {
+                                const f = trackedFiles[idx];
+                                if(f.path && ipcRenderer) ipcRenderer.send('stop-watching-file', f.path);
+                                setTrackedFiles(p => p.filter((_,i) => i !== idx));
+                                if(activeTrackerFileIndex >= idx) setActiveTrackerFileIndex(Math.max(0, activeTrackerFileIndex - 1));
+                            }} 
+                            stats={stats} ffmpegFound={ffmpegFound} isCombining={isCombining}
+                            onPlayVideo={(path) => ipcRenderer && ipcRenderer.send('open-video-path', path)} 
+                            onShowFolder={(path) => ipcRenderer && ipcRenderer.send('open-folder', path.substring(0, path.lastIndexOf(navigator.userAgent.includes("Windows")?'\\':'/')))} 
+                            onOpenToolFlows={() => ipcRenderer && ipcRenderer.invoke('open-tool-flow')} 
+                            onSetToolFlowPath={handleSetToolFlowPath}
+                            onReloadVideos={handleReloadVideos} 
+                            onRetryStuck={() => currentFile?.path && ipcRenderer.invoke('retry-stuck-jobs', {filePath: currentFile.path})} 
+                            onRetryJob={(id) => currentFile?.path && ipcRenderer.invoke('retry-job', {filePath: currentFile.path, jobId: id})} 
+                            onDeleteVideo={async (_id, path) => {
+                                if(ipcRenderer) {
+                                    const res = await ipcRenderer.invoke('delete-video-file', path);
+                                    if(res.success) handleReloadVideos();
+                                }
+                            }}
+                            onCombine={handleCombine} 
+                            onCombineAll={handleCombineAll} 
+                            onLinkVideo={async (id, idx) => {
+                                if(ipcRenderer) {
+                                    const res = await ipcRenderer.invoke('open-video-file-dialog');
+                                    if(res.success) {
+                                        setTrackedFiles(prev => {
+                                            const next = [...prev];
+                                            next[idx].jobs = next[idx].jobs.map(j => j.id === id ? {...j, videoPath: res.path, status: 'Completed'} : j);
+                                            return next;
+                                        });
+                                    }
+                                }
+                            }}
                         />
                     )}
                 </div>

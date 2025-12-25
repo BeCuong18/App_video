@@ -163,7 +163,6 @@ export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, on
         let userPrompt = `Mode: ${formData.videoType}. Input Idea/Lyrics: "${formData.idea.trim()}". Specs: Nationality: ${formData.country}, Genre: ${formData.mvGenre}, Style: ${formData.filmingStyle}, Music Genre: ${formData.musicGenre === 'other' ? formData.customMusicGenre : formData.musicGenre}. Generate exactly ${sceneCount} scenes. Character Consistency Enforced: ${formData.characterConsistency}, Number of Characters: ${formData.characterCount}.`;
 
         const parts: any[] = [{ text: userPrompt }];
-        // Only provide images to Gemini in IN2V mode
         if (formData.videoType === 'in2v') {
             formData.uploadedImages.forEach((img, i) => {
                 if (img) {
