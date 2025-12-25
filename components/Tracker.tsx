@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { TrackedFile, VideoJob, JobStatus } from '../types';
-import { PlayIcon, FolderIcon, TrashIcon, RetryIcon, ExternalLinkIcon, UploadIcon, LoaderIcon, LinkIcon } from './Icons';
+import { PlayIcon, FolderIcon, TrashIcon, RetryIcon, ExternalLinkIcon, UploadIcon, LoaderIcon, LinkIcon, CogIcon } from './Icons';
 
 interface TrackerProps {
     trackedFiles: TrackedFile[];
@@ -57,13 +57,12 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
         if (!imgName || !currentFile?.path) return null;
         const separator = currentFile.path.includes('\\') ? '\\' : '/';
         const dir = currentFile.path.substring(0, currentFile.path.lastIndexOf(separator));
-        // Electron allows local file access if formatted correctly, or we assume images are in the same folder
         return `file://${dir}${separator}${imgName}`;
     };
 
     const renderSourceImages = (job: VideoJob) => {
         const images = [job.imagePath, job.imagePath2, job.imagePath3].filter(Boolean);
-        if (images.length === 0) return <span className="text-[10px] text-stone-300 italic">No image</span>;
+        if (images.length === 0) return <span className="text-[10px] text-stone-300 italic">Không có ảnh</span>;
 
         return (
             <div className="flex -space-x-2 hover:space-x-1 transition-all">
@@ -117,7 +116,7 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
             );
         }
         if (job.status === 'Processing' || job.status === 'Generating') return <div className="flex justify-center"><LoaderIcon /></div>;
-        return <span className="text-stone-300 text-[10px] font-bold">WAITING...</span>;
+        return <span className="text-stone-300 text-[10px] font-bold italic">CHỜ XỬ LÝ...</span>;
     };
 
     if (trackedFiles.length === 0) {
@@ -169,22 +168,28 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
                             <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block">Hoàn thành</span>
                             <span className="text-xl font-black text-tet-green">{stats?.completed || 0}/{stats?.total || 0}</span>
                         </div>
-                        <button onClick={props.onReloadVideos} className="p-3 bg-white hover:bg-stone-50 text-blue-500 rounded-2xl border-2 border-stone-100 shadow-sm transition" title="Tải lại video">
-                            <RetryIcon className="w-5 h-5"/>
+                        <button onClick={props.onReloadVideos} className="px-4 py-2.5 bg-white hover:bg-stone-50 text-blue-500 rounded-2xl border-2 border-stone-100 shadow-sm transition flex items-center gap-2 font-black text-[10px] uppercase tracking-widest">
+                            <RetryIcon className="w-4 h-4"/> TẢI LẠI VIDEO
                         </button>
-                        <button onClick={props.onRetryStuck} className="p-3 bg-white hover:bg-stone-50 text-amber-500 rounded-2xl border-2 border-stone-100 shadow-sm transition" title="Reset lỗi">
-                            <ExternalLinkIcon className="w-5 h-5"/>
+                        <button onClick={props.onRetryStuck} className="px-4 py-2.5 bg-white hover:bg-stone-50 text-amber-500 rounded-2xl border-2 border-stone-100 shadow-sm transition flex items-center gap-2 font-black text-[10px] uppercase tracking-widest">
+                            <ExternalLinkIcon className="w-4 h-4"/> RESET LỖI
                         </button>
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <button onClick={props.onOpenToolFlows} className="bg-tet-red hover:bg-tet-red-dark text-white px-5 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest border-2 border-white shadow-md flex items-center gap-2">
-                            <PlayIcon className="w-3 h-3"/> MỞ TOOLFLOWS
+                        <div className="flex items-center bg-tet-red rounded-2xl border-2 border-white shadow-md overflow-hidden">
+                            <button onClick={props.onOpenToolFlows} className="hover:bg-tet-red-dark text-white px-5 py-2.5 font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-colors">
+                                <PlayIcon className="w-3 h-3"/> MỞ TOOLFLOWS
+                            </button>
+                            <div className="w-px h-6 bg-white/30"></div>
+                            <button onClick={props.onSetToolFlowPath} className="hover:bg-tet-red-dark text-white p-2.5 transition-colors" title="Cài đặt đường dẫn Tool">
+                                <CogIcon className="w-4 h-4"/>
+                            </button>
+                        </div>
+                        <button onClick={() => props.onShowFolder(currentFile.path!)} className="bg-stone-200 hover:bg-stone-300 text-stone-600 px-4 py-2.5 rounded-2xl transition flex items-center gap-2 font-black text-[10px] uppercase tracking-widest">
+                            <FolderIcon className="w-4 h-4"/> THƯ MỤC
                         </button>
-                        <button onClick={() => props.onShowFolder(currentFile.path!)} className="bg-stone-200 hover:bg-stone-300 text-stone-600 p-2.5 rounded-2xl transition" title="Mở thư mục">
-                            <FolderIcon className="w-5 h-5"/>
-                        </button>
-                        <button onClick={handleCopyPath} className="bg-stone-200 hover:bg-tet-gold hover:text-white text-stone-600 px-4 py-2.5 rounded-2xl font-black text-[10px] transition">
+                        <button onClick={handleCopyPath} className="bg-stone-200 hover:bg-tet-gold hover:text-white text-stone-600 px-4 py-2.5 rounded-2xl font-black text-[10px] transition uppercase tracking-widest">
                             {copyFeedback ? 'ĐÃ COPY' : 'COPY PATH'}
                         </button>
                     </div>
@@ -192,9 +197,10 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
 
                 {/* Combine Actions */}
                 {props.ffmpegFound && (
-                    <div className="px-6 py-2 bg-white/40 border-b border-stone-200 flex gap-2">
-                        <button onClick={() => props.onCombine('normal')} disabled={props.isCombining} className="bg-tet-green text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm hover:brightness-110 disabled:opacity-50 transition">Ghép Thường</button>
-                        <button onClick={() => props.onCombine('timed')} disabled={props.isCombining} className="bg-blue-500 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm hover:brightness-110 disabled:opacity-50 transition">Ghép Theo Nhạc</button>
+                    <div className="px-6 py-2 bg-white/40 border-b border-stone-200 flex gap-2 overflow-x-auto">
+                        <button onClick={() => props.onCombine('normal')} disabled={props.isCombining} className="bg-tet-green text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm hover:brightness-110 disabled:opacity-50 transition whitespace-nowrap">Ghép Thường</button>
+                        <button onClick={() => props.onCombine('timed')} disabled={props.isCombining} className="bg-blue-500 text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm hover:brightness-110 disabled:opacity-50 transition whitespace-nowrap">Ghép Theo Nhạc</button>
+                        <button onClick={props.onCombineAll} disabled={props.isCombining} className="bg-tet-gold text-tet-brown px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm hover:brightness-110 disabled:opacity-50 transition whitespace-nowrap">Ghép Tất Cả</button>
                     </div>
                 )}
 
@@ -205,10 +211,10 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
                             <tr className="border-b-2 border-stone-200">
                                 <th className="px-4 py-3 text-[10px] font-black text-stone-400 uppercase tracking-widest w-16">ID</th>
                                 <th className="px-4 py-3 text-[10px] font-black text-stone-400 uppercase tracking-widest w-28">Trạng thái</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-stone-400 uppercase tracking-widest w-40">Ảnh gốc</th>
                                 <th className="px-4 py-3 text-[10px] font-black text-stone-400 uppercase tracking-widest">Tên Video</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-stone-400 uppercase tracking-widest w-48 text-center">Kết quả</th>
-                                <th className="px-4 py-3 text-[10px] font-black text-stone-400 uppercase tracking-widest w-24 text-center">Xử lý</th>
+                                <th className="px-4 py-3 text-[10px] font-black text-stone-400 uppercase tracking-widest w-40 text-center">Kết quả</th>
+                                <th className="px-4 py-3 text-[10px] font-black text-stone-400 uppercase tracking-widest w-40 text-center">Ảnh gốc</th>
+                                <th className="px-4 py-3 text-[10px] font-black text-stone-400 uppercase tracking-widest w-36 text-center">Xử lý</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-stone-100">
@@ -216,18 +222,26 @@ export const Tracker: React.FC<TrackerProps> = (props) => {
                                 <tr key={job.id} className="hover:bg-white/60 transition-colors group">
                                     <td className="px-4 py-4 font-black text-xs text-stone-400">{job.id.replace('Job_', '')}</td>
                                     <td className="px-4 py-4"><span className={getStatusBadge(job.status)}>{job.status}</span></td>
-                                    <td className="px-4 py-4">{renderSourceImages(job)}</td>
                                     <td className="px-4 py-4">
-                                        <div className="text-[11px] font-bold text-tet-brown truncate max-w-[200px]" title={job.videoName}>{job.videoName}</div>
+                                        <div className="text-[11px] font-bold text-tet-brown truncate max-w-[250px]" title={job.videoName}>{job.videoName}</div>
                                         <div className="text-[9px] text-stone-400 font-mono mt-1 uppercase">{job.typeVideo}</div>
                                     </td>
                                     <td className="px-4 py-4">{renderResultCell(job)}</td>
                                     <td className="px-4 py-4">
+                                        <div className="flex justify-center">
+                                            {renderSourceImages(job)}
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-4">
                                         <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                             {job.videoPath && (
-                                                <button onClick={() => props.onDeleteVideo(job.id, job.videoPath!)} className="p-2 bg-red-50 text-red-400 rounded-lg hover:bg-red-100 transition"><TrashIcon className="w-3.5 h-3.5"/></button>
+                                                <button onClick={() => props.onDeleteVideo(job.id, job.videoPath!)} className="px-2 py-1.5 bg-red-50 text-red-400 rounded-lg hover:bg-red-100 transition flex items-center gap-1 font-black text-[8px] uppercase tracking-tighter">
+                                                    <TrashIcon className="w-3 h-3"/> XÓA
+                                                </button>
                                             )}
-                                            <button onClick={() => props.onRetryJob(job.id)} className="p-2 bg-stone-100 text-stone-500 rounded-lg hover:bg-stone-200 transition"><RetryIcon className="w-3.5 h-3.5"/></button>
+                                            <button onClick={() => props.onRetryJob(job.id)} className="px-2 py-1.5 bg-stone-100 text-stone-500 rounded-lg hover:bg-stone-200 transition flex items-center gap-1 font-black text-[8px] uppercase tracking-tighter">
+                                                <RetryIcon className="w-3 h-3"/> THỬ LẠI
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>

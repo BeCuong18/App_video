@@ -122,8 +122,6 @@ const App: React.FC = () => {
     }, []); 
 
     const handleActivate = async (key: string) => {
-        // Thực hiện logic kiểm tra key đơn giản hoặc gửi về server nếu có
-        // Ở đây chúng ta giả định mọi key > 5 ký tự là hợp lệ và lưu lại
         if (key && key.trim().length > 5) {
             if (ipcRenderer) {
                 await ipcRenderer.invoke('save-app-config', { licenseKey: key.trim() });
@@ -150,7 +148,7 @@ const App: React.FC = () => {
         saveApiConfig(apiKeys, key.id);
         setActiveTab('generator');
         setFeedback({ type: 'success', message: `Đã chọn API Key: ${key.name}` });
-        setTimeout(() => setFeedback(null), 2000);
+        setTimeout(() => setFeedback(null), 3000);
     };
 
     const handleKeyAdd = (key: ApiKey) => {
@@ -208,11 +206,18 @@ const App: React.FC = () => {
     const handleCombineAll = async () => {
         if (!ipcRenderer) return;
         setIsCombining(true);
+        setFeedback({type:'info', message:'Đang bắt đầu ghép tất cả...'});
         const filesToProcess = trackedFiles.filter(f => f.jobs.some(j => j.status === 'Completed' && j.videoPath))
             .map(f => ({ name: f.name, jobs: f.jobs.filter(j=>j.status==='Completed' && j.videoPath) }));
         
+        if (filesToProcess.length === 0) {
+            setIsCombining(false);
+            setFeedback({type:'error', message:'Không tìm thấy video nào đã hoàn thành để ghép.'});
+            return;
+        }
+
         const res = await ipcRenderer.invoke('execute-ffmpeg-combine-all', filesToProcess);
-        if (!res.canceled) {
+        if (res && !res.canceled) {
             setFeedback({ type: res.failures.length ? 'error' : 'success', message: `Đã ghép xong. Thành công: ${res.successes.length}, Lỗi: ${res.failures.length}` });
         } else setFeedback({type:'info', message:'Đã hủy'});
         setIsCombining(false);
@@ -240,9 +245,10 @@ const App: React.FC = () => {
             imagePath3: formData.uploadedImages[2]?.name || ''
         }));
         
+        // Cập nhật: STATUS được để trống '' thay vì 'Pending' trong file Excel
         const wsData = jobs.map(j => ({
             JOB_ID: j.id, PROMPT: j.prompt, IMAGE_PATH: j.imagePath, IMAGE_PATH_2: j.imagePath2, IMAGE_PATH_3: j.imagePath3, 
-            STATUS: j.status, VIDEO_NAME: j.videoName, TYPE_VIDEO: j.typeVideo
+            STATUS: '', VIDEO_NAME: j.videoName, TYPE_VIDEO: j.typeVideo
         }));
 
         const wb = XLSX.utils.book_new();
@@ -341,9 +347,7 @@ const App: React.FC = () => {
                                                 imagePath2: r[3]||'', 
                                                 imagePath3: r[4]||'',
                                                 status: r[5]||'Pending', 
-                                                // @ts-ignore
                                                 videoName: r[6]||'',
-                                                // @ts-ignore
                                                 typeVideo: r[7]||''
                                             }));
                                             ipcRenderer.send('start-watching-file', f.path);
@@ -393,8 +397,15 @@ const App: React.FC = () => {
             </div>
 
             {feedback && (
-                <div className="fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-3xl shadow-2xl bg-white border-2 border-tet-gold z-[200] animate-bounce-slow">
-                    <span className="font-bold">{feedback.message}</span>
+                <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-8 py-4 rounded-3xl shadow-2xl bg-white border-2 flex items-center gap-4 z-[200] animate-bounce-slow ${feedback.type === 'error' ? 'border-red-500' : 'border-tet-gold'}`}>
+                    <span className={`font-bold ${feedback.type === 'error' ? 'text-red-500' : 'text-stone-700'}`}>{feedback.message}</span>
+                    <button 
+                        onClick={() => setFeedback(null)} 
+                        className="p-1 hover:bg-stone-100 rounded-full transition-colors text-stone-400 font-bold ml-2"
+                        title="Đóng thông báo"
+                    >
+                        ✕
+                    </button>
                 </div>
             )}
             {showStats && <StatsModal onClose={() => setShowStats(false)} isAdmin={isAdminLoggedIn} activeApiKeyId={activeApiKeyId} />}
