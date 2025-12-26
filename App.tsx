@@ -28,16 +28,25 @@ const App: React.FC = () => {
     const [ffmpegFound, setFfmpegFound] = useState<boolean | null>(null);
     const [isCombining, setIsCombining] = useState(false);
     
+    // Form Data Persistent State (Giữ dữ liệu khi chuyển tab)
+    const [generatorFormData, setGeneratorFormData] = useState<FormData>({
+        idea: '', in2vAtmosphere: '', uploadedImages: [null, null, null], liveArtistName: '', liveArtist: '',
+        songMinutes: '3', songSeconds: '30', projectName: '',
+        model: 'gemini-3-flash-preview', 
+        mvGenre: 'narrative', filmingStyle: 'auto',
+        country: 'Việt Nam', musicGenre: 'V-Pop', customMusicGenre: '',
+        characterConsistency: true, characterCount: 1, temperature: 0.7
+    });
+
     // API Key States
     const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
     const [activeApiKeyId, setActiveApiKeyId] = useState<string>('');
 
-    // Logic tự động ẩn thông báo sau 10 giây
     useEffect(() => {
         if (feedback) {
             const timer = setTimeout(() => {
                 setFeedback(null);
-            }, 10000); // 10 giây
+            }, 10000); 
             return () => clearTimeout(timer);
         }
     }, [feedback]);
@@ -75,7 +84,6 @@ const App: React.FC = () => {
                 savedKeys = keysFromMain.length > 0 ? keysFromMain : keysFromEncrypted;
                 activeId = config.activeApiKeyId || (savedKeys[0]?.id || '');
 
-                // Đăng ký nhận thông báo Alert từ System (Ví dụ: Cập nhật ứng dụng)
                 ipcRenderer.on('show-alert-modal', (_: any, data: any) => {
                     setAlertModal({
                         title: data.title,
@@ -96,30 +104,13 @@ const App: React.FC = () => {
                 }
             }
 
-            if (savedKeys.length === 0) {
-                const localKeys = parseApiKeys(localStorage.getItem('api-keys'));
-                if (localKeys.length > 0) {
-                    savedKeys = localKeys;
-                    activeId = savedKeys[0].id;
-                    if (ipcRenderer) {
-                        await ipcRenderer.invoke('save-app-config', {
-                            apiKeys: JSON.stringify(savedKeys),
-                            activeApiKeyId: activeId
-                        });
-                    }
-                }
-            }
-
             setMachineId(currentMachineId);
             setIsActivated(!!currentLicense);
             setApiKeys(savedKeys);
             setActiveApiKeyId(activeId);
             
-            if (savedKeys.length === 0) {
-                setActiveTab('api-manager');
-            } else {
-                setActiveTab('generator');
-            }
+            if (savedKeys.length === 0) setActiveTab('api-manager');
+            else setActiveTab('generator');
             
             setConfigLoaded(true);
         };
@@ -141,7 +132,6 @@ const App: React.FC = () => {
             ipcRenderer.invoke('check-ffmpeg').then((res:any) => setFfmpegFound(res.found));
         }
 
-        // Cleanup listeners when unmount
         return () => {
             if (ipcRenderer) {
                 ipcRenderer.removeAllListeners('show-alert-modal');
@@ -149,6 +139,13 @@ const App: React.FC = () => {
             }
         };
     }, []); 
+
+    const handleSavePresets = async (newPresets: Preset[]) => {
+        setPresets(newPresets);
+        if (ipcRenderer) {
+            await ipcRenderer.invoke('save-app-config', { presets: newPresets });
+        }
+    };
 
     const handleActivate = async (key: string) => {
         if (key && key.trim().length > 5) {
@@ -212,6 +209,16 @@ const App: React.FC = () => {
         });
     };
 
+    // Fix: Implemented handleSetToolFlowPath to resolve the reference error. This function calls the Electron IPC handler to pick an executable for ToolFlows.
+    const handleSetToolFlowPath = async () => {
+        if (ipcRenderer) {
+            const res = await ipcRenderer.invoke('set-tool-flow-path');
+            if (res.success) {
+                setFeedback({ type: 'success', message: 'Đã cập nhật đường dẫn ToolFlows' });
+            }
+        }
+    };
+
     const handleCombine = async (mode: 'normal' | 'timed') => {
         const file = trackedFiles[activeTrackerFileIndex];
         if (!file || !file.path || !ipcRenderer) return;
@@ -235,8 +242,13 @@ const App: React.FC = () => {
         if (!ipcRenderer) return;
         setIsCombining(true);
         setFeedback({type:'info', message:'Đang bắt đầu ghép tất cả...'});
-        const filesToProcess = trackedFiles.filter(f => f.jobs.some(j => j.status === 'Completed' && j.videoPath))
-            .map(f => ({ name: f.name, jobs: f.jobs.filter(j=>j.status==='Completed' && j.videoPath) }));
+        
+        const filesToProcess = trackedFiles
+            .filter(f => f.jobs.some(j => j.status === 'Completed' && j.videoPath))
+            .map(f => ({ 
+                name: f.name, 
+                jobs: f.jobs.filter(j => j.status === 'Completed' && j.videoPath) 
+            }));
         
         if (filesToProcess.length === 0) {
             setIsCombining(false);
@@ -244,20 +256,17 @@ const App: React.FC = () => {
             return;
         }
 
-        const res = await ipcRenderer.invoke('execute-ffmpeg-combine-all', filesToProcess);
-        if (res && !res.canceled) {
-            setFeedback({ type: res.failures.length ? 'error' : 'success', message: `Đã ghép xong. Thành công: ${res.successes.length}, Lỗi: ${res.failures.length}` });
-        } else setFeedback({type:'info', message:'Đã hủy'});
-        setIsCombining(false);
-    };
-
-    const handleSetToolFlowPath = async () => {
-        if (ipcRenderer) {
-            const res = await ipcRenderer.invoke('set-tool-flow-path');
-            if (res.success) {
-                setFeedback({type:'success', message:'Đã cập nhật đường dẫn ToolFlows'});
+        try {
+            const res = await ipcRenderer.invoke('execute-ffmpeg-combine-all', { files: filesToProcess });
+            if (res && res.success) {
+                setFeedback({ type: 'success', message: `Đã ghép xong ${res.count} dự án vào thư mục kết quả.` });
+            } else if (res && res.error) {
+                setFeedback({ type: 'error', message: res.error });
             }
+        } catch (err: any) {
+            setFeedback({ type: 'error', message: err.message });
         }
+        setIsCombining(false);
     };
 
     const handleGenerateSuccess = async (scenes: any[], formData: FormData, detectedType: 'TEXT' | 'IN2V') => {
@@ -307,7 +316,7 @@ const App: React.FC = () => {
     return (
         <div className="h-screen overflow-hidden flex flex-col font-sans text-tet-brown">
             <header className="px-8 py-3 bg-gradient-to-r from-tet-red-dark via-tet-red to-tet-red-dark border-b-4 border-tet-gold shadow-lg flex justify-between items-center z-50 rounded-b-[40px] mx-4 mt-2 shrink-0">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4" onClick={() => setActiveTab('generator')} style={{cursor:'pointer'}}>
                     <div className="bg-tet-gold p-2 rounded-full border-4 border-tet-red shadow-md animate-bounce-slow">
                         <span className="text-4xl">🐎</span>
                     </div>
@@ -359,8 +368,10 @@ const App: React.FC = () => {
                         />
                     ) : activeTab === 'generator' ? (
                         <Generator 
+                            formData={generatorFormData}
+                            setFormData={setGeneratorFormData}
                             presets={presets} 
-                            onSavePresets={p => setPresets(p)} 
+                            onSavePresets={handleSavePresets} 
                             onGenerateSuccess={handleGenerateSuccess} 
                             onFeedback={setFeedback} 
                             apiKey={activeApiKey?.value}

@@ -9,6 +9,8 @@ import { LoaderIcon, TrashIcon, UploadIcon, FolderIcon } from './Icons';
 const ipcRenderer = (window as any).require ? (window as any).require('electron').ipcRenderer : null;
 
 interface GeneratorProps {
+    formData: FormData;
+    setFormData: React.Dispatch<React.SetStateAction<FormData>>;
     presets: Preset[];
     onSavePresets: (newPresets: Preset[]) => void;
     onGenerateSuccess: (scenes: Scene[], formData: FormData, detectedType: 'TEXT' | 'IN2V') => void;
@@ -17,22 +19,13 @@ interface GeneratorProps {
     activeApiKeyId?: string;
 }
 
-export const Generator: React.FC<GeneratorProps> = ({ presets, onSavePresets, onGenerateSuccess, onFeedback, apiKey, activeApiKeyId }) => {
+export const Generator: React.FC<GeneratorProps> = ({ formData, setFormData, presets, onSavePresets, onGenerateSuccess, onFeedback, apiKey, activeApiKeyId }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [generatedScenes, setGeneratedScenes] = useState<Scene[]>([]);
     const [lastDetectedType, setLastDetectedType] = useState<'TEXT' | 'IN2V'>('TEXT');
     const [newPresetName, setNewPresetName] = useState('');
     const [selectedPresetId, setSelectedPresetId] = useState('');
     const [modelUsageCount, setModelUsageCount] = useState(0);
-
-    const [formData, setFormData] = useState<FormData>({
-        idea: '', in2vAtmosphere: '', uploadedImages: [null, null, null], liveArtistName: '', liveArtist: '',
-        songMinutes: '3', songSeconds: '30', projectName: '',
-        model: 'gemini-3-flash-preview', 
-        mvGenre: 'narrative', filmingStyle: 'auto',
-        country: 'Việt Nam', musicGenre: 'V-Pop', customMusicGenre: '',
-        characterConsistency: true, characterCount: 1, temperature: 0.7
-    });
 
     const mvGenreOptions: { value: MvGenre, label: string }[] = [
         { value: 'narrative', label: 'Kể chuyện / Phim ngắn' },

@@ -26,9 +26,6 @@ const ADMIN_CREDENTIALS = {
     password: '285792684'
 };
 
-/**
- * CƠ CHẾ GỐC: Lấy UUID phần cứng để làm Machine ID ổn định
- */
 function getSystemId() {
     try {
         let id = '';
@@ -90,26 +87,14 @@ function readStats() {
     return { history: {}, promptCount: 0, modelUsage: {}, lastResetModelUsage: new Date().toISOString() }; 
 }
 
-/**
- * Reset modelUsage nếu đã qua mốc 17:00 (5h chiều) gần nhất
- */
 function checkAndResetModelUsage(stats) {
     const now = new Date();
-    const resetHour = 17; // 17:00 = 5 PM
-    
-    // Tìm mốc 17:00 gần nhất trước thời điểm hiện tại
+    const resetHour = 17; 
     let mostRecentReset = new Date();
     mostRecentReset.setHours(resetHour, 0, 0, 0);
-    
-    // Nếu bây giờ chưa đến 17h, mốc reset gần nhất là 17h ngày hôm qua
-    if (now < mostRecentReset) {
-        mostRecentReset.setDate(mostRecentReset.getDate() - 1);
-    }
-    
+    if (now < mostRecentReset) mostRecentReset.setDate(mostRecentReset.getDate() - 1);
     const lastReset = stats.lastResetModelUsage ? new Date(stats.lastResetModelUsage) : new Date(0);
-    
     if (lastReset < mostRecentReset) {
-        console.log("Đã qua 17:00. Reset giới hạn sử dụng Model...");
         stats.modelUsage = {};
         stats.lastResetModelUsage = now.toISOString();
         writeStats(stats);
@@ -137,16 +122,13 @@ function incrementDailyStat() {
 }
 
 function incrementPromptCount(modelName, apiKeyId) {
-    const stats = readStats(); // readStats đã bao gồm logic reset 5h chiều
+    const stats = readStats();
     if (typeof stats.promptCount !== 'number') stats.promptCount = 0;
     stats.promptCount += 1;
-
     if (!stats.modelUsage) stats.modelUsage = {};
     if (!stats.modelUsage[apiKeyId]) stats.modelUsage[apiKeyId] = {};
     if (!stats.modelUsage[apiKeyId][modelName]) stats.modelUsage[apiKeyId][modelName] = 0;
-    
     stats.modelUsage[apiKeyId][modelName] += 1;
-
     writeStats(stats);
     return stats.modelUsage[apiKeyId][modelName];
 }
@@ -298,19 +280,13 @@ app.whenReady().then(() => {
   createWindow();
   autoUpdater.checkForUpdatesAndNotify().catch(() => {});
   
-  // Timer định kỳ kiểm tra stuck jobs và reset giới hạn 5h chiều
   setInterval(() => {
-    // Tự động kiểm tra reset 5h chiều
     readStats();
-
     const now = Date.now();
     for (const [filePath, jobMap] of jobStateTimestamps.entries()) {
         const stuckIds = [];
-        for (const [id, state] of jobMap.entries()) if (['Processing', 'Generating'].includes(state.status) && (now - state.timestamp > 300000)) stuckIds.push(id); // Giới hạn 5 phút (300,000ms)
-        if (stuckIds.length > 0) {
-            console.log(`Auto-resetting ${stuckIds.length} stuck jobs in ${filePath}`);
-            updateExcelStatus(filePath, stuckIds, '');
-        }
+        for (const [id, state] of jobMap.entries()) if (['Processing', 'Generating'].includes(state.status) && (now - state.timestamp > 300000)) stuckIds.push(id); 
+        if (stuckIds.length > 0) updateExcelStatus(filePath, stuckIds, '');
     }
   }, 60000);
 });
@@ -396,6 +372,44 @@ ipcMain.handle('execute-ffmpeg-combine', async (event, { jobs, targetDuration, m
     if (mode === 'timed' && targetDuration) args.push('-t', String(targetDuration));
     args.push('-c', 'copy', '-y', res.filePath);
     return new Promise(r => execFile(getFfmpegPath(), args, (err) => { try{fs.unlinkSync(listPath);}catch(e){} r(err ? { success: false, error: err.message } : { success: true, filePath: res.filePath }); }));
+});
+
+// HANDLER MỚI: Ghép tất cả các dự án hoàn thành
+ipcMain.handle('execute-ffmpeg-combine-all', async (event, { files }) => {
+    const res = await dialog.showOpenDialog(mainWindow, { 
+        title: 'Chọn thư mục lưu các video đã ghép', 
+        properties: ['openDirectory', 'createDirectory'] 
+    });
+    
+    if (res.canceled) return { success: false };
+    const outputDir = res.filePaths[0];
+    const ffmpegPath = getFfmpegPath();
+    let successCount = 0;
+
+    for (const file of files) {
+        const outputFileName = `Combined_${file.name.replace('.xlsx', '')}.mp4`;
+        const outputPath = path.join(outputDir, outputFileName);
+        const listPath = path.join(outputDir, `list_${randomUUID()}.txt`);
+        
+        fs.writeFileSync(listPath, file.jobs.map(j => `file '${j.videoPath.replace(/'/g, "'\\''")}'`).join('\n'));
+        
+        const args = ['-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', '-y', outputPath];
+        
+        try {
+            await new Promise((resolve, reject) => {
+                execFile(ffmpegPath, args, (err) => {
+                    if (fs.existsSync(listPath)) fs.unlinkSync(listPath);
+                    if (err) reject(err);
+                    else resolve();
+                });
+            });
+            successCount++;
+        } catch (err) {
+            console.error(`Failed to combine ${file.name}:`, err);
+        }
+    }
+
+    return { success: true, count: successCount };
 });
 
 ipcMain.on('open-folder', (e, p) => fs.existsSync(p) && shell.openPath(p));
