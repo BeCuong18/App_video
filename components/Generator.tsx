@@ -131,7 +131,7 @@ export const Generator: React.FC<GeneratorProps> = ({ formData, setFormData, pre
     };
 
     const handleMultiImageUpload = (index: number) => (e: ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
+        const file = e.target.files?.[0] as any; // Cast to any to access .path in Electron
         if (!file) return;
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -140,7 +140,12 @@ export const Generator: React.FC<GeneratorProps> = ({ formData, setFormData, pre
             if (base64Data) {
                 setFormData(prev => {
                     const updated = [...prev.uploadedImages];
-                    updated[index] = { base64: base64Data, mimeType: file.type, name: file.name };
+                    updated[index] = { 
+                        base64: base64Data, 
+                        mimeType: file.type, 
+                        name: file.name,
+                        path: file.path || file.name // Store full path if available (Electron), else name
+                    };
                     return { ...prev, uploadedImages: updated };
                 });
             }

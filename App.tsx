@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { TrackedFile, VideoJob, Preset, FormData, ApiKey } from './types';
@@ -308,9 +309,9 @@ const App: React.FC = () => {
             status: 'Pending', 
             videoName: `${safeName}_${i+1}`, 
             typeVideo: detectedType === 'IN2V' ? 'IN2V' : '', 
-            imagePath: formData.uploadedImages[0]?.name || '', 
-            imagePath2: formData.uploadedImages[1]?.name || '', 
-            imagePath3: formData.uploadedImages[2]?.name || ''
+            imagePath: formData.uploadedImages[0]?.path || formData.uploadedImages[0]?.name || '', 
+            imagePath2: formData.uploadedImages[1]?.path || formData.uploadedImages[1]?.name || '', 
+            imagePath3: formData.uploadedImages[2]?.path || formData.uploadedImages[2]?.name || ''
         }));
         
         const wsData = jobs.map(j => ({

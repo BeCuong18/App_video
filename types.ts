@@ -16,6 +16,7 @@ export interface UploadedImage {
   base64: string;
   mimeType: string;
   name: string;
+  path?: string; // Thêm trường path để lưu đường dẫn đầy đủ
 }
 
 export interface FormData {
