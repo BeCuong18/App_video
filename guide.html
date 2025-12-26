@@ -4,142 +4,298 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hướng dẫn sử dụng - Prompt Generator Pro</title>
+    <title>Tài Liệu Hướng Dẫn - Prompt Generator Pro 2026</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+          theme: {
+            extend: {
+              colors: {
+                'tet-cream': '#FFFDF5',
+                'tet-red': '#D50000',
+                'tet-red-dark': '#8E0000',
+                'tet-gold': '#FFD600',
+                'tet-brown': '#3E2723',
+                'tet-green': '#1B5E20',
+              }
+            }
+          }
+        }
+    </script>
     <style>
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #fdfaf6;
-            color: #3e2723;
+            font-family: 'Nunito', sans-serif;
+            background-color: #FFFDF5;
+            color: #3E2723;
+            background-image: radial-gradient(#FFD600 1px, transparent 1px);
+            background-size: 20px 20px;
         }
-        .container {
-            max-width: 900px;
-            margin: auto;
-            padding: 3rem 2rem;
+        .glass-card {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            border: 2px solid #FFF59D;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
         }
-        h1, h2, h3 {
-            color: #8e0000;
-            font-weight: 900;
-            border-bottom: 2px solid #ffd600;
-            padding-bottom: 0.5rem;
-            margin-top: 2.5rem;
-            margin-bottom: 1.25rem;
-            text-transform: uppercase;
-        }
-        h1 { font-size: 2.5rem; text-align: center; border-bottom: 4px solid #d50000; }
-        h2 { font-size: 1.8rem; color: #d50000; }
-        h3 { font-size: 1.3rem; border-bottom: none; color: #f57f17; }
-        p, li {
-            line-height: 1.8;
-            margin-bottom: 1.25rem;
-            font-size: 1.05rem;
-        }
-        ul {
-            list-style-type: disc;
-            padding-left: 2rem;
-        }
-        .note {
-            background-color: #fffde7;
-            border-left: 5px solid #ffd600;
-            padding: 1.5rem;
-            border-radius: 0.75rem;
-            margin: 2rem 0;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-        }
-        .warning-note {
-            background-color: #fff5f5;
-            border-left: 5px solid #d50000;
-            color: #c53030;
-        }
-        .limit-badge {
-            display: inline-block;
-            background: #d50000;
-            color: white;
-            padding: 0.2rem 0.6rem;
-            border-radius: 6px;
-            font-weight: 900;
-            font-size: 0.8rem;
-        }
-        .step-num {
-            background: #ffd600;
-            color: #8e0000;
-            width: 24px;
-            height: 24px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
+        h1, h2, h3 { font-weight: 900; text-transform: uppercase; }
+        .step-badge {
+            background: #FFD600;
+            color: #8E0000;
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
             border-radius: 50%;
-            font-size: 0.8rem;
-            margin-right: 0.5rem;
             font-weight: 900;
+            border: 3px solid white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            font-size: 1.1rem;
         }
+        .code-tag {
+            font-family: monospace;
+            background: #EDF2F7;
+            color: #2D3748;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.85em;
+            border: 1px solid #CBD5E0;
+            font-weight: bold;
+        }
+        .error-code {
+            font-family: monospace;
+            font-weight: 900;
+            font-size: 1.1em;
+        }
+        details > summary {
+            list-style: none;
+        }
+        details > summary::-webkit-details-marker {
+            display: none;
+        }
+        .highlight { color: #D50000; font-weight: 800; }
+        ::-webkit-scrollbar { width: 10px; }
+        ::-webkit-scrollbar-track { background: #FFF3E0; }
+        ::-webkit-scrollbar-thumb { background: #D50000; border-radius: 5px; border: 2px solid #FFF3E0; }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="text-center mb-12">
-            <span class="text-6xl block mb-4">🧧</span>
-            <h1>CẨM NANG SỬ DỤNG PHẦN MỀM</h1>
-            <p class="text-stone-500 mt-4 italic">Khai máy đầu xuân - Bứt phá sáng tạo 2026</p>
-        </div>
-
-        <div class="note warning-note">
-            <h3 class="!mt-0 !mb-2 !text-red-700">📌 QUY ĐỊNH VỀ GIỚI HẠN API</h3>
-            <p class="mb-0">
-                Mỗi Model AI trong một API Key có giới hạn <span class="limit-badge">20 lượt tạo Prompt</span>. 
-                Khi đạt giới hạn, bạn cần đổi sang API Key khác hoặc đợi chu kỳ reset của Google (thường là 24h đối với gói Free).
+<body class="p-4 md:p-8 pb-20">
+    <div class="max-w-5xl mx-auto space-y-10">
+        <!-- Header -->
+        <div class="text-center mb-12 relative py-8">
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-9xl opacity-[0.03] pointer-events-none select-none">🐉</div>
+            <h1 class="text-3xl md:text-5xl text-tet-red-dark mb-4 drop-shadow-sm leading-tight">Tài Liệu Hướng Dẫn & <br/>Khắc Phục Sự Cố</h1>
+            <p class="text-sm md:text-lg text-tet-brown font-bold bg-white/50 inline-block px-8 py-2 rounded-full border-2 border-tet-gold shadow-sm">
+                Phiên bản Pro 2026 - Tự động hóa quy trình sản xuất Video
             </p>
         </div>
 
-        <h2>1. Hướng dẫn các chức năng chính</h2>
-        
-        <h3>✨ Tab: Kịch Bản Tết (Generator)</h3>
-        <ul>
-            <li><strong>Nhập ý tưởng:</strong> Bạn có thể nhập lời bài hát, đoạn văn kể chuyện hoặc chỉ là một vài từ khóa. AI sẽ tự động phân tích và tạo kịch bản chi tiết.</li>
-            <li><strong>Chọn thể loại & Phong cách:</strong> Tùy chỉnh "Quốc gia", "Nhạc nền", "Thể loại MV" để AI định hướng hình ảnh đúng mong muốn.</li>
-            <li><strong>Đồng nhất nhân vật:</strong> Nếu bật tính năng này, AI sẽ tạo một "Bản thiết kế nhân vật" (Blueprint) và áp dụng cho toàn bộ các cảnh để đảm bảo mặt nhân vật không bị thay đổi giữa các clip.</li>
-            <li><strong>Lưu cài đặt (Presets):</strong> Sau khi chỉnh thông số ưng ý, hãy đặt tên và nhấn "Lưu" để sử dụng lại cho các dự án sau.</li>
-        </ul>
-
-        <h3>🎬 Tab: Xưởng Phim (Tracker)</h3>
-        <ul>
-            <li><strong>Theo dõi tiến độ:</strong> Sau khi lưu file Excel kịch bản, hãy mở file đó trong Tab này. Phần mềm sẽ tự động quét thư mục chứa file Excel để tìm các video do AI (ToolFlows) tạo ra.</li>
-            <li><strong>Xem nhanh Video:</strong> Nhấn vào thumbnail video để xem trước (Preview) hoặc nhấn icon Play để mở bằng trình phát của máy tính.</li>
-            <li><strong>Ghép Video (FFmpeg):</strong> 
-                <ul class="mt-2 text-sm">
-                    <li><em>Ghép thường:</em> Nối tất cả video đã hoàn thành lại với nhau.</li>
-                    <li><em>Ghép theo nhạc:</em> Nối video và cắt theo đúng thời lượng dự án đã cài đặt.</li>
-                </ul>
-            </li>
-        </ul>
-
-        <h2>2. Khắc phục lỗi thường gặp</h2>
-        
-        <div class="space-y-4">
-            <div class="bg-white p-4 rounded-xl border border-stone-200">
-                <p class="font-black text-tet-red-dark mb-1">❌ Lỗi: "API Key không hợp lệ" hoặc "403 Forbidden"</p>
-                <p class="text-sm"><strong>Cách xử lý:</strong> Kiểm tra lại mã API Key trong mục "Quản lý API". Đảm bảo bạn đã sao chép đủ ký tự và Key chưa bị vô hiệu hóa trên Google AI Studio.</p>
+        <!-- Section: Bảng mã lỗi API -->
+        <div class="glass-card rounded-[32px] overflow-hidden border-2 border-red-200 shadow-xl">
+            <div class="bg-red-50 p-6 border-b border-red-100 flex items-center gap-3">
+                <span class="text-3xl">🚨</span>
+                <div>
+                    <h2 class="text-xl text-tet-red-dark">Từ Điển Mã Lỗi (Error Codes)</h2>
+                    <p class="text-sm text-stone-500 font-bold">Các mã lỗi thường gặp khi làm việc với Google Gemini API</p>
+                </div>
             </div>
             
-            <div class="bg-white p-4 rounded-xl border border-stone-200">
-                <p class="font-black text-tet-red-dark mb-1">❌ Lỗi: "Requested entity was not found"</p>
-                <p class="text-sm"><strong>Cách xử lý:</strong> Lỗi này thường do Model bạn chọn không khả dụng với Key hiện tại hoặc Key chưa được gán vào một dự án có tính phí (nếu dùng model Pro). Hãy thử đổi sang model Flash (Lite).</p>
-            </div>
+            <div class="divide-y divide-stone-100">
+                <!-- 400 -->
+                <div class="p-6 hover:bg-stone-50 transition-colors">
+                    <div class="flex items-start gap-4">
+                        <div class="bg-stone-200 text-stone-700 px-3 py-1 rounded-lg error-code">400</div>
+                        <div>
+                            <h3 class="text-stone-800 text-lg mb-1">Bad Request (Yêu cầu không hợp lệ)</h3>
+                            <p class="text-sm text-stone-600 mb-2">Dữ liệu gửi đi bị lỗi format hoặc Prompt quá dài, chứa nội dung bị cấm.</p>
+                            <div class="bg-red-50 p-3 rounded-xl text-xs text-red-800 font-medium border border-red-100">
+                                💡 <strong>Khắc phục:</strong> Kiểm tra lại nội dung Prompt (Idea). Xóa bớt các ký tự đặc biệt lạ. Giảm bớt số lượng ảnh upload nếu quá nặng.
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-            <div class="bg-white p-4 rounded-xl border border-stone-200">
-                <p class="font-black text-tet-red-dark mb-1">❌ Lỗi: "Đã tạo 20/20 prompt - Giới hạn đạt mức tối đa"</p>
-                <p class="text-sm"><strong>Cách xử lý:</strong> Đây là giới hạn bảo vệ để tránh spam. Bạn hãy vào mục <strong>Quản lý API Key</strong> (icon chìa khóa ở Header), nhập một Key mới và chọn sử dụng Key đó.</p>
-            </div>
+                <!-- 401 -->
+                <div class="p-6 hover:bg-stone-50 transition-colors">
+                    <div class="flex items-start gap-4">
+                        <div class="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-lg error-code">401</div>
+                        <div>
+                            <h3 class="text-stone-800 text-lg mb-1">Unauthenticated (Lỗi xác thực)</h3>
+                            <p class="text-sm text-stone-600 mb-2">API Key bị sai, đã bị xóa, hoặc chưa được kích hoạt tính năng thanh toán (với model Pro).</p>
+                            <div class="bg-yellow-50 p-3 rounded-xl text-xs text-yellow-800 font-medium border border-yellow-100">
+                                💡 <strong>Khắc phục:</strong> Vào tab <span class="font-bold">Quản lý API Key</span>, xóa Key cũ và thêm Key mới chính xác từ Google AI Studio.
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-            <div class="bg-white p-4 rounded-xl border border-stone-200">
-                <p class="font-black text-tet-red-dark mb-1">❌ Video không hiển thị trong danh sách theo dõi</p>
-                <p class="text-sm"><strong>Cách xử lý:</strong> Đảm bảo file Video (.mp4) được đặt cùng thư mục với file Excel hoặc nằm trong một thư mục con có cùng tên với file Excel. Tên video phải chứa "Job_X" (với X là số thứ tự cảnh).</p>
+                <!-- 403 -->
+                <div class="p-6 hover:bg-stone-50 transition-colors">
+                    <div class="flex items-start gap-4">
+                        <div class="bg-orange-100 text-orange-800 px-3 py-1 rounded-lg error-code">403</div>
+                        <div>
+                            <h3 class="text-stone-800 text-lg mb-1">Permission Denied (Từ chối truy cập)</h3>
+                            <p class="text-sm text-stone-600 mb-2">Thường gặp khi truy cập Model không khả dụng tại quốc gia (Region lock) hoặc tài khoản bị Google khóa.</p>
+                            <div class="bg-orange-50 p-3 rounded-xl text-xs text-orange-800 font-medium border border-orange-100">
+                                💡 <strong>Khắc phục:</strong> Đổi sang Model <span class="code-tag">Gemini 2.5 Flash</span> hoặc dùng VPN đổi IP sang Mỹ/Singapore.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 404 -->
+                <div class="p-6 hover:bg-stone-50 transition-colors">
+                    <div class="flex items-start gap-4">
+                        <div class="bg-purple-100 text-purple-800 px-3 py-1 rounded-lg error-code">404</div>
+                        <div>
+                            <h3 class="text-stone-800 text-lg mb-1">Not Found (Không tìm thấy Model)</h3>
+                            <p class="text-sm text-stone-600 mb-2">Tên Model trong cấu hình không tồn tại hoặc đã bị Google ngừng hỗ trợ.</p>
+                            <div class="bg-purple-50 p-3 rounded-xl text-xs text-purple-800 font-medium border border-purple-100">
+                                💡 <strong>Khắc phục:</strong> Chọn lại Model trong danh sách (Ví dụ: Gemini 2.5 Flash Lite) thay vì dùng Model cũ.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 429 -->
+                <div class="p-6 hover:bg-stone-50 transition-colors bg-red-50/50">
+                    <div class="flex items-start gap-4">
+                        <div class="bg-red-200 text-red-900 px-3 py-1 rounded-lg error-code">429</div>
+                        <div>
+                            <h3 class="text-stone-800 text-lg mb-1">Resource Exhausted (Hết lượt / Quota)</h3>
+                            <p class="text-sm text-stone-600 mb-2">Đây là lỗi phổ biến nhất. Bạn đã dùng hết số lượng request miễn phí trong phút/ngày.</p>
+                            <div class="bg-white p-3 rounded-xl text-xs text-red-600 font-medium border border-red-200 shadow-sm">
+                                💡 <strong>Khắc phục:</strong> 
+                                <ul class="list-disc list-inside mt-1 ml-1 space-y-1">
+                                    <li>Chờ khoảng 1-2 phút rồi thử lại.</li>
+                                    <li>Tạo thêm nhiều API Key khác (từ các tài khoản Google khác nhau) và thêm vào phần mềm để luân phiên sử dụng.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 500 & 503 -->
+                <div class="p-6 hover:bg-stone-50 transition-colors">
+                    <div class="flex items-start gap-4">
+                        <div class="bg-stone-800 text-white px-3 py-1 rounded-lg error-code">5xx</div>
+                        <div>
+                            <h3 class="text-stone-800 text-lg mb-1">Server Errors (500, 502, 503)</h3>
+                            <p class="text-sm text-stone-600 mb-2">Lỗi từ phía máy chủ Google (quá tải, bảo trì).</p>
+                            <div class="bg-stone-100 p-3 rounded-xl text-xs text-stone-600 font-medium border border-stone-200">
+                                💡 <strong>Khắc phục:</strong> Không thể can thiệp. Vui lòng chờ vài phút và nhấn thử lại.
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="mt-12 text-center p-8 border-t-2 border-dashed border-stone-200">
-            <p class="text-sm font-bold text-stone-400 uppercase tracking-widest">© 2026 Prompt Generator Pro - Chúc bạn một năm mới thành công!</p>
+        <!-- Section: Hướng dẫn chức năng chi tiết -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            <!-- Cột 1: Generator & Input -->
+            <div class="space-y-8">
+                <div class="glass-card rounded-[32px] p-8">
+                    <h2 class="text-2xl text-tet-brown mb-6 flex items-center gap-2 border-b-2 border-tet-gold/30 pb-3">
+                        <span>✨</span> Tab Generator (Kịch Bản)
+                    </h2>
+                    
+                    <div class="space-y-6">
+                        <!-- Path Ảnh -->
+                        <div class="relative pl-6 border-l-4 border-tet-gold">
+                            <h3 className="font-bold text-lg text-stone-800">1. Quy tắc Path Ảnh (Quan trọng)</h3>
+                            <p class="text-sm text-stone-600 mt-1 mb-2">
+                                Phần mềm lưu <span class="highlight">đường dẫn tuyệt đối</span> (Full Path) của ảnh vào Excel chứ không copy ảnh vào phần mềm.
+                            </p>
+                            <div class="bg-yellow-50 p-3 rounded-xl border border-yellow-200 text-xs text-yellow-800">
+                                ⚠️ <strong>Cảnh báo:</strong> Sau khi xuất Excel, <span class="underline decoration-2 decoration-red-400">tuyệt đối không được đổi tên, di chuyển hoặc xóa file ảnh gốc</span> trên máy tính. Nếu không ToolFlows sẽ báo lỗi không tìm thấy ảnh.
+                            </div>
+                        </div>
+
+                        <!-- Cơ chế I2V -->
+                        <div class="relative pl-6 border-l-4 border-tet-green">
+                            <h3 className="font-bold text-lg text-stone-800">2. Chế độ Text vs I2V</h3>
+                            <ul class="text-sm text-stone-600 space-y-2 mt-2">
+                                <li><strong>TEXT Mode:</strong> Nếu không upload ảnh nào, AI sẽ tự sáng tạo hình ảnh mô tả.</li>
+                                <li><strong>I2V Mode:</strong> Chỉ cần upload 1 ảnh, AI sẽ tự động chuyển sang chế độ Image-to-Video, sử dụng ảnh đó làm tham chiếu (Reference) cho tất cả các cảnh.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-card rounded-[32px] p-8">
+                    <h2 class="text-2xl text-tet-brown mb-6 flex items-center gap-2 border-b-2 border-tet-gold/30 pb-3">
+                        <span>🔑</span> Quản lý API Key
+                    </h2>
+                    <p class="text-sm text-stone-600 mb-4">
+                        Hệ thống hỗ trợ lưu nhiều Key cùng lúc. Bạn nên chuẩn bị ít nhất 3 Key để tránh bị gián đoạn do lỗi 429 (Hết lượt).
+                    </p>
+                    <ul class="text-sm text-stone-600 space-y-2 list-disc list-inside">
+                        <li>Nhấn nút <span class="inline-block p-1 bg-tet-gold text-white rounded shadow-sm"><svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></span> trên Header để vào quản lý.</li>
+                        <li>Nút xanh <span class="text-emerald-600 font-bold">✓</span>: Chọn Key đang hoạt động.</li>
+                        <li>Nút đỏ <span class="text-red-500 font-bold">🗑</span>: Xóa Key hỏng.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Cột 2: Tracker & Sản xuất -->
+            <div class="space-y-8">
+                <div class="glass-card rounded-[32px] p-8">
+                    <h2 class="text-2xl text-tet-brown mb-6 flex items-center gap-2 border-b-2 border-tet-gold/30 pb-3">
+                        <span>🎬</span> Tab Tracker (Xưởng Phim)
+                    </h2>
+
+                    <div class="space-y-8">
+                        <!-- Auto Reload -->
+                        <div>
+                            <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2">
+                                <span class="step-badge text-xs">A</span> Cơ chế Auto-Reload
+                            </h3>
+                            <p class="text-sm text-stone-600 mt-2">
+                                Phần mềm có một bộ đếm chạy ngầm <strong>mỗi 2 giây</strong>. Nó sẽ quét thư mục chứa file Excel để tìm các file video `.mp4` mới được tạo ra.
+                            </p>
+                            <p class="text-xs text-stone-500 mt-1 italic">
+                                * Điều kiện nhận diện: File video phải có tên chứa mã Job (VD: `Job_1.mp4`, `MyProject_Job_1.mp4`).
+                            </p>
+                        </div>
+
+                        <!-- ToolFlows -->
+                        <div>
+                            <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2">
+                                <span class="step-badge text-xs">B</span> Kết nối ToolFlows
+                            </h3>
+                            <div class="mt-2 text-sm text-stone-600 space-y-2">
+                                <p>1. Nhấn icon <span class="bg-stone-200 px-1 rounded">⚙️</span> (Cài đặt) cạnh nút "MỞ TOOLFLOWS".</p>
+                                <p>2. Trỏ đường dẫn đến file <code>ToolFlows.exe</code> (hoặc tool tạo video bất kỳ).</p>
+                                <p>3. Sau đó nhấn nút "MỞ TOOLFLOWS" để khởi chạy tool ngay từ phần mềm.</p>
+                            </div>
+                        </div>
+
+                        <!-- FFmpeg -->
+                        <div>
+                            <h3 className="font-bold text-lg text-stone-800 flex items-center gap-2">
+                                <span class="step-badge text-xs">C</span> Ghép Phim (FFmpeg)
+                            </h3>
+                            <div class="grid grid-cols-1 gap-3 mt-3">
+                                <div class="border border-tet-green/30 bg-emerald-50/50 p-3 rounded-xl">
+                                    <span class="font-bold text-tet-green block text-xs uppercase mb-1">1. Ghép Thường</span>
+                                    <span class="text-xs text-stone-600">Nối đuôi tất cả video đã hoàn thành thành 1 file dài. Giữ nguyên độ dài gốc của từng clip.</span>
+                                </div>
+                                <div class="border border-blue-200 bg-blue-50/50 p-3 rounded-xl">
+                                    <span class="font-bold text-blue-600 block text-xs uppercase mb-1">2. Ghép Theo Nhạc (Timed)</span>
+                                    <span class="text-xs text-stone-600">Tự động cắt ngắn video output sao cho tổng thời lượng khớp chính xác với số phút/giây bạn đã nhập ở tab Generator.</span>
+                                </div>
+                                <div class="border border-yellow-300 bg-yellow-50/50 p-3 rounded-xl">
+                                    <span class="font-bold text-tet-gold-dark block text-xs uppercase mb-1">3. Ghép Tất Cả (Combine All)</span>
+                                    <span class="text-xs text-stone-600">Duyệt qua danh sách các file Excel đang theo dõi. Nếu file nào có video hoàn thành, nó sẽ tự động ghép và xuất ra thư mục bạn chọn.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center pt-10 pb-6 border-t border-stone-200/50">
+             <p class="text-xs font-bold text-stone-400 uppercase tracking-widest">© 2026 Prompt Generator Pro | Developed by BeCuong18</p>
         </div>
     </div>
 </body>
