@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { TrackedFile, VideoJob, Preset, FormData, ApiKey } from './types';
 import { Activation } from './components/Activation';
@@ -28,6 +27,10 @@ const App: React.FC = () => {
     const [ffmpegFound, setFfmpegFound] = useState<boolean | null>(null);
     const [isCombining, setIsCombining] = useState(false);
     
+    // Sử dụng ref để giữ trackedFiles mới nhất cho interval mà không cần reset interval liên tục
+    const trackedFilesRef = useRef<TrackedFile[]>([]);
+    useEffect(() => { trackedFilesRef.current = trackedFiles; }, [trackedFiles]);
+
     // Form Data Persistent State (Giữ dữ liệu khi chuyển tab)
     const [generatorFormData, setGeneratorFormData] = useState<FormData>({
         idea: '', in2vAtmosphere: '', uploadedImages: [null, null, null], liveArtistName: '', liveArtist: '',
@@ -192,24 +195,52 @@ const App: React.FC = () => {
         saveApiConfig(updated, newActiveId);
     };
 
+    // Hàm reload được tối ưu hóa: chạy song song (Promise.all) và chỉ set state 1 lần
     const handleReloadVideos = async () => {
         if (!ipcRenderer) return;
-        setTrackedFiles(prev => {
-            prev.forEach(file => {
-                if (file.path) {
-                    ipcRenderer.invoke('find-videos-for-jobs', { jobs: file.jobs, excelFilePath: file.path })
-                        .then((res:any) => {
-                             if(res.success && JSON.stringify(res.jobs) !== JSON.stringify(file.jobs)) {
-                                 setTrackedFiles(curr => curr.map(f => f.path === file.path ? {...f, jobs: res.jobs} : f));
-                             }
-                        });
+        const currentFiles = trackedFilesRef.current;
+        if (currentFiles.length === 0) return;
+
+        try {
+            const promises = currentFiles.map(async (file) => {
+                if (!file.path) return file;
+                try {
+                    const res = await ipcRenderer.invoke('find-videos-for-jobs', { jobs: file.jobs, excelFilePath: file.path });
+                    if (res.success) {
+                        return { ...file, jobs: res.jobs };
+                    }
+                } catch (e) { 
+                    return file; 
                 }
+                return file;
             });
-            return prev;
-        });
+
+            const updatedFiles = await Promise.all(promises);
+            
+            setTrackedFiles(prev => {
+                // Deep comparison đơn giản để tránh re-render nếu không có gì thay đổi
+                if (JSON.stringify(prev) !== JSON.stringify(updatedFiles)) {
+                    return updatedFiles;
+                }
+                return prev;
+            });
+        } catch (error) {
+            console.error("Auto reload error:", error);
+        }
     };
 
-    // Fix: Implemented handleSetToolFlowPath to resolve the reference error. This function calls the Electron IPC handler to pick an executable for ToolFlows.
+    // Tự động reload mỗi 2 giây khi ở tab Tracker
+    useEffect(() => {
+        let interval: any;
+        if (activeTab === 'tracker') {
+            handleReloadVideos(); // Chạy ngay lập tức khi vào tab
+            interval = setInterval(handleReloadVideos, 2000);
+        }
+        return () => {
+            if (interval) clearInterval(interval);
+        };
+    }, [activeTab]);
+
     const handleSetToolFlowPath = async () => {
         if (ipcRenderer) {
             const res = await ipcRenderer.invoke('set-tool-flow-path');
