@@ -36,13 +36,6 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, active
         if (ipcRenderer) await ipcRenderer.invoke('delete-stat-date', date);
         loadStats(); 
     };
-    
-    const handleDeleteAll = async () => { 
-        if (ipcRenderer) await ipcRenderer.invoke('delete-all-stats');
-        loadStats(); 
-    };
-
-    const maxCount = stats?.history.reduce((max, item) => Math.max(max, item.count), 0) || 1;
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-md p-4 animate-fade-in">

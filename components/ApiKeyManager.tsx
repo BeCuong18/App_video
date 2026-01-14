@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { ApiKey } from '../types';
-import { KeyIcon, TrashIcon, CheckIcon } from './Icons';
+import { KeyIcon, TrashIcon } from './Icons';
 
 interface ApiKeyManagerProps {
   apiKeys: ApiKey[];

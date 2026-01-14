@@ -7,7 +7,7 @@ import { StatsModal, AdminLoginModal, AlertModal } from './components/AppModals'
 import { Generator } from './components/Generator';
 import { Tracker } from './components/Tracker';
 import { ApiKeyManagerScreen } from './components/ApiKeyManager';
-import { ChartIcon, ShieldIcon, KeyIcon, FolderIcon } from './components/Icons';
+import { ChartIcon, ShieldIcon, KeyIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron && (window as any).require ? (window as any).require('electron').ipcRenderer : null;
