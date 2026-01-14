@@ -13,15 +13,10 @@ interface ApiKeyManagerProps {
 export const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onKeySelect, onKeyAdd, onKeyDelete }) => {
     const [newKeyName, setNewKeyName] = useState('');
     const [newKeyValue, setNewKeyValue] = useState('');
-    const [error, setError] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
-        if (!newKeyName.trim() || !newKeyValue.trim()) {
-            setError('Vui lòng nhập đầy đủ thông tin.');
-            return;
-        }
+        if (!newKeyName.trim() || !newKeyValue.trim()) return;
         onKeyAdd({
             id: crypto.randomUUID(),
             name: newKeyName.trim(),
@@ -32,82 +27,82 @@ export const ApiKeyManagerScreen: React.FC<ApiKeyManagerProps> = ({ apiKeys, onK
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 relative z-10 bg-tet-cream">
-            <div className="w-full max-w-2xl mx-auto">
-                <div className="glass-card rounded-[40px] p-8 shadow-2xl border-4 border-white bg-white/90">
-                    <h1 className="text-3xl font-black tracking-tight mb-2 text-center text-stone-700 drop-shadow-sm">
-                        <span className="text-tet-red">API Key</span> Manager
-                    </h1>
-                    <p className="text-stone-400 mb-8 text-center text-sm font-bold">
-                        Quản lý khóa kết nối Google Gemini AI.
-                    </p>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        {/* List Column */}
-                        <div className="order-2 md:order-1">
-                            <h2 className="text-xs font-black text-stone-400 uppercase tracking-widest mb-4 ml-2">Danh sách khóa</h2>
-                            <div className="space-y-3 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                                {apiKeys.length === 0 ? (
-                                    <p className="text-stone-400 italic text-sm text-center py-6 bg-stone-50 rounded-2xl border-2 border-dashed border-stone-100">Chưa có khóa nào.</p>
-                                ) : (
-                                    apiKeys.map(key => (
-                                        <div key={key.id} className="group flex items-center justify-between p-3 bg-white rounded-2xl border-2 border-stone-100 hover:border-tet-gold transition-all shadow-sm">
-                                            <div className="flex items-center gap-3 overflow-hidden">
-                                                <div className="p-3 bg-yellow-50 rounded-xl text-tet-gold-dark">
-                                                    <KeyIcon className="w-5 h-5" />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="font-bold text-sm text-stone-700 truncate">{key.name}</p>
-                                                    <p className="text-[10px] text-stone-400 font-mono truncate">••••••••••••{key.value.slice(-4)}</p>
-                                                </div>
+        <div className="min-h-full flex justify-center p-6">
+            <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+                
+                {/* List Column */}
+                <div className="space-y-4">
+                    <h2 className="text-sm font-bold text-mac-text-sec ml-1 uppercase tracking-wide">Danh Sách Key</h2>
+                    <div className="bg-mac-surface rounded-mac-lg shadow-mac-card border border-mac-border/20 overflow-hidden">
+                        <div className="divide-y divide-gray-100 max-h-[500px] overflow-y-auto custom-scrollbar">
+                            {apiKeys.length === 0 ? (
+                                <div className="p-8 text-center text-gray-400 text-sm">Chưa có Key nào.</div>
+                            ) : (
+                                apiKeys.map(key => (
+                                    <div key={key.id} className="group flex items-center justify-between p-4 hover:bg-mac-surface-sec/50 transition">
+                                        <div className="flex items-center gap-4 overflow-hidden">
+                                            <div className="w-10 h-10 rounded-full bg-blue-50 text-mac-accent flex items-center justify-center shrink-0">
+                                                <KeyIcon className="w-5 h-5" />
                                             </div>
-                                            <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => onKeySelect(key)} className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-500 rounded-lg transition" title="Sử dụng">
-                                                    <CheckIcon className="w-4 h-4" />
-                                                </button>
-                                                <button onClick={() => onKeyDelete(key.id)} className="p-2 hover:bg-red-50 text-stone-300 hover:text-red-400 rounded-lg transition" title="Xóa">
-                                                    <TrashIcon className="w-4 h-4" />
-                                                </button>
+                                            <div className="min-w-0">
+                                                <p className="font-semibold text-sm text-mac-text truncate">{key.name}</p>
+                                                <p className="text-xs text-gray-400 font-mono truncate">••••{key.value.slice(-6)}</p>
                                             </div>
                                         </div>
-                                    ))
-                                )}
-                            </div>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => onKeySelect(key)} className="px-4 py-1.5 bg-white border border-mac-border hover:bg-green-50 text-gray-600 hover:text-green-600 hover:border-green-200 rounded-lg text-xs font-bold transition">
+                                                Chọn
+                                            </button>
+                                            <button onClick={() => onKeyDelete(key.id)} className="p-2 text-gray-400 hover:text-red-500 transition">
+                                                <TrashIcon className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
+                    </div>
+                </div>
 
-                        {/* Add Column */}
-                        <div className="order-1 md:order-2 bg-stone-50 rounded-[32px] p-6 border-2 border-stone-100 h-fit">
-                            <h2 className="text-xs font-black text-stone-600 uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <span className="w-3 h-3 rounded-full bg-tet-red inline-block shadow-sm"></span> Thêm khóa mới
-                            </h2>
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div>
-                                    <input
-                                        type="text"
-                                        value={newKeyName}
-                                        onChange={(e) => setNewKeyName(e.target.value)}
-                                        className="w-full bg-white border-2 border-stone-100 rounded-2xl p-3 text-sm text-stone-700 focus:border-tet-red transition font-bold"
-                                        placeholder="Tên gợi nhớ (VD: Key Chính)"
-                                    />
-                                </div>
-                                <div>
-                                    <input
-                                        type="password"
-                                        value={newKeyValue}
-                                        onChange={(e) => setNewKeyValue(e.target.value)}
-                                        className="w-full bg-white border-2 border-stone-100 rounded-2xl p-3 text-sm text-stone-700 focus:border-tet-red transition font-mono font-bold"
-                                        placeholder="AI Studio API Key"
-                                    />
-                                </div>
-                                {error && <p className="text-red-500 text-xs font-bold bg-red-50 p-3 rounded-xl border border-red-100">{error}</p>}
-                                <button
-                                    type="submit"
-                                    className="w-full bg-tet-red text-white font-black py-3 rounded-2xl hover:bg-tet-red-dark transition shadow-lg text-sm uppercase tracking-wide transform hover:scale-[1.02] border-4 border-white"
-                                >
-                                    Lưu Khóa
-                                </button>
-                            </form>
-                        </div>
+                {/* Add Column */}
+                <div className="space-y-4">
+                    <h2 className="text-sm font-bold text-mac-text-sec ml-1 uppercase tracking-wide">Thêm Key Mới</h2>
+                    <div className="bg-mac-surface rounded-mac-lg shadow-mac-card border border-mac-border/20 p-6">
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-mac-text-sec mb-2">Tên Key</label>
+                                <input
+                                    type="text"
+                                    value={newKeyName}
+                                    onChange={(e) => setNewKeyName(e.target.value)}
+                                    className="w-full text-sm h-10 px-3"
+                                    placeholder="Ví dụ: Tài khoản Chính"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-mac-text-sec mb-2">Mã Bí Mật (API Secret)</label>
+                                <input
+                                    type="password"
+                                    value={newKeyValue}
+                                    onChange={(e) => setNewKeyValue(e.target.value)}
+                                    className="w-full text-sm h-10 px-3 font-mono"
+                                    placeholder="Dán Key từ Google AI Studio tại đây"
+                                />
+                            </div>
+                            <button
+                                type="submit"
+                                disabled={!newKeyName || !newKeyValue}
+                                className="w-full bg-mac-accent text-white font-semibold py-2.5 rounded-lg hover:bg-mac-accent-hover transition shadow-sm disabled:opacity-50 text-sm mt-2"
+                            >
+                                Lưu Key
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div className="p-4 rounded-mac-lg bg-blue-50 border border-blue-100">
+                        <p className="text-xs text-blue-800 leading-relaxed">
+                            <strong>Lưu ý:</strong> API Key được lưu cục bộ trên máy tính của bạn. Để sử dụng Gemini 1.5 Pro, hãy đảm bảo tài khoản Google Cloud đã bật thanh toán (Billing).
+                        </p>
                     </div>
                 </div>
             </div>

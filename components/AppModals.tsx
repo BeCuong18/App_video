@@ -46,56 +46,52 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, active
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-md p-4 animate-fade-in">
-            <div className={`glass-card border-4 border-white rounded-[40px] max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-hidden flex flex-col bg-white/90`}>
-                <div className="p-6 border-b-2 border-dashed border-stone-100 flex justify-between items-center bg-white/50">
-                    <h3 className="text-xl font-black text-stone-700 flex items-center gap-3 uppercase tracking-wide">
-                        {isAdmin ? <ShieldIcon className="w-6 h-6 text-tet-red" /> : <ChartIcon className="w-6 h-6 text-tet-gold-dark" />}
-                        {isAdmin ? 'QUẢN TRỊ VIÊN' : 'THỐNG KÊ SẢN XUẤT'}
+            <div className="bg-mac-surface rounded-mac-xl w-full max-w-3xl shadow-mac-float border border-white/20 max-h-[85vh] flex flex-col overflow-hidden">
+                <div className="p-5 bg-mac-surface-sec/50 border-b border-mac-border/30 flex justify-between items-center shrink-0">
+                    <h3 className="text-base font-bold text-mac-text flex items-center gap-2">
+                        {isAdmin ? <ShieldIcon className="w-5 h-5 text-mac-accent" /> : <ChartIcon className="w-5 h-5 text-mac-accent" />}
+                        Thống Kê Sử Dụng
                     </h3>
-                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-stone-100 hover:bg-red-100 text-stone-400 hover:text-red-400 flex items-center justify-center transition font-bold text-lg">&times;</button>
+                    <button onClick={onClose} className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-500 flex items-center justify-center transition text-lg leading-none">&times;</button>
                 </div>
                 
-                <div className="p-6 overflow-y-auto flex-1 custom-scrollbar bg-tet-cream">
-                    {loading ? ( <div className="flex justify-center py-10"><LoaderIcon /></div> ) : !stats ? ( <p className="text-center text-stone-400">Không có dữ liệu.</p> ) : (
+                <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
+                    {loading ? ( <div className="flex justify-center py-10"><LoaderIcon /></div> ) : !stats ? ( <p className="text-center text-gray-400">Chưa có dữ liệu.</p> ) : (
                         <div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
                                 {[
-                                    { label: 'Video Hoàn Thành', value: stats.total, color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100' },
-                                    { label: 'Prompt Đã Tạo', value: stats.promptCount, color: 'text-blue-500', bg: 'bg-blue-50 border-blue-100' },
-                                    { label: 'Credits Sử Dụng', value: stats.totalCredits, color: 'text-yellow-600', bg: 'bg-yellow-50 border-yellow-100' },
-                                    { label: 'Machine ID', value: stats.machineId, color: 'text-stone-500', bg: 'bg-stone-100 border-stone-200', isCode: true }
+                                    { label: 'Video Hoàn Thành', value: stats.total, color: 'text-green-600' },
+                                    { label: 'Prompt Đã Tạo', value: stats.promptCount, color: 'text-mac-accent' },
+                                    { label: 'Tín Dụng', value: stats.totalCredits, color: 'text-orange-500' },
+                                    { label: 'Mã Máy', value: stats.machineId, color: 'text-gray-500', isCode: true }
                                 ].map((item, idx) => (
-                                    <div key={idx} className={`${item.bg} p-5 rounded-3xl text-center border-2 shadow-sm`}>
-                                        <p className="text-stone-400 text-[10px] uppercase tracking-widest font-bold mb-2">{item.label}</p>
+                                    <div key={idx} className="bg-white p-4 rounded-mac border border-mac-border/20 shadow-sm">
+                                        <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">{item.label}</p>
                                         {item.isCode ? (
-                                            <p className="text-[10px] font-mono text-stone-600 break-all bg-white p-2 rounded-lg">{item.value}</p>
+                                            <p className="text-[10px] font-mono text-gray-600 bg-gray-50 p-1 rounded break-all">{item.value}</p>
                                         ) : (
-                                            <p className={`text-3xl font-black ${item.color} drop-shadow-sm`}>{item.value}</p>
+                                            <p className={`text-2xl font-bold ${item.color}`}>{item.value}</p>
                                         )}
                                     </div>
                                 ))}
                             </div>
 
-                            {/* Detailed Quota View for Active Key */}
                             {activeApiKeyId && stats.modelUsage?.[activeApiKeyId] && (
-                                <div className="mb-8 p-6 bg-white rounded-3xl border-2 border-tet-gold/30 shadow-sm">
-                                    <h4 className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-4">Lượt sử dụng Model (Active Key)</h4>
+                                <div className="mb-6 bg-white p-5 rounded-mac border border-mac-border/20 shadow-sm">
+                                    <h4 className="text-xs font-bold text-gray-900 mb-4">Hạn Mức Trong Ngày (Key Đang Dùng)</h4>
                                     <div className="space-y-3">
                                         {Object.entries(stats.modelUsage[activeApiKeyId]).map(([model, countVal]) => {
-                                            // Fix: cast countVal to number because Object.entries might return it as unknown
                                             const count = countVal as number;
                                             return (
-                                                <div key={model} className="flex items-center justify-between bg-stone-50 p-3 rounded-2xl border border-stone-100">
-                                                    <span className="text-xs font-bold text-stone-600">{model}</span>
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-32 h-2 bg-stone-200 rounded-full overflow-hidden">
-                                                            <div 
-                                                                className={`h-full ${count >= 15 ? 'bg-red-500' : 'bg-tet-gold'}`} 
-                                                                style={{ width: `${(count / 20) * 100}%` }}
-                                                            ></div>
-                                                        </div>
-                                                        <span className={`text-xs font-black ${count >= 18 ? 'text-red-500' : 'text-stone-700'}`}>{count}/20</span>
+                                                <div key={model} className="flex items-center gap-4">
+                                                    <span className="text-xs font-medium text-gray-500 w-32 truncate">{model}</span>
+                                                    <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                                        <div 
+                                                            className={`h-full rounded-full ${count >= 18 ? 'bg-red-500' : 'bg-mac-accent'}`} 
+                                                            style={{ width: `${Math.min((count / 20) * 100, 100)}%` }}
+                                                        ></div>
                                                     </div>
+                                                    <span className="text-xs font-semibold text-gray-700 w-10 text-right">{count}/20</span>
                                                 </div>
                                             );
                                         })}
@@ -103,49 +99,24 @@ export const StatsModal: React.FC<StatsModalProps> = ({ onClose, isAdmin, active
                                 </div>
                             )}
 
-                            {isAdmin && (
-                                <div className="mb-8 p-6 bg-white rounded-3xl border-2 border-stone-100 shadow-sm">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h4 className="text-stone-600 font-bold text-sm uppercase tracking-wide flex items-center gap-2"><ChartIcon className="w-4 h-4 text-tet-gold-dark"/> Biểu đồ năng suất</h4>
-                                        <button onClick={() => { if(confirm("Xóa TOÀN BỘ lịch sử?")) handleDeleteAll(); }} className="bg-red-400 hover:bg-red-500 text-white font-bold py-2 px-4 rounded-xl text-xs flex items-center gap-2 transition shadow-md border-2 border-white">
-                                            <TrashIcon className="w-3 h-3"/> Reset All
-                                        </button>
-                                    </div>
-                                    <div className="flex items-end gap-2 h-40 pt-4 pb-2 px-2 overflow-x-auto custom-scrollbar border-b-2 border-dashed border-stone-100">
-                                        {stats.history.length === 0 ? <p className="text-stone-400 w-full text-center text-sm">Chưa có dữ liệu biểu đồ</p> : 
-                                            stats.history.slice(0, 30).reverse().map((item) => (
-                                                <div key={item.date} className="flex flex-col items-center gap-1 group relative min-w-[24px] flex-1 h-full justify-end">
-                                                    <div className="text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity absolute -top-8 bg-tet-brown px-2 py-1 rounded-lg shadow-lg z-10 whitespace-nowrap font-bold">{item.count} video</div>
-                                                    <div 
-                                                        className="w-full bg-tet-green hover:bg-tet-gold transition-all rounded-t-lg"
-                                                        style={{ height: `${(item.count / maxCount) * 100}%`, minHeight: '8px' }}
-                                                    ></div>
-                                                </div>
-                                            ))
-                                        }
-                                    </div>
-                                </div>
-                            )}
-
-                            <h4 className="text-sm font-bold text-stone-600 mb-4 border-l-4 border-tet-red pl-3 uppercase tracking-wider">Lịch sử chi tiết</h4>
-                            <div className="overflow-hidden rounded-3xl border-2 border-stone-100 bg-white shadow-sm">
-                                <table className="w-full text-left text-sm text-stone-700">
-                                    <thead className="bg-stone-50 text-stone-400 uppercase font-bold text-[10px] tracking-wider">
+                            <div className="bg-white rounded-mac border border-mac-border/30 overflow-hidden shadow-sm">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-gray-50 text-gray-500 font-bold text-xs border-b border-mac-border/30">
                                         <tr>
-                                            <th className="px-6 py-3 border-b border-stone-100">Ngày</th>
-                                            <th className="px-6 py-3 text-right border-b border-stone-100">Số lượng</th>
-                                            {isAdmin && <th className="px-6 py-3 text-center border-b border-stone-100">Hành động</th>}
+                                            <th className="px-4 py-3">Ngày</th>
+                                            <th className="px-4 py-3 text-right">Số lượng</th>
+                                            {isAdmin && <th className="px-4 py-3 text-center">Thao tác</th>}
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-stone-50">
-                                        {stats.history.length === 0 ? ( <tr><td colSpan={isAdmin ? 3 : 2} className="px-6 py-8 text-center text-stone-400 italic">Chưa có dữ liệu</td></tr> ) : (
+                                    <tbody className="divide-y divide-gray-100">
+                                        {stats.history.length === 0 ? ( <tr><td colSpan={3} className="px-4 py-4 text-center text-gray-400 text-xs">Trống</td></tr> ) : (
                                             stats.history.map((item) => (
-                                                <tr key={item.date} className="hover:bg-stone-50 transition">
-                                                    <td className="px-6 py-3 font-mono text-stone-600 text-xs font-bold">{item.date}</td>
-                                                    <td className="px-6 py-3 text-right font-black text-emerald-500">{item.count}</td>
+                                                <tr key={item.date} className="hover:bg-gray-50">
+                                                    <td className="px-4 py-3 text-xs font-mono text-gray-600">{item.date}</td>
+                                                    <td className="px-4 py-3 text-right font-bold text-mac-text">{item.count}</td>
                                                     {isAdmin && (
-                                                        <td className="px-6 py-3 text-center">
-                                                            <button onClick={() => { if(confirm("Xóa ngày này?")) handleDelete(item.date); }} className="w-8 h-8 flex items-center justify-center rounded-full bg-stone-100 hover:bg-red-100 text-stone-400 hover:text-red-400 transition mx-auto"><TrashIcon className="w-4 h-4"/></button>
+                                                        <td className="px-4 py-3 text-center">
+                                                            <button onClick={() => handleDelete(item.date)} className="text-gray-400 hover:text-red-500"><TrashIcon className="w-3.5 h-3.5"/></button>
                                                         </td>
                                                     )}
                                                 </tr>
@@ -182,7 +153,7 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onLog
         if (ipcRenderer) {
             const result = await ipcRenderer.invoke('verify-admin', { username, password });
             if (result.success) onLoginSuccess();
-            else setError('Thông tin đăng nhập không chính xác');
+            else setError('Thông tin đăng nhập không đúng');
         } else {
              if (username === 'bescuong' && password === '285792684') onLoginSuccess();
              else setError('Mock: Sai thông tin');
@@ -192,22 +163,22 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({ onClose, onLog
 
     return (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/30 backdrop-blur-md p-4 animate-fade-in">
-            <div className="glass-card border-4 border-white rounded-[32px] max-w-sm w-full shadow-2xl p-8 transform scale-100 transition-all bg-white/90">
+            <div className="bg-mac-surface rounded-mac-xl max-w-xs w-full shadow-mac-float border border-white/20 p-6">
                 <div className="text-center mb-6">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-50 mb-4 border-2 border-red-100 shadow-sm animate-bounce-slow">
-                        <LockIcon className="w-6 h-6 text-red-400" />
+                    <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <LockIcon className="w-6 h-6 text-gray-500" />
                     </div>
-                    <h3 className="text-lg font-black text-stone-700 uppercase tracking-wide">Khu Vực Quản Trị</h3>
+                    <h3 className="text-base font-bold text-mac-text">Đăng Nhập Quản Trị</h3>
                 </div>
                 
-                <form onSubmit={handleLogin} className="space-y-4">
-                    <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Tên đăng nhập" className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl p-4 text-stone-700 focus:border-red-300 transition text-sm font-bold" required />
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mật khẩu" className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl p-4 text-stone-700 focus:border-red-300 transition text-sm font-bold" required />
-                    {error && <p className="text-red-500 text-xs text-center font-bold">{error}</p>}
+                <form onSubmit={handleLogin} className="space-y-3">
+                    <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="Tên đăng nhập" className="w-full text-sm px-4 h-10" required />
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mật khẩu" className="w-full text-sm px-4 h-10" required />
+                    {error && <p className="text-red-500 text-xs text-center">{error}</p>}
                     
-                    <div className="flex gap-3 mt-6">
-                        <button type="button" onClick={onClose} className="flex-1 py-3 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-500 font-bold transition text-sm">Hủy</button>
-                        <button type="submit" disabled={loading} className="flex-1 py-3 rounded-xl bg-red-400 hover:bg-red-500 text-white font-bold transition disabled:opacity-50 text-sm flex justify-center items-center shadow-lg border-2 border-white">
+                    <div className="flex gap-2 mt-4">
+                        <button type="button" onClick={onClose} className="flex-1 h-10 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold text-xs transition">Hủy</button>
+                        <button type="submit" disabled={loading} className="flex-1 h-10 rounded-lg bg-mac-text hover:bg-black text-white font-semibold text-xs transition flex justify-center items-center">
                             {loading ? <LoaderIcon /> : 'Đăng Nhập'}
                         </button>
                     </div>
@@ -229,20 +200,16 @@ interface AlertModalProps {
 export const AlertModal: React.FC<AlertModalProps> = ({ title, message, type, onClose, onConfirm }) => {
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/30 backdrop-blur-md p-4 animate-fade-in">
-      <div className={`glass-card border-4 ${type === 'update' ? 'border-blue-300' : 'border-tet-gold'} rounded-[40px] max-w-md w-full shadow-2xl transform scale-100 p-8 text-center bg-white`}>
-          <div className={`mx-auto flex items-center justify-center h-24 w-24 rounded-full mb-6 ${type === 'update' ? 'bg-blue-50' : 'bg-yellow-50'} border-4 ${type === 'update' ? 'border-blue-200' : 'border-yellow-200'} shadow-lg animate-bounce-slow`}>
-             {type === 'update' ? (
-                <span className="text-4xl">🚀</span>
-             ) : (
-                <span className="text-5xl">🧧</span>
-             )}
+      <div className="bg-mac-surface rounded-mac-xl max-w-sm w-full shadow-mac-float border border-white/20 p-6 text-center">
+          <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 ${type === 'update' ? 'bg-blue-100 text-mac-accent' : 'bg-green-100 text-green-600'}`}>
+             {type === 'update' ? <span className="text-xl">🚀</span> : <span className="text-xl">✓</span>}
           </div>
-          <h3 className="text-2xl font-black text-stone-700 mb-3 uppercase tracking-wide">{title}</h3>
-          <p className="text-stone-500 mb-8 leading-relaxed text-sm font-bold">{message}</p>
-          <div className="flex justify-center gap-4">
-            <button onClick={onClose} className="px-6 py-3 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-500 font-bold transition text-sm">Đóng</button>
+          <h3 className="text-lg font-bold text-mac-text mb-2">{title}</h3>
+          <p className="text-mac-text-sec text-sm mb-6 leading-relaxed">{message}</p>
+          <div className="flex justify-center gap-3">
+            <button onClick={onClose} className="px-5 py-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold text-sm transition">Đóng</button>
             {onConfirm && (
-              <button onClick={onConfirm} className={`px-6 py-3 rounded-2xl font-bold transition shadow-lg text-white text-sm uppercase tracking-wide transform hover:scale-105 border-4 border-white ${type === 'update' ? 'bg-blue-500 hover:bg-blue-400' : 'bg-tet-gold hover:bg-yellow-300 text-stone-800'}`}>
+              <button onClick={onConfirm} className={`px-5 py-2.5 rounded-lg font-semibold text-white text-sm transition ${type === 'update' ? 'bg-mac-accent hover:bg-mac-accent-hover' : 'bg-green-600 hover:bg-green-700'}`}>
                 {type === 'update' ? 'Cập nhật' : 'Tuyệt vời'}
               </button>
             )}

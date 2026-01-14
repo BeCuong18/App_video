@@ -28,6 +28,9 @@ const App: React.FC = () => {
     const [ffmpegFound, setFfmpegFound] = useState<boolean | null>(null);
     const [isCombining, setIsCombining] = useState(false);
     
+    // Web file input ref
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
     // Sử dụng ref để giữ trackedFiles mới nhất cho interval mà không cần reset interval liên tục
     const trackedFilesRef = useRef<TrackedFile[]>([]);
     useEffect(() => { trackedFilesRef.current = trackedFiles; }, [trackedFiles]);
@@ -98,6 +101,16 @@ const App: React.FC = () => {
                         } : undefined
                     });
                 });
+            } else {
+                // WEB MODE INITIALIZATION
+                const savedPresets = localStorage.getItem('presets');
+                if (savedPresets) setPresets(JSON.parse(savedPresets));
+                
+                const savedKeysStr = localStorage.getItem('api-keys');
+                if (savedKeysStr) savedKeys = JSON.parse(savedKeysStr);
+                
+                currentMachineId = 'WEB-CLIENT-' + Math.random().toString(36).substring(7);
+                currentLicense = localStorage.getItem('license-key') || '';
             }
 
             const localLicense = localStorage.getItem('license-key');
@@ -148,6 +161,8 @@ const App: React.FC = () => {
         setPresets(newPresets);
         if (ipcRenderer) {
             await ipcRenderer.invoke('save-app-config', { presets: newPresets });
+        } else {
+            localStorage.setItem('presets', JSON.stringify(newPresets));
         }
     };
 
@@ -155,10 +170,10 @@ const App: React.FC = () => {
         if (key && key.trim().length > 5) {
             if (ipcRenderer) {
                 await ipcRenderer.invoke('save-app-config', { licenseKey: key.trim() });
-                setIsActivated(true);
-                localStorage.setItem('license-key', key.trim());
-                return true;
             }
+            setIsActivated(true);
+            localStorage.setItem('license-key', key.trim());
+            return true;
         }
         return false;
     };
@@ -196,9 +211,8 @@ const App: React.FC = () => {
         saveApiConfig(updated, newActiveId);
     };
 
-    // Hàm reload được tối ưu hóa: chạy song song (Promise.all) và chỉ set state 1 lần
     const handleReloadVideos = async () => {
-        if (!ipcRenderer) return;
+        if (!ipcRenderer) return; 
         const currentFiles = trackedFilesRef.current;
         if (currentFiles.length === 0) return;
 
@@ -217,9 +231,7 @@ const App: React.FC = () => {
             });
 
             const updatedFiles = await Promise.all(promises);
-            
             setTrackedFiles(prev => {
-                // Deep comparison đơn giản để tránh re-render nếu không có gì thay đổi
                 if (JSON.stringify(prev) !== JSON.stringify(updatedFiles)) {
                     return updatedFiles;
                 }
@@ -230,11 +242,10 @@ const App: React.FC = () => {
         }
     };
 
-    // Tự động reload mỗi 2 giây khi ở tab Tracker
     useEffect(() => {
         let interval: any;
-        if (activeTab === 'tracker') {
-            handleReloadVideos(); // Chạy ngay lập tức khi vào tab
+        if (activeTab === 'tracker' && isElectron) {
+            handleReloadVideos();
             interval = setInterval(handleReloadVideos, 2000);
         }
         return () => {
@@ -322,19 +333,60 @@ const App: React.FC = () => {
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.json_to_sheet(wsData);
         XLSX.utils.book_append_sheet(wb, ws, 'Prompts');
-        const content = XLSX.write(wb, {bookType:'xlsx', type:'array'});
         
         if (ipcRenderer) {
+            const content = XLSX.write(wb, {bookType:'xlsx', type:'array'});
             const res = await ipcRenderer.invoke('save-file-dialog', { defaultPath: `${safeName}.xlsx`, fileContent: content });
             if (res.success) {
                 setTrackedFiles(p => [...p, { name: `${safeName}.xlsx`, jobs, path: res.filePath }]);
                 setActiveTab('tracker');
                 ipcRenderer.send('start-watching-file', res.filePath);
             }
+        } else {
+            const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${safeName}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            setTrackedFiles(p => [...p, { name: `${safeName}.xlsx`, jobs, path: '' }]);
+            setActiveTab('tracker');
+            setFeedback({ type: 'success', message: 'Đã tải xuống file Excel!' });
         }
     };
 
-    if (!configLoaded) return <div className="h-screen bg-tet-cream flex items-center justify-center"><ShieldIcon className="animate-spin w-16 h-16 text-tet-red"/></div>;
+    const handleWebOpenFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            const bstr = evt.target?.result;
+            const wb = XLSX.read(bstr, { type: 'binary' });
+            const wsname = wb.SheetNames[0];
+            const ws = wb.Sheets[wsname];
+            const data = XLSX.utils.sheet_to_json(ws, { header: 1 }).slice(1) as any[][];
+            
+            const jobs: VideoJob[] = data.map((r,i) => ({
+                 id: r[0]||`job_${i}`, prompt: r[1]||'', 
+                 imagePath: r[2]||'', imagePath2: r[3]||'', imagePath3: r[4]||'',
+                 status: r[5] as any || 'Pending',
+                 videoName: r[6]||'', typeVideo: r[7]||'', videoPath: r[8]||undefined
+            }));
+            
+            setTrackedFiles(prev => [...prev, { name: file.name, jobs, path: '' }]);
+            setFeedback({ type: 'success', message: `Đã mở file ${file.name} (Chế độ Xem Web)` });
+        };
+        reader.readAsBinaryString(file);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    if (!configLoaded) return <div className="h-screen bg-mac-bg flex items-center justify-center"><div className="w-8 h-8 rounded-full border-4 border-mac-accent border-t-transparent animate-spin"></div></div>;
     if (!isActivated) return <Activation machineId={machineId} onActivate={handleActivate} />;
 
     const activeApiKey = apiKeys.find(k => k.id === activeApiKeyId);
@@ -346,48 +398,61 @@ const App: React.FC = () => {
     } : null;
 
     return (
-        <div className="h-screen overflow-hidden flex flex-col font-sans text-tet-brown">
-            <header className="px-8 py-3 bg-gradient-to-r from-tet-red-dark via-tet-red to-tet-red-dark border-b-4 border-tet-gold shadow-lg flex justify-between items-center z-50 rounded-b-[40px] mx-4 mt-2 shrink-0">
-                <div className="flex items-center gap-4" onClick={() => setActiveTab('generator')} style={{cursor:'pointer'}}>
-                    <div className="bg-tet-gold p-2 rounded-full border-4 border-tet-red shadow-md animate-bounce-slow">
-                        <span className="text-4xl">🐎</span>
+        <div className="h-screen overflow-hidden flex flex-col font-sans text-mac-text bg-mac-bg">
+            <input type="file" ref={fileInputRef} style={{display: 'none'}} accept=".xlsx" onChange={handleWebOpenFile}/>
+
+            {/* macOS Glass Header */}
+            <header className="glass-panel z-50 px-6 py-4 flex items-center justify-between shrink-0 h-18">
+                <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-mac bg-gradient-to-br from-mac-accent to-blue-600 flex items-center justify-center text-white shadow-mac-card">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
                     </div>
                     <div>
-                        <h1 className="text-2xl font-black text-tet-gold drop-shadow-md">CHÚC MỪNG NĂM MỚI</h1>
-                        <span className="text-xs font-bold text-white uppercase tracking-widest">Prompt Generator Pro 2026</span>
+                        <h1 className="text-base font-bold text-mac-text leading-none tracking-tight">Prompt Generator</h1>
+                        <p className="text-[11px] text-mac-text-sec font-medium mt-1">Phiên bản Pro</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-white/20 px-4 py-2 rounded-2xl border-2 border-white/30 mr-2">
-                        <FolderIcon className="w-5 h-5 text-tet-gold" />
-                        <div className="text-left">
-                            <div className="text-[8px] text-white/70 font-black uppercase tracking-widest">Dự án theo dõi</div>
-                            <div className="text-sm font-black text-white leading-none">{trackedFiles.length} File Excel</div>
-                        </div>
+
+                {/* macOS Big Tabs (Segmented Control style but larger) */}
+                {activeTab !== 'api-manager' && (
+                    <div className="bg-mac-gray-light/60 p-1.5 rounded-xl flex gap-1 shadow-inner backdrop-blur-md">
+                        <button 
+                            onClick={() => setActiveTab('generator')}
+                            className={`px-8 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${activeTab === 'generator' ? 'bg-white shadow-sm text-mac-text scale-[1.02]' : 'text-mac-text-sec hover:text-mac-text hover:bg-white/50'}`}
+                        >
+                            Tạo Kịch Bản
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('tracker')}
+                            className={`px-8 py-2.5 text-sm font-semibold rounded-lg transition-all duration-200 ${activeTab === 'tracker' ? 'bg-white shadow-sm text-mac-text scale-[1.02]' : 'text-mac-text-sec hover:text-mac-text hover:bg-white/50'}`}
+                        >
+                            Xưởng Phim
+                        </button>
+                    </div>
+                )}
+
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-white/50 rounded-lg border border-mac-border/30 backdrop-blur-sm">
+                        <div className={`w-2 h-2 rounded-full ${activeApiKey ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500'}`}></div>
+                        <span className="text-xs font-medium text-mac-text-sec truncate max-w-[100px]">{activeApiKey?.name || 'Chưa chọn Key'}</span>
                     </div>
 
-                    <div className="hidden md:block mr-2 text-right">
-                        <div className="text-[10px] text-white/70 font-bold uppercase tracking-widest">API Active</div>
-                        <div className="text-xs font-black text-tet-gold truncate max-w-[120px]">{activeApiKey?.name || 'Chưa chọn'}</div>
+                    <div className="flex items-center bg-white/50 rounded-lg p-1 border border-mac-border/30">
+                        <button onClick={() => setActiveTab(activeTab === 'api-manager' ? 'generator' : 'api-manager')} className={`p-2 rounded-md transition ${activeTab === 'api-manager' ? 'bg-mac-accent text-white shadow-sm' : 'text-mac-text-sec hover:bg-black/5'}`}>
+                            <KeyIcon className="w-5 h-5"/>
+                        </button>
+                        <div className="w-px h-4 bg-mac-border/50 mx-1"></div>
+                        <button onClick={() => setShowStats(true)} className="p-2 text-mac-text-sec hover:bg-black/5 rounded-md transition">
+                            <ChartIcon className="w-5 h-5"/>
+                        </button>
+                        {isElectron && (
+                            <button onClick={() => setShowAdminLogin(true)} className="p-2 text-mac-text-sec hover:bg-black/5 rounded-md transition">
+                                <ShieldIcon className="w-5 h-5"/>
+                            </button>
+                        )}
                     </div>
-                    <button 
-                        onClick={() => setActiveTab(activeTab === 'api-manager' ? 'generator' : 'api-manager')} 
-                        className={`p-3 rounded-full shadow-md border-2 border-white transition-all transform hover:rotate-12 ${activeTab === 'api-manager' ? 'bg-white text-tet-red' : 'bg-tet-gold text-tet-red-dark hover:bg-white'}`} 
-                        title="Quản lý API Key"
-                    >
-                        <KeyIcon className="w-5 h-5"/>
-                    </button>
-                    <button onClick={() => setShowStats(true)} className="p-3 bg-tet-gold text-tet-red-dark rounded-full shadow-md border-2 border-white transition-transform hover:scale-110"><ChartIcon className="w-5 h-5"/></button>
-                    <button onClick={() => setShowAdminLogin(true)} className="p-3 bg-tet-red text-white rounded-full shadow-md border-2 border-white transition-transform hover:scale-110"><ShieldIcon className="w-5 h-5"/></button>
                 </div>
             </header>
-
-            {activeTab !== 'api-manager' && (
-                <div className="flex justify-center gap-4 py-4 shrink-0">
-                    <button onClick={() => setActiveTab('generator')} className={`px-8 py-3 rounded-full font-extrabold uppercase text-xs border-2 ${activeTab === 'generator' ? 'bg-tet-red text-white border-tet-gold' : 'bg-white text-tet-brown'}`}>✨ Kịch Bản Tết</button>
-                    <button onClick={() => setActiveTab('tracker')} className={`px-8 py-3 rounded-full font-extrabold uppercase text-xs border-2 ${activeTab === 'tracker' ? 'bg-tet-green text-white border-tet-gold' : 'bg-white text-tet-brown'}`}>🎬 Xưởng Phim</button>
-                </div>
-            )}
 
             <div className="flex-1 p-6 overflow-hidden">
                 <div className="max-w-[1600px] mx-auto h-full overflow-y-auto custom-scrollbar">
@@ -433,6 +498,8 @@ const App: React.FC = () => {
                                         });
                                         setTrackedFiles(prev => [...prev, ...newFiles]);
                                     }
+                                } else {
+                                    if(fileInputRef.current) fileInputRef.current.click();
                                 }
                             }} 
                             onCloseFile={(idx) => {
@@ -442,13 +509,16 @@ const App: React.FC = () => {
                                 if(activeTrackerFileIndex >= idx) setActiveTrackerFileIndex(Math.max(0, activeTrackerFileIndex - 1));
                             }} 
                             stats={stats} ffmpegFound={ffmpegFound} isCombining={isCombining}
-                            onPlayVideo={(path) => ipcRenderer && ipcRenderer.send('open-video-path', path)} 
+                            isElectron={!!isElectron}
+                            onPlayVideo={(path) => {
+                                if(ipcRenderer) ipcRenderer.send('open-video-path', path);
+                            }} 
                             onShowFolder={(path) => ipcRenderer && ipcRenderer.send('open-folder', path.substring(0, path.lastIndexOf(navigator.userAgent.includes("Windows")?'\\':'/')))} 
                             onOpenToolFlows={() => ipcRenderer && ipcRenderer.invoke('open-tool-flow')} 
                             onSetToolFlowPath={handleSetToolFlowPath}
                             onReloadVideos={handleReloadVideos} 
-                            onRetryStuck={() => currentFile?.path && ipcRenderer.invoke('retry-stuck-jobs', {filePath: currentFile.path})} 
-                            onRetryJob={(id) => currentFile?.path && ipcRenderer.invoke('retry-job', {filePath: currentFile.path, jobId: id})} 
+                            onRetryStuck={() => currentFile?.path && ipcRenderer && ipcRenderer.invoke('retry-stuck-jobs', {filePath: currentFile.path})} 
+                            onRetryJob={(id) => currentFile?.path && ipcRenderer && ipcRenderer.invoke('retry-job', {filePath: currentFile.path, jobId: id})} 
                             onDeleteVideo={async (_id, path) => {
                                 if(ipcRenderer) {
                                     const res = await ipcRenderer.invoke('delete-video-file', path);
@@ -475,35 +545,14 @@ const App: React.FC = () => {
             </div>
 
             {feedback && (
-                <div className={`fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-10 py-6 rounded-[40px] shadow-2xl bg-white border-4 flex flex-col items-center gap-4 z-[300] animate-fade-in ${feedback.type === 'error' ? 'border-red-500 shadow-red-100' : 'border-tet-gold shadow-yellow-50'}`}>
-                    <div className="flex items-center gap-4 w-full">
-                        <div className={`p-3 rounded-full ${feedback.type === 'error' ? 'bg-red-50 text-red-500' : 'bg-yellow-50 text-tet-gold-dark'}`}>
-                           {feedback.type === 'error' ? <span className="text-2xl font-black">!</span> : <span className="text-2xl">🏮</span>}
-                        </div>
-                        <span className={`font-black text-lg ${feedback.type === 'error' ? 'text-red-600' : 'text-stone-700'}`}>{feedback.message}</span>
-                        <button 
-                            onClick={() => setFeedback(null)} 
-                            className="p-2 hover:bg-stone-100 rounded-full transition-colors text-stone-400 font-bold ml-auto"
-                            title="Đóng thông báo"
-                        >
-                            ✕
-                        </button>
-                    </div>
-                    <div className="w-full h-1 bg-stone-100 rounded-full mt-2 overflow-hidden">
-                        <div className={`h-full animate-[shrink_10s_linear_forwards] ${feedback.type === 'error' ? 'bg-red-500' : 'bg-tet-gold'}`}></div>
-                    </div>
+                <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-mac-float bg-white/80 backdrop-blur-md border border-white/20 flex items-center gap-3 z-[300] animate-slide-up`}>
+                    <div className={`w-2 h-2 rounded-full ${feedback.type === 'error' ? 'bg-red-500' : feedback.type === 'success' ? 'bg-green-500' : 'bg-mac-accent'}`}></div>
+                    <span className="text-sm font-medium text-mac-text">{feedback.message}</span>
                 </div>
             )}
             {showStats && <StatsModal onClose={() => setShowStats(false)} isAdmin={isAdminLoggedIn} activeApiKeyId={activeApiKeyId} />}
             {showAdminLogin && <AdminLoginModal onClose={() => setShowAdminLogin(false)} onLoginSuccess={() => setIsAdminLoggedIn(true)} />}
             {alertModal && <AlertModal {...alertModal} onClose={() => setAlertModal(null)} />}
-            
-            <style>{`
-                @keyframes shrink {
-                    from { width: 100%; }
-                    to { width: 0%; }
-                }
-            `}</style>
         </div>
     );
 };
