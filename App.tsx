@@ -7,7 +7,7 @@ import { StatsModal, AdminLoginModal, AlertModal } from './components/AppModals'
 import { Generator } from './components/Generator';
 import { Tracker } from './components/Tracker';
 import { ApiKeyManagerScreen } from './components/ApiKeyManager';
-import { ChartIcon, ShieldIcon, KeyIcon } from './components/Icons';
+import { ChartIcon, ShieldIcon, KeyIcon, ChatBubbleIcon, CloudDownloadIcon } from './components/Icons';
 
 const isElectron = navigator.userAgent.toLowerCase().includes('electron');
 const ipcRenderer = isElectron && (window as any).require ? (window as any).require('electron').ipcRenderer : null;
@@ -27,6 +27,7 @@ const App: React.FC = () => {
     const [alertModal, setAlertModal] = useState<{title: string, message: string, type: 'completion' | 'update', onConfirm?: () => void} | null>(null);
     const [ffmpegFound, setFfmpegFound] = useState<boolean | null>(null);
     const [isCombining, setIsCombining] = useState(false);
+    const [checkingUpdate, setCheckingUpdate] = useState(false);
     
     // Web file input ref
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -312,6 +313,26 @@ const App: React.FC = () => {
         setIsCombining(false);
     };
 
+    const handleCheckUpdate = async () => {
+        if (!ipcRenderer || checkingUpdate) return;
+        setCheckingUpdate(true);
+        setFeedback({ type: 'info', message: 'Đang kiểm tra cập nhật...' });
+        try {
+            const res = await ipcRenderer.invoke('check-for-updates');
+            if (res.success) {
+                // Nếu có update, main.js sẽ tự show popup (autoUpdater default behavior)
+                // Tuy nhiên ta có thể báo thêm
+                setFeedback({ type: 'success', message: 'Đã hoàn tất kiểm tra.' });
+            } else {
+                setFeedback({ type: 'info', message: res.error || 'Phiên bản hiện tại là mới nhất.' });
+            }
+        } catch (e) {
+            setFeedback({ type: 'error', message: 'Lỗi kiểm tra cập nhật.' });
+        } finally {
+            setCheckingUpdate(false);
+        }
+    };
+
     const handleGenerateSuccess = async (scenes: any[], formData: FormData, detectedType: 'TEXT' | 'IN2V') => {
         const safeName = (formData.projectName || 'MV').replace(/[^a-z0-9_]/gi, '_');
         const jobs: VideoJob[] = scenes.map((p,i) => ({
@@ -398,7 +419,7 @@ const App: React.FC = () => {
     } : null;
 
     return (
-        <div className="h-screen overflow-hidden flex flex-col font-sans text-mac-text bg-mac-bg">
+        <div className="h-screen overflow-hidden flex flex-col font-sans text-mac-text bg-mac-bg relative">
             <input type="file" ref={fileInputRef} style={{display: 'none'}} accept=".xlsx" onChange={handleWebOpenFile}/>
 
             {/* macOS Glass Header */}
@@ -413,7 +434,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                {/* macOS Big Tabs (Segmented Control style but larger) */}
+                {/* macOS Big Tabs */}
                 {activeTab !== 'api-manager' && (
                     <div className="bg-mac-gray-light/60 p-1.5 rounded-xl flex gap-1 shadow-inner backdrop-blur-md">
                         <button 
@@ -438,15 +459,21 @@ const App: React.FC = () => {
                     </div>
 
                     <div className="flex items-center bg-white/50 rounded-lg p-1 border border-mac-border/30">
-                        <button onClick={() => setActiveTab(activeTab === 'api-manager' ? 'generator' : 'api-manager')} className={`p-2 rounded-md transition ${activeTab === 'api-manager' ? 'bg-mac-accent text-white shadow-sm' : 'text-mac-text-sec hover:bg-black/5'}`}>
+                        {isElectron && (
+                             <button onClick={handleCheckUpdate} disabled={checkingUpdate} className={`p-2 rounded-md transition text-mac-text-sec hover:bg-black/5 ${checkingUpdate ? 'animate-pulse' : ''}`} title="Kiểm tra cập nhật">
+                                <CloudDownloadIcon className="w-5 h-5"/>
+                             </button>
+                        )}
+                        <div className="w-px h-4 bg-mac-border/50 mx-1"></div>
+                        <button onClick={() => setActiveTab(activeTab === 'api-manager' ? 'generator' : 'api-manager')} className={`p-2 rounded-md transition ${activeTab === 'api-manager' ? 'bg-mac-accent text-white shadow-sm' : 'text-mac-text-sec hover:bg-black/5'}`} title="Quản lý API Key">
                             <KeyIcon className="w-5 h-5"/>
                         </button>
                         <div className="w-px h-4 bg-mac-border/50 mx-1"></div>
-                        <button onClick={() => setShowStats(true)} className="p-2 text-mac-text-sec hover:bg-black/5 rounded-md transition">
+                        <button onClick={() => setShowStats(true)} className="p-2 text-mac-text-sec hover:bg-black/5 rounded-md transition" title="Thống kê">
                             <ChartIcon className="w-5 h-5"/>
                         </button>
                         {isElectron && (
-                            <button onClick={() => setShowAdminLogin(true)} className="p-2 text-mac-text-sec hover:bg-black/5 rounded-md transition">
+                            <button onClick={() => setShowAdminLogin(true)} className="p-2 text-mac-text-sec hover:bg-black/5 rounded-md transition" title="Admin">
                                 <ShieldIcon className="w-5 h-5"/>
                             </button>
                         )}
@@ -543,6 +570,17 @@ const App: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* Support Bubble */}
+            <a 
+                href="https://matrix.to/#/@bescuong:chat.vfastsoft.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="fixed bottom-6 right-6 w-14 h-14 bg-mac-accent hover:bg-mac-accent-hover text-white rounded-full shadow-mac-float flex items-center justify-center transition-transform hover:scale-105 z-[400] cursor-pointer"
+                title="Hỗ trợ khẩn cấp"
+            >
+                <ChatBubbleIcon className="w-7 h-7" />
+            </a>
 
             {feedback && (
                 <div className={`fixed top-6 left-1/2 -translate-x-1/2 px-6 py-3 rounded-full shadow-mac-float bg-white/80 backdrop-blur-md border border-white/20 flex items-center gap-3 z-[300] animate-slide-up`}>

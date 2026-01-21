@@ -236,16 +236,55 @@ export const Generator: React.FC<GeneratorProps> = ({ formData, setFormData, pre
             return;
         }
 
+        // DETECT YOUTUBE LINK
+        const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+        const ytMatch = formData.idea.match(youtubeRegex);
+        const hasYoutubeLink = !!ytMatch;
+        const youtubeUrl = hasYoutubeLink ? ytMatch[0] : '';
+
         const sceneCount = Math.max(3, Math.round(totalSeconds / 8));
         const systemPrompt = effectiveType === 'TEXT' ? storySystemPrompt : in2vSystemPrompt;
         const musicGenreDisplay = formData.musicGenre === 'Custom' ? formData.customMusicGenre : formData.musicGenre;
+        
         let userPrompt = `Idea: "${formData.idea.trim()}". Specs: Country: ${formData.country}, Genre: ${formData.mvGenre}, Music: ${musicGenreDisplay}, Style: ${formData.filmingStyle}, Character Consistency: ${formData.characterConsistency}, Count: ${formData.characterCount}. Generate exactly ${sceneCount} professionally formatted scenes for an AI video model.`;
+
+        // INJECT CONSISTENCY INSTRUCTION
+        if (formData.characterConsistency) {
+            userPrompt += `\n\n**IMPORTANT: CHARACTER CONSISTENCY ENABLED**
+            1. Define a detailed MASTER VISUAL PROFILE for the ${formData.characterCount} main character(s) (Face, Hair, Outfit).
+            2. REPEAT this exact visual profile description in the 'CHARACTER' field of EVERY single scene.
+            3. Ensure the character looks identical in Scene 1 and Scene ${sceneCount}.`;
+        }
+
+        // If YouTube link is present, INJECT STRONG OVERRIDE INSTRUCTIONS
+        if (hasYoutubeLink) {
+            userPrompt += `\n\n*** ACTION REQUIRED: EXACT COPY MODE ***
+            Target Video: ${youtubeUrl}
+            
+            MISSION:
+            1. Access this YouTube video directly (or search for its visual breakdown).
+            2. Reconstruct the visual sequence exactly as it appears in the video.
+            3. IGNORE generic search results or text summaries. Look at the VIDEO CONTENT.
+            4. If the video starts with a close-up, start your script with a close-up.
+            5. Output the scenes in the exact chronological order of the YouTube video.
+            
+            IMPORTANT: You MUST use the [SCENE_START] format with specific keys (SCENE_HEADING, CHARACTER, CINEMATOGRAPHY, LIGHTING, ENVIRONMENT, ACTION_EMOTION, STYLE) for every generated scene. Do not summarize.
+            `;
+            
+            onFeedback({ type: 'info', message: 'Đang truy cập và phân tích nội dung video...' });
+        }
 
         const parts: any[] = [{ text: userPrompt }];
         if (effectiveType === 'IN2V') {
             formData.uploadedImages.forEach((img) => {
                 if (img) parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
             });
+        }
+
+        // Configure tools: Enable Google Search if a YouTube link is present
+        const tools: any[] = [];
+        if (hasYoutubeLink) {
+            tools.push({ googleSearch: {} });
         }
 
         try {
@@ -257,6 +296,7 @@ export const Generator: React.FC<GeneratorProps> = ({ formData, setFormData, pre
                     systemInstruction: systemPrompt,
                     temperature: formData.temperature,
                     thinkingConfig: { thinkingBudget: 0 },
+                    tools: tools.length > 0 ? tools : undefined,
                     responseMimeType: 'application/json',
                     responseSchema: {
                         type: Type.OBJECT,
@@ -342,7 +382,7 @@ export const Generator: React.FC<GeneratorProps> = ({ formData, setFormData, pre
                  <div className="xl:col-span-8 space-y-6">
                      <div className="bg-mac-surface p-6 rounded-mac-lg shadow-mac-card border border-mac-border/20">
                         <h3 className="text-sm font-semibold text-mac-text mb-4">1. Ý Tưởng Chính / Lời Bài Hát</h3>
-                        <textarea name="idea" value={formData.idea} onChange={handleInputChange} rows={6} className="w-full p-4 text-sm text-mac-text leading-relaxed resize-none" placeholder="Mô tả ý tưởng video, lời bài hát hoặc câu chuyện tại đây..." />
+                        <textarea name="idea" value={formData.idea} onChange={handleInputChange} rows={6} className="w-full p-4 text-sm text-mac-text leading-relaxed resize-none" placeholder="Mô tả ý tưởng video, lời bài hát hoặc câu chuyện tại đây... (Có thể dán link YouTube để AI học theo phong cách)" />
                      </div>
 
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

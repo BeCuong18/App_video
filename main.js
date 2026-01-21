@@ -439,4 +439,17 @@ ipcMain.handle('set-tool-flow-path', async () => {
     return { success: false };
 });
 
+// Thêm Handler cập nhật thủ công
+ipcMain.handle('check-for-updates', async () => {
+  if (app.isPackaged) {
+      try {
+          const result = await autoUpdater.checkForUpdates();
+          return { success: true, updateInfo: result.updateInfo };
+      } catch (e) {
+          return { success: false, error: e.message };
+      }
+  }
+  return { success: false, error: 'Chỉ hoạt động ở chế độ Packaged' };
+});
+
 ipcMain.on('restart_app', () => autoUpdater.quitAndInstall());
